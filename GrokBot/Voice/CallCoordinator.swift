@@ -22,7 +22,8 @@ final class CallCoordinator: NSObject, CXProviderDelegate {
     private let controller = CXCallController()
     private var callID: UUID?
     private var callKitActive = false
-    private var activity: Activity<CallActivityAttributes>?
+    /// The running activity's ID. Activities aren't Sendable, so tasks look them up by ID instead of capturing one.
+    private var activityID: String?
     private var state = CallActivityAttributes.ContentState(startedAt: .now, muted: false, phase: "listening")
 
     var isMuted: Bool { state.muted }
@@ -166,23 +167,27 @@ final class CallCoordinator: NSObject, CXProviderDelegate {
     private func startActivity(_ attributes: CallActivityAttributes) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         do {
-            activity = try Activity.request(attributes: attributes, content: ActivityContent(state: state, staleDate: nil), pushType: nil)
+            activityID = try Activity.request(attributes: attributes, content: ActivityContent(state: state, staleDate: nil), pushType: nil).id
         } catch {
             print("The call's Live Activity could not start:", error.localizedDescription)
         }
     }
 
     private func pushState() {
-        guard let activity else { return }
+        guard let id = activityID else { return }
         let content = ActivityContent(state: state, staleDate: nil)
-        Task { await activity.update(content) }
+        Task { await Self.activity(id)?.update(content) }
     }
 
     private func endActivity() {
-        guard let activity else { return }
-        self.activity = nil
+        guard let id = activityID else { return }
+        activityID = nil
         let content = ActivityContent(state: state, staleDate: nil)
-        Task { await activity.end(content, dismissalPolicy: .immediate) }
+        Task { await Self.activity(id)?.end(content, dismissalPolicy: .immediate) }
+    }
+
+    private nonisolated static func activity(_ id: String) -> Activity<CallActivityAttributes>? {
+        Activity<CallActivityAttributes>.activities.first { $0.id == id }
     }
 }
 #endif

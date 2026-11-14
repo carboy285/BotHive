@@ -78,6 +78,11 @@ final class MacUITests: XCTestCase {
         let (app, directory) = try application(setup: true)
         defer { app.terminate(); try? FileManager.default.removeItem(at: directory) }
         app.launch()
+        // 0.9.9: first run opens on the Bots saying hello.
+        if app.buttons["Get started"].waitForExistence(timeout: 15) {
+            capture(app, name: "macos-welcome")
+            app.buttons["Get started"].click()
+        }
         XCTAssertTrue(app.staticTexts["A free app for your AI CLIs"].waitForExistence(timeout: 15), app.debugDescription)
         capture(app, name: "macos-setup")
         app.buttons["Continue"].click()

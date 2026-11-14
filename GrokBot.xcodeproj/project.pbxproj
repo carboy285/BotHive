@@ -807,6 +807,7 @@
 				"0F5B17094854229F4639D1E7",
 				"2CD85C05820661ABC1377867",
 				"F7B42D4953D10AFD6971454C",
+				"AC291DFB41826093A7D812FF",
 			);
 			"name" = "GrokBotMac";
 			"sourceTree" = "<group>";
@@ -1435,6 +1436,7 @@
 				"68B3FD7F051C869F767BFB82",
 				"399FFDB4109DA3914179F6AF",
 				"F74FEC740A8E735891BB67E7",
+				"2F786ED86CDC72CAFB27076F",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -2426,6 +2428,16 @@
 		"F61654E6EF9E810ECEFF7687" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "54AA7CF10EEBDB5CBB321BA5";
+		};
+		"AC291DFB41826093A7D812FF" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Features/MacCallPill.swift";
+			"sourceTree" = "<group>";
+		};
+		"2F786ED86CDC72CAFB27076F" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "AC291DFB41826093A7D812FF";
 		};
 	};
 	"rootObject" = "244210E48437B6556980A702";

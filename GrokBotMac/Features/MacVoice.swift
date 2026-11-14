@@ -42,11 +42,14 @@ final class MacVoiceHub: ObservableObject {
                 activity: { workspace.entries(for: current).suffix(12).filter { $0.kind == .activity }.map { VoiceStep(id: $0.id, text: $0.text, date: $0.date) } },
                 vocabulary: names)
             // Could not start (no microphone, models not ready): leave the card up so the reason stays visible.
+            // 0.9.9: once running, the call follows you to other apps as a pill in the notch.
+            if conversation.isRunning, botID == current.id { MacCallPill.shared.attach(hub: self, bot: current) }
         }
     }
 
     func stop() {
         guard let id = botID else { return }
+        MacCallPill.shared.detach()
         conversation.stop()
         desktop?.setVoiceMode(id, on: false)
         botID = nil

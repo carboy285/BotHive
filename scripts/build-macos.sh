@@ -33,16 +33,43 @@ trap 'rm -rf -- "$stage_dir"' EXIT
 # ditto preserves the bundle's resources, code signature, and executable modes.
 ditto "$app_path" "$stage_dir/OpenGrokBot.app"
 ln -s /Applications "$stage_dir/Applications"
-cat > "$stage_dir/Read Me.txt" <<'NOTE'
-Drag OpenGrokBot to Applications.
-Free, independent chat for AI CLIs installed on this Mac.
-On first launch, choose your CLI and sign in through its own setup.
-Optionally enter your Composio project key to connect tools.
-AI providers and Composio apply their own plans and usage limits.
-If ad-hoc signed, macOS may block opening it. Use a locally built copy or a
-Developer ID signed and notarized release; do not disable Gatekeeper globally.
-NOTE
-hdiutil create -volname 'OpenGrokBot' -srcfolder "$stage_dir" -format UDZO -ov "$image_path"
+# 0.9.9: a window with the Bots around the edges and an arrow to Applications (scripts/make_dmg_background.py).
+mkdir "$stage_dir/.background"
+tiffutil -cathidpicheck "$script_dir/dmg/background.png" "$script_dir/dmg/background@2x.png" -out "$stage_dir/.background/background.tiff"
+rw_image="$stage_dir.rw.dmg"
+trap 'rm -rf -- "$stage_dir" "$rw_image"' EXIT
+hdiutil create -volname 'OpenGrokBot' -srcfolder "$stage_dir" -format UDRW -ov "$rw_image"
+device="$(hdiutil attach -readwrite -noverify -noautoopen "$rw_image" | awk '/Apple_HFS|Apple_APFS/ {print $1; exit}')"
+volume="$(hdiutil info | awk -v dev="$device" '$1 == dev && /\/Volumes\// {sub(/^.*\/Volumes\//, ""); print; exit}')"
+# Finder lays out the window. Without a GUI session (some CI runners) this fails and the DMG stays plain.
+if ! osascript <<APPLESCRIPT
+tell application "Finder"
+  tell disk "$volume"
+    open
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set the bounds of container window to {200, 120, 840, 548}
+    set viewOptions to the icon view options of container window
+    set arrangement of viewOptions to not arranged
+    set icon size of viewOptions to 128
+    set text size of viewOptions to 13
+    set background picture of viewOptions to file ".background:background.tiff"
+    set position of item "OpenGrokBot.app" of container window to {180, 190}
+    set position of item "Applications" of container window to {460, 190}
+    update without registering applications
+    delay 1
+    close
+  end tell
+end tell
+APPLESCRIPT
+then
+  echo 'Finder could not style the DMG window; continuing with a plain DMG.' >&2
+fi
+chmod -Rf go-w "/Volumes/$volume" || true
+sync
+hdiutil detach "$device" -quiet || hdiutil detach "$device" -force -quiet
+hdiutil convert "$rw_image" -format UDZO -imagekey zlib-level=9 -o "$image_path"
 hdiutil verify "$image_path"
 if [[ -n "${MACOS_NOTARY_PROFILE:-}" ]]; then
   if [[ "$identity" == '-' ]]; then echo 'Notarization requires a Developer ID identity.' >&2; exit 1; fi

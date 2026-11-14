@@ -1,4 +1,5 @@
 import AVFoundation
+import Combine
 import PhotosUI
 import Speech
 import SwiftUI
@@ -594,11 +595,44 @@ final class PhoneVoiceHub: ObservableObject {
                 stopReply: { Task { _ = await remote.command(RemoteCommand(action: "stop", botID: current.id)) } },
                 activity: { model.entries(for: current).suffix(12).filter { $0.kind == .activity }.map { VoiceStep(id: $0.id, text: $0.text, date: $0.date) } },
                 vocabulary: model.workspace.bots.map(\.name))
+            guard conversation.isRunning, botID == current.id else { return }
+            beginOutsideCall(current)
         }
     }
 
+    /// 0.9.9: the call keeps going outside the app, with mute and end in the Dynamic Island and Lock Screen.
+    private func beginOutsideCall(_ bot: Bot) {
+        let calls = CallCoordinator.shared
+        let session = conversation.session
+        let look = bot.appearance ?? BotAppearance(shape: bot.isMain == true ? .circle : .square, color: bot.color)
+        calls.onMute = { session.setMuted($0) }
+        calls.onEnd = { [weak self] in self?.stop() }
+        CallControl.toggleMute = { calls.requestMute(!calls.isMuted) }
+        CallControl.end = { [weak self] in self?.stop() }
+        calls.begin(botName: bot.name, shape: look.shape.rawValue, color: look.color)
+        // Mute pressed inside the app, and what the call is doing, reach the Live Activity.
+        callWatchers = [
+            session.$muted.removeDuplicates().sink { muted in
+                if calls.isMuted != muted { calls.requestMute(muted) }
+            },
+            session.$state.removeDuplicates().sink { state in
+                switch state {
+                case .speaking: calls.update(phase: "speaking")
+                case .thinking: calls.update(phase: "thinking")
+                default: calls.update(phase: "listening")
+                }
+            },
+        ]
+    }
+
+    private var callWatchers: [AnyCancellable] = []
+
     func stop() {
         guard let id = botID else { return }
+        callWatchers = []
+        CallControl.toggleMute = nil; CallControl.end = nil
+        CallCoordinator.shared.onMute = nil; CallCoordinator.shared.onEnd = nil
+        CallCoordinator.shared.end()
         conversation.stop()
         botID = nil
         if let remote { Task { _ = await remote.command(RemoteCommand(action: "voice_mode", botID: id, text: "off")) } }

@@ -5,6 +5,8 @@ import AppKit
 
 struct CloudSignInView: View {
     @ObservedObject var account: CloudAccount
+    /// Onboarding draws its own heading above this view.
+    var showsHeading = true
     @State private var email = ""
     @State private var password = ""
     @State private var create = false
@@ -20,8 +22,10 @@ struct CloudSignInView: View {
                 }
                 Button("Sign out of this device",role:.destructive) { Task { await account.signOut() } }
             } else {
-                Text(create ? "Create your account":"Sign in to OpenGrokBot").font(.title3.weight(.medium))
-                Text("Use the same account on your computer and iPhone.").foregroundStyle(.secondary)
+                if showsHeading {
+                    Text(create ? "Create your account":"Sign in to OpenGrokBot").font(.title3.weight(.medium))
+                    Text("Use the same account on your computer and iPhone.").foregroundStyle(.secondary)
+                }
                 TextField("Email",text:$email).textContentType(.emailAddress).autocorrectionDisabled()
                     .accessibilityIdentifier("cloud-email")
                 SecureField("Password",text:$password).textContentType(create ? .newPassword:.password)

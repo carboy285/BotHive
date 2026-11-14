@@ -145,7 +145,7 @@ struct RootView: View {
             .onChange(of: remote.hasSnapshot) { _, _ in openPendingVoice(); sendPendingAsk() }
             .onChange(of: remote.online) { _, _ in sendPendingAsk() }
             .onChange(of: phase) { _, new in if new == .active { sendPendingAsk() } }
-            .fullScreenCover(isPresented: Binding(get: { !seenWelcome }, set: { if !$0 { seenWelcome = true } })) { WelcomeView { seenWelcome = true } }
+            .fullScreenCover(isPresented: Binding(get: { !seenWelcome }, set: { if !$0 { seenWelcome = true } })) { OnboardingFlow(account: remote.account) { seenWelcome = true }.environmentObject(remote) }
             .sheet(isPresented: $createBot) { CreateBotView() }
             .sheet(item: $inspectedBot) { bot in
                 NavigationStack {
@@ -400,43 +400,3 @@ struct CreateBotView: View {
     }
 }
 
-/// Shown once on first launch: how the phone, the computer and the Bots fit together.
-struct WelcomeView: View {
-    let done: () -> Void
-    @State private var page = 0
-    private let pages: [(icon: String, title: String, text: String)] = [
-        ("desktopcomputer", "Your Bots run on your computer",
-         "Install OpenGrokBot on your Mac or Windows PC, choose an AI account there, and sign in with the same OpenGrokBot account on this iPhone."),
-        ("checkmark.shield", "Approve this iPhone once",
-         "Your computer asks before letting this phone in. Compare the fingerprint shown on both screens, then approve. Messages travel end-to-end encrypted."),
-        ("waveform", "Type, talk or send photos",
-         "Tap the waveform to talk hands-free, the plus button for photos and pasted images, and search to find any message.")
-    ]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            TabView(selection: $page) {
-                ForEach(pages.indices, id: \.self) { index in
-                    VStack(spacing: 22) {
-                        Spacer()
-                        Image(systemName: pages[index].icon).font(.system(size: 64, weight: .light)).foregroundStyle(.primary)
-                            .accessibilityHidden(true)
-                        Text(pages[index].title).font(.title2.weight(.semibold)).multilineTextAlignment(.center)
-                        Text(pages[index].text).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 32)
-                        Spacer()
-                    }.tag(index)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .always))
-            .indexViewStyle(.page(backgroundDisplayMode: .always))
-            Button {
-                if page < pages.count - 1 { withAnimation { page += 1 } } else { done() }
-            } label: {
-                Text(page < pages.count - 1 ? "Next" : "Get started").font(.headline).foregroundStyle(Palette.background)
-                    .frame(maxWidth: .infinity).frame(height: 54).background(.primary, in: Capsule())
-            }.buttonStyle(.plain).padding(.horizontal, 24).padding(.bottom, 12)
-            Button("Skip", action: done).font(.subheadline).foregroundStyle(.secondary).padding(.bottom, 20)
-        }
-        .background(Palette.background)
-    }
-}

@@ -39,8 +39,11 @@ tiffutil -cathidpicheck "$script_dir/dmg/background.png" "$script_dir/dmg/backgr
 rw_image="$stage_dir.rw.dmg"
 trap 'rm -rf -- "$stage_dir" "$rw_image"' EXIT
 hdiutil create -volname 'OpenGrokBot' -srcfolder "$stage_dir" -format UDRW -ov "$rw_image"
-device="$(hdiutil attach -readwrite -noverify -noautoopen "$rw_image" | awk '/Apple_HFS|Apple_APFS/ {print $1; exit}')"
-volume="$(hdiutil info | awk -v dev="$device" '$1 == dev && /\/Volumes\// {sub(/^.*\/Volumes\//, ""); print; exit}')"
+attach_output="$(hdiutil attach -readwrite -noverify -noautoopen "$rw_image")"
+device="$(printf '%s\n' "$attach_output" | awk '/\/Volumes\// {print $1; exit}')"
+mount_point="$(printf '%s\n' "$attach_output" | grep -o '/Volumes/.*$' | head -n 1)"
+volume="${mount_point#/Volumes/}"
+if [[ -z "$device" || -z "$volume" ]]; then echo 'Could not find the mounted DMG volume.' >&2; exit 1; fi
 # Finder lays out the window. Without a GUI session (some CI runners) this fails and the DMG stays plain.
 if ! osascript <<APPLESCRIPT
 tell application "Finder"
@@ -66,7 +69,7 @@ APPLESCRIPT
 then
   echo 'Finder could not style the DMG window; continuing with a plain DMG.' >&2
 fi
-chmod -Rf go-w "/Volumes/$volume" || true
+chmod -Rf go-w "$mount_point" || true
 sync
 hdiutil detach "$device" -quiet || hdiutil detach "$device" -force -quiet
 hdiutil convert "$rw_image" -format UDZO -imagekey zlib-level=9 -o "$image_path"

@@ -67,6 +67,8 @@ tell application "Finder"
 end tell
 APPLESCRIPT
 then
+  # Release builds must not ship a plain window; local builds keep going.
+  if [[ "${REQUIRE_DMG_STYLE:-0}" == 1 ]]; then echo 'Finder could not style the DMG window.' >&2; hdiutil detach "$device" -force -quiet || true; exit 1; fi
   echo 'Finder could not style the DMG window; continuing with a plain DMG.' >&2
 fi
 chmod -Rf go-w "$mount_point" || true

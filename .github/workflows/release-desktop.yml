@@ -57,6 +57,8 @@ jobs:
           -only-testing:GrokBotMacTests/HeadsUpRulesTests
           CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- test
       - name: Package universal Mac installer
+        env:
+          REQUIRE_DMG_STYLE: '1'
         run: ./scripts/build-macos.sh
       - name: Archive matching sources
         run: git archive --format=zip --prefix=OpenGrokBot-0.9.9/ --output=artifacts/OpenGrokBot-0.9.9-Source.zip HEAD
@@ -153,7 +155,11 @@ jobs:
           shopt -s nullglob
           release_files=(downloads/*.zip downloads/macos/*.dmg downloads/macos/*.sha256 downloads/*.exe)
           test "${#release_files[@]}" -ge 3 || { echo 'Expected Mac, Windows and source downloads.' >&2; exit 1; }
-          # A failed asset upload can leave an unpublished draft. Public releases are kept.
+          # A failed asset upload can leave an unpublished draft.
           draft_id=$(gh api 'repos/carboy285/opengrokbot/releases?per_page=100' --jq '[.[] | select(.tag_name == "v0.9.9" and .draft == true)] | .[0].id // empty')
           if [ -n "$draft_id" ]; then gh api --method DELETE "repos/carboy285/opengrokbot/releases/$draft_id"; fi
+          # Re-releasing the same version replaces it: the old release and its tag go, so the tag points at this build.
+          if gh release view v0.9.9 --repo carboy285/opengrokbot >/dev/null 2>&1; then
+            gh release delete v0.9.9 --repo carboy285/opengrokbot --cleanup-tag --yes
+          fi
           gh release create v0.9.9 --target "$GITHUB_SHA" --title 'OpenGrokBot 0.9.9 · A friendlier first run and calls outside the app' --prerelease --notes-file /tmp/desktop-release.md "${release_files[@]}"

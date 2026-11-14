@@ -610,6 +610,8 @@ final class PhoneVoiceHub: ObservableObject {
         CallControl.toggleMute = { calls.requestMute(!calls.isMuted) }
         CallControl.end = { [weak self] in self?.stop() }
         calls.begin(botName: bot.name, shape: look.shape.rawValue, color: look.color)
+        // Replies reach the call through the state loop, which normally pauses in the background.
+        remote?.keepAliveInBackground = true
         // Mute pressed inside the app, and what the call is doing, reach the Live Activity.
         callWatchers = [
             session.$muted.removeDuplicates().sink { muted in
@@ -633,6 +635,7 @@ final class PhoneVoiceHub: ObservableObject {
         CallControl.toggleMute = nil; CallControl.end = nil
         CallCoordinator.shared.onMute = nil; CallCoordinator.shared.onEnd = nil
         CallCoordinator.shared.end()
+        remote?.keepAliveInBackground = false
         conversation.stop()
         botID = nil
         if let remote { Task { _ = await remote.command(RemoteCommand(action: "voice_mode", botID: id, text: "off")) } }

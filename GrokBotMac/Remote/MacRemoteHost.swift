@@ -106,15 +106,20 @@ final class MacRemoteHost: ObservableObject {
             var nextHeartbeat = Date.distantPast
             var lastRequest = Date.distantPast
             var retryDelay = 1000
+            var seenWake = 0
             while !Task.isCancelled {
                 guard let self, self.enabled else { return }
                 var retrying = false
+                var backlog = false
                 do {
                     if Date() >= nextHeartbeat {
                         try await self.account.sync(available:true)
                         nextHeartbeat = Date().addingTimeInterval(20); self.lastHeartbeat = Date()
+                        self.account.startWake()
                     }
+                    seenWake = self.account.wake.pulse.count
                     let packets = try await self.account.poll()
+                    backlog = packets.count >= 8
                     if !packets.isEmpty { lastRequest = Date() }
                     for packet in packets {
                         try Task.checkCancellation()
@@ -162,7 +167,8 @@ final class MacRemoteHost: ObservableObject {
                                 let error = RemoteHostResponse.error(413, "This computer's workspace is too large for the encrypted relay. Export older conversations on the host and try again.")
                                 try await self.account.send(CloudCoding.encoder().encode(CloudResponse(status: error.status, body: error.body)),to:peer,id:packet.id,kind:"response")
                             }
-                            try await self.account.acknowledge(packet)
+                            // The reply is on its way; clearing the request needn't delay the next one.
+                            self.account.acknowledgeLater(packet)
                         } catch { try? await self.account.acknowledge(packet) }
                     }
                     if self.connectionState != "Waiting for device approval" { self.connectionState = self.lastPhoneRequest.map { Date().timeIntervalSince($0) < 10 ? "Connected" : "Ready for approved phones" } ?? "Ready for approved phones" }
@@ -170,13 +176,22 @@ final class MacRemoteHost: ObservableObject {
                     retryDelay = 1000
                     if self.feedback != message { self.feedback = message }
                 } catch { if Task.isCancelled || !self.enabled { return }; self.connectionState = "Offline · retrying"; self.feedback = error.localizedDescription; nextHeartbeat = .distantPast; retrying = true; retryDelay = min(15000, retryDelay * 2) }
-                let interval: Duration = retrying ? .milliseconds(retryDelay) : Date().timeIntervalSince(lastRequest) < 10 ? .milliseconds(250) : .milliseconds(700)
-                try? await Task.sleep(for: interval)
+                if retrying {
+                    try? await Task.sleep(for: .milliseconds(retryDelay))
+                } else if backlog {
+                    // A full page: more requests are waiting.
+                } else if self.account.wake.connected {
+                    // 0.9.9: the relay pings this Mac when a phone's request lands; the timer is only a safety net.
+                    await self.account.wake.pulse.wait(after: seenWake, upTo: .seconds(2))
+                } else {
+                    let interval: Duration = Date().timeIntervalSince(lastRequest) < 10 ? .milliseconds(250) : .milliseconds(700)
+                    await self.account.wake.pulse.wait(after: seenWake, upTo: interval)
+                }
             }
         }
     }
     func stop(persistPreference: Bool = true) {
-        enabled = false; polling?.cancel(); polling = nil; baselines = [:]; replies = [:]
+        enabled = false; polling?.cancel(); polling = nil; baselines = [:]; replies = [:]; account.stopWake()
         pendingPhoneApproval = nil
         if persistPreference { preferences.set(false,forKey:"cloudHostEnabled") }
         feedback = "Phone access is off."; connectionState = account.signedIn ? "Phone access off" : "Signed out"

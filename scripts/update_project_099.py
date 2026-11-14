@@ -102,6 +102,7 @@ for name in ['GrokBot', 'GrokBotMac']: compile_in('GrokBot/Design/CharacterCrowd
 for name in ['GrokBot', EXT]: compile_in('GrokBot/Voice/CallActivity.swift', name, 'GrokBot')
 compile_in('GrokBot/Features/OnboardingFlow.swift', 'GrokBot', 'GrokBot')
 compile_in('GrokBot/Voice/CallCoordinator.swift', 'GrokBot', 'GrokBot')
+for name in ['GrokBot', 'GrokBotMac']: compile_in('GrokBot/Core/CloudWake.swift', name, 'GrokBot')
 ext_source = EXT + '/GrokBotLiveActivity.swift'
 ref = reference(ext_source)
 sources = phase_of(ext_key, 'PBXSourcesBuildPhase')

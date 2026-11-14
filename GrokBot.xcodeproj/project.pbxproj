@@ -256,6 +256,7 @@
 				"DAD4E5B107A48F3C9B21930B",
 				"4F26F5AA04AF454B5ED4D243",
 				"8ECA00763C20C90E7FE4CFFC",
+				"750ADD191075DBD9C76B1B2A",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -548,6 +549,7 @@
 				"62D83F157E120CF8E201F4DB",
 				"B3CA23F0A8D9CE53DC747EC7",
 				"6C549D615CF3943CF8DBEE54",
+				"E85445FB8C908430C76181E1",
 			);
 			"name" = "GrokBot";
 			"sourceTree" = "<group>";
@@ -1437,6 +1439,7 @@
 				"399FFDB4109DA3914179F6AF",
 				"F74FEC740A8E735891BB67E7",
 				"2F786ED86CDC72CAFB27076F",
+				"C3EB320BD125CD252FD45F37",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -2438,6 +2441,20 @@
 		"2F786ED86CDC72CAFB27076F" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "AC291DFB41826093A7D812FF";
+		};
+		"E85445FB8C908430C76181E1" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBot/Core/CloudWake.swift";
+			"sourceTree" = "<group>";
+		};
+		"750ADD191075DBD9C76B1B2A" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "E85445FB8C908430C76181E1";
+		};
+		"C3EB320BD125CD252FD45F37" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "E85445FB8C908430C76181E1";
 		};
 	};
 	"rootObject" = "244210E48437B6556980A702";

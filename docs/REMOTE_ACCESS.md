@@ -46,3 +46,10 @@ Only the host can run AI, install/sign into CLIs, configure Composio or manage t
 Account sign-in replaces pairing keys on Apple platforms. Sign in again and approve your phone; old pairing links are not imported. The new Mac build does not invoke Tailscale or change your existing Tailscale configuration. If you enabled a Serve/Funnel route with 0.5.0, disable it from that version before upgrading, or remove that specific app route in Tailscale. Other Tailscale services must be preserved.
 
 For physical iPhone installation, see [Device setup](DEVICE_SETUP.md). Physical-device roaming and live email delivery require your accounts and have not been verified by the automated fixtures; see [Verification](VERIFICATION.md).
+
+## Faster replies (0.9.9)
+
+Apply `supabase/migrations/20261114200000_relay_wake.sql` to the account database (Supabase SQL editor, or `supabase db push`). When a phone or computer stores a packet, the database pings the recipient on a private Realtime channel named `opengrok:<device id>`, and the recipient checks its mailbox right away instead of on a 250–700 ms timer. The ping is an empty JSON object: messages still travel only through the encrypted mailbox. Only the account that owns a device can listen on its channel. `supabase/verify-wake.sql` checks all of this in a transaction that is rolled back.
+
+Without the migration, 0.9.9 still answers faster than 0.9.8 (requests no longer queue behind each other, and clearing a handled packet doesn't hold up the reply), and both apps keep polling on their old timers.
+

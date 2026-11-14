@@ -43,6 +43,12 @@ final class RemoteController: ObservableObject {
     private var active = true
     private var epoch = UUID()
     private var initialLoadFailed = false
+    /// Ends the state loop's wait early, e.g. right after a message is sent (0.9.9).
+    private let kick = CloudPulse()
+    /// A voice call runs in the background, and its replies arrive through the state loop (0.9.9).
+    var keepAliveInBackground = false {
+        didSet { if keepAliveInBackground, !active { setActive(true) } }
+    }
 
     init(account: CloudAccount = CloudAccount(kind:"controller"), secrets: KeychainSecretStore = KeychainSecretStore(service:"org.opengrokbot.ios.cloud-selection")) {
         self.account = account; self.client = CloudRelayClient(account:account); self.secrets = secrets
@@ -75,18 +81,21 @@ final class RemoteController: ObservableObject {
         model?.applyRemoteSnapshot(Workspace()); model?.leavePreview()
     }
     func setActive(_ active: Bool) {
+        if !active, keepAliveInBackground { return }
         if self.active == active, (!active || polling != nil) { return }
         self.active = active
-        if active { startPolling() } else { polling?.cancel(); polling = nil; online = false }
+        if active { startPolling() } else { polling?.cancel(); polling = nil; online = false; account.stopWake() }
     }
     private func startPolling(autoSelect: Bool = true) {
         polling?.cancel()
         guard active, account.signedIn else { status = "Sign in to connect your desktop"; return }
         restoreHost()
+        account.startWake()
         if connection == nil { status = "Finding your computer…" }
         let current = epoch
         polling = Task {
             var nextPinSync = Date.distantPast
+            var seenKick = kick.count
             var nextDiscovery = connection == nil ? Date.distantPast : Date().addingTimeInterval(15)
             while !Task.isCancelled, current == epoch {
                 do {
@@ -94,6 +103,7 @@ final class RemoteController: ObservableObject {
                         try await account.sync()
                         try Task.checkCancellation()
                         guard current == epoch else { return }
+                        account.startWake()
                         nextDiscovery = Date().addingTimeInterval(connection == nil ? 2 : 20)
                         if connection == nil, autoSelect, let owner = account.session?.user.id {
                             let selection = try secrets.read(account:owner.uuidString).flatMap { String(data:$0,encoding:.utf8) }
@@ -112,6 +122,7 @@ final class RemoteController: ObservableObject {
                             }
                         }
                     }
+                    seenKick = kick.count
                     if connection != nil {
                         if !hasSnapshot, !needsApproval, !initialLoadFailed { status = "Loading Bots from \(hostName)…" }
                         try await refresh()
@@ -134,7 +145,7 @@ final class RemoteController: ObservableObject {
                     }
                 }
                 let interval: Duration = !online ? .seconds(2) : running.isEmpty ? .milliseconds(700) : .milliseconds(250)
-                try? await Task.sleep(for: interval)
+                await kick.wait(after: seenKick, upTo: interval)
             }
         }
     }
@@ -243,6 +254,8 @@ final class RemoteController: ObservableObject {
         do {
             _ = try await client.fetch(peer,target:"/v1/command",command:command)
             guard current == epoch else { return false }
+            // Check for the result now instead of at the next tick.
+            kick.signal()
             // The regular state poll publishes the result. Acknowledged commands
             // must not keep the composer busy waiting for another relay exchange.
             return true

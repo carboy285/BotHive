@@ -60,4 +60,48 @@ final class CloudTests: XCTestCase {
         try account.pin(desktop);desktop.public_key = try CloudIdentity().publicKey;XCTAssertThrowsError(try account.pin(desktop))
         await account.signOut();XCTAssertFalse(account.signedIn);XCTAssertNil(account.identity)
     }
+
+    // MARK: 0.9.9 wake channel
+
+    func testWakeChannelTopicAndJoinFrame() throws {
+        let device = UUID(uuidString: "A0B418E3-8581-4F21-B136-CF0039F1B001")!
+        // Postgres prints UUIDs in lower case; the channel name must match the migration's 'opengrok:' || id::text.
+        XCTAssertEqual(CloudWake.topic(device), "realtime:opengrok:a0b418e3-8581-4f21-b136-cf0039f1b001")
+        let frame = CloudWake.joinFrame(topic: CloudWake.topic(device), token: "jwt", ref: "1")
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(frame.utf8)) as? [String: Any])
+        XCTAssertEqual(object["event"] as? String, "phx_join")
+        XCTAssertEqual(object["ref"] as? String, "1")
+        XCTAssertEqual(object["join_ref"] as? String, "1")
+        let payload = try XCTUnwrap(object["payload"] as? [String: Any])
+        XCTAssertEqual(payload["access_token"] as? String, "jwt")
+        let config = try XCTUnwrap(payload["config"] as? [String: Any])
+        XCTAssertEqual(config["private"] as? Bool, true)
+        let url = try XCTUnwrap(CloudWake.socketURL())
+        XCTAssertEqual(url.scheme, "wss"); XCTAssertEqual(url.path, "/realtime/v1/websocket")
+        XCTAssertEqual(url.host, CloudConfiguration.url.host)
+    }
+
+    func testWakeChannelReadsServerFrames() {
+        let topic = "realtime:opengrok:abc"
+        XCTAssertEqual(CloudWake.parse(#"{"topic":"realtime:opengrok:abc","event":"phx_reply","payload":{"status":"ok","response":{}},"ref":"1"}"#, topic: topic), .joined)
+        XCTAssertEqual(CloudWake.parse(#"{"topic":"realtime:opengrok:abc","event":"phx_reply","payload":{"status":"error","response":{"reason":"Unauthorized"}},"ref":"1"}"#, topic: topic), .closed)
+        XCTAssertEqual(CloudWake.parse(#"{"topic":"realtime:opengrok:abc","event":"broadcast","payload":{"type":"broadcast","event":"packet","payload":{}},"ref":null}"#, topic: topic), .wake)
+        XCTAssertEqual(CloudWake.parse(#"{"topic":"realtime:opengrok:abc","event":"system","payload":{"status":"error","message":"denied"},"ref":null}"#, topic: topic), .closed)
+        XCTAssertEqual(CloudWake.parse(#"{"topic":"realtime:opengrok:abc","event":"phx_close","payload":{},"ref":null}"#, topic: topic), .closed)
+        // Heartbeat replies and other channels' traffic are ignored.
+        XCTAssertEqual(CloudWake.parse(#"{"topic":"phoenix","event":"phx_reply","payload":{"status":"ok"},"ref":"7"}"#, topic: topic), .other)
+        XCTAssertEqual(CloudWake.parse(#"{"topic":"realtime:opengrok:other","event":"broadcast","payload":{},"ref":null}"#, topic: topic), .other)
+        XCTAssertEqual(CloudWake.parse("not json", topic: topic), .other)
+    }
+
+    @MainActor
+    func testPulseWakesWaitersAndNeverLosesAnEarlyPing() async {
+        let pulse = CloudPulse()
+        let seen = pulse.count
+        pulse.signal() // Lands before the wait starts: must still count.
+        let early = await pulse.wait(after: seen, upTo: .seconds(1))
+        XCTAssertTrue(early)
+        let quiet = await pulse.wait(after: pulse.count, upTo: .milliseconds(50))
+        XCTAssertFalse(quiet)
+    }
 }

@@ -30,6 +30,8 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
     private var approvals: [String:String] = [:]
     private var pinnedHosts: [String:String] = [:]
     var signedIn: Bool { session != nil }
+    /// 0.9.9: pings this device the moment a packet is stored for it, so mailbox checks don't wait on a timer.
+    let wake = CloudWake()
     var email: String { session?.user.email ?? "Account" }
     var localDevice: CloudDevice? { devices.first { $0.id == identity?.id } }
     var controllers: [CloudDevice] { devices.filter { $0.kind == "controller" } }
@@ -145,6 +147,7 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
         let oldSession = session
         browser?.cancel(); authCompletion?.finish(.failure(CloudError.signedOut))
         // Clear local state immediately, even if the network is unavailable.
+        wake.stop()
         generation = UUID(); refreshTask?.cancel(); refreshTask = nil; session = nil; identity = nil; devices = []; approvals = [:]; pinnedHosts = [:]
         do { try secrets.delete(account:"session") } catch { self.error = "Keychain sign-out failed. Unlock this device and sign out again." }
         if let oldSession { _ = try? await raw(path:"/auth/v1/logout?scope=local",method:"POST",data:Data("{}".utf8),token:oldSession.access_token) }
@@ -179,6 +182,8 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
     private func raw(path: String, method: String, data: Data?, token: String?) async throws -> Data {
         guard let url = URL(string:path,relativeTo:CloudConfiguration.url), url.scheme == "https", url.host == CloudConfiguration.url.host else { throw CloudError.invalidPacket }
         var request = URLRequest(url:url); request.httpMethod = method; request.httpBody = data
+        // Someone is waiting on every relay call: ask the system to treat it as interactive traffic.
+        request.networkServiceType = .responsiveData
         request.setValue(CloudConfiguration.publishableKey,forHTTPHeaderField:"apikey")
         request.setValue("application/json",forHTTPHeaderField:"Content-Type")
         if let token { request.setValue("Bearer " + token,forHTTPHeaderField:"Authorization") }
@@ -247,6 +252,19 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
         guard let identity else { throw CloudError.signedOut }
         _ = try await request(path:"/rest/v1/rpc/opengrok_ack",body:["device_id":identity.id.uuidString,"packet_id":packet.id.uuidString,"packet_kind":packet.kind])
     }
+    /// Acknowledges without making the caller wait: the reply it just read is already in hand.
+    func acknowledgeLater(_ packet: CloudPacket) {
+        Task { try? await self.acknowledge(packet) }
+    }
+    /// Opens the wake channel for this device once it is registered and signed in.
+    func startWake() {
+        guard signedIn, let device = identity?.id else { return }
+        wake.start(device: device) { [weak self] in
+            guard let self else { throw CloudError.signedOut }
+            return try await self.accessToken()
+        }
+    }
+    func stopWake() { wake.stop() }
     func decrypt(_ packet: CloudPacket, peer: CloudDevice) throws -> Data {
         guard let identity, let owner = session?.user.id else { throw CloudError.signedOut }
         return try identity.open(packet,from:peer,owner:owner)

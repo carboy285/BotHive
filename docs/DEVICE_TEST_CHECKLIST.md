@@ -133,3 +133,25 @@ Automated checks (unit tests, fixture UI tests and builds) cannot prove that voi
 - Mac → Computers → Old entries: Remove an offline duplicate. Needs `supabase/migrations/20261109050000_forget_device.sql` applied to the account database first.
 - Mac on an unapproved computer: the VM card says a prompt is waiting on that computer.
 - Not built: a unique guest session name per command (I could not confirm VBoxManage run accepts one; retries cover VERR_DUPLICATE).
+
+## 0.9.9: first run and calls outside the app
+
+### iPhone (about 10 minutes, on a real phone: CallKit does not run properly in the Simulator)
+1. **First run.** Delete the app, install 0.9.9 and open it. The Bots pop in around "Grok Bot" and drift; tap one and it squishes. *Get started* leads to Sign in, Pair your Mac, Microphone and Notifications. *Skip* on each step moves on without errors, and *Back* returns.
+2. **Reduce Motion.** Settings → Accessibility → Motion → Reduce Motion on, then repeat step 1: the Bots sit still and steps fade instead of sliding.
+3. **Start a call.** Open a Bot and start voice mode. Within a second or two the status bar shows a green call indicator.
+4. **Leave the app.** Swipe home. The Dynamic Island shows the Bot's face and a running timer. Long-press it: the timer, Bot name, a mic button and a red ✕ appear.
+5. **Keeps listening.** With the app in the background, say something. The Bot answers out loud. If it doesn't, note whether the timer is still running.
+6. **Mute.** Tap the mic in the Dynamic Island: it turns white with a slashed mic and the timer turns red. Speak: nothing is sent. Tap again to unmute. Open the app: its mute button agrees.
+7. **Lock Screen.** Lock the phone. The Lock Screen shows the same black banner with mute and ✕, and both work.
+8. **End from outside.** Tap ✕ in the Dynamic Island. The call ends, the Island clears, and voice mode is closed when you open the app.
+9. **Real phone call.** Start a Bot call, then have someone call you. iOS offers to end the Bot call and answer. Choose it: the Bot call ends cleanly.
+10. **Ending in the app.** Start a call, end it with the app's own end button: the Dynamic Island clears.
+
+### Mac (about 10 minutes)
+1. **First run.** Quit the app, run `defaults delete org.opengrokbot.mac localCLISetupComplete`, and reopen. The setup panel opens on the Bots around "Grok Bot". *Get started* opens the six steps; each has its own character. Settings → *AI CLI setup* goes straight to the steps.
+2. **Call pill.** Start voice mode, then switch to another app. A black pill hangs from the notch with the Bot's face on the left and a timer on the right. On a Mac without a notch it sits just below the menu bar.
+3. **Expand.** Hover the pill: it grows to show the Bot's name, a mic and a red ✕. Move away: it shrinks back, and the menu bar items beside it can be clicked again.
+4. **Controls.** Mute from the pill, speak (nothing is sent), unmute. Click the Bot's face: Grok Bot comes to the front and the pill disappears. Switch away again and end the call with ✕: the pill disappears and voice mode closes.
+5. **Spaces and full screen.** With a call on, switch to another Space and to a full-screen app: the pill stays visible.
+6. **DMG.** Open the 0.9.9 DMG. The window shows the app on the left, Applications on the right, an arrow between them and Bots around the edges.

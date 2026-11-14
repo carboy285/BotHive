@@ -100,48 +100,53 @@ final class CallCoordinator: NSObject, CXProviderDelegate {
 
     // MARK: CXProviderDelegate (delivered on the main queue)
 
+    // Only Sendable values (UUIDs, Bools) cross into main-actor code; the CXAction objects stay here.
+
     nonisolated func providerDidReset(_ provider: CXProvider) {
-        MainActor.assumeIsolated { endedOutside() }
+        MainActor.assumeIsolated { self.endedOutside() }
     }
 
     nonisolated func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
-        MainActor.assumeIsolated {
-            guard action.callUUID == callID else { action.fail(); return }
-            callKitActive = true
-            provider.reportOutgoingCall(with: action.callUUID, startedConnectingAt: nil)
-            action.fulfill()
-            let update = CXCallUpdate()
-            update.remoteHandle = action.handle
-            update.localizedCallerName = action.contactIdentifier
-            update.hasVideo = false
-            update.supportsHolding = false
-            update.supportsGrouping = false
-            update.supportsUngrouping = false
-            update.supportsDTMF = false
-            provider.reportCall(with: action.callUUID, updated: update)
-            provider.reportOutgoingCall(with: action.callUUID, connectedAt: .now)
-        }
+        let id = action.callUUID
+        let ours = MainActor.assumeIsolated { self.acceptStart(id) }
+        guard ours else { action.fail(); return }
+        provider.reportOutgoingCall(with: id, startedConnectingAt: nil)
+        action.fulfill()
+        let update = CXCallUpdate()
+        update.remoteHandle = action.handle
+        update.localizedCallerName = action.contactIdentifier
+        update.hasVideo = false
+        update.supportsHolding = false
+        update.supportsGrouping = false
+        update.supportsUngrouping = false
+        update.supportsDTMF = false
+        provider.reportCall(with: id, updated: update)
+        provider.reportOutgoingCall(with: id, connectedAt: .now)
     }
 
     nonisolated func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
-        MainActor.assumeIsolated {
-            // The app already cleared callID when it ended the call itself.
-            if action.callUUID == callID { endedOutside() }
-            action.fulfill()
-        }
+        let id = action.callUUID
+        // The app already cleared callID when it ended the call itself.
+        MainActor.assumeIsolated { if id == self.callID { self.endedOutside() } }
+        action.fulfill()
     }
 
     nonisolated func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
-        MainActor.assumeIsolated {
-            if action.callUUID == callID { applyMute(action.isMuted) }
-            action.fulfill()
-        }
+        let id = action.callUUID, muted = action.isMuted
+        MainActor.assumeIsolated { if id == self.callID { self.applyMute(muted) } }
+        action.fulfill()
     }
 
     nonisolated func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {}
     nonisolated func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {}
 
     // MARK: Private
+
+    private func acceptStart(_ id: UUID) -> Bool {
+        guard id == callID else { return false }
+        callKitActive = true
+        return true
+    }
 
     private func applyMute(_ on: Bool) {
         guard state.muted != on else { return }

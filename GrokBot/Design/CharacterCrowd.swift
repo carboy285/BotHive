@@ -29,7 +29,7 @@ struct CharacterCrowd: View {
         Member(id: 10, shape: "clover", color: "gray", x: 0.9, y: 0.95, scale: 0.56, tilt: 18),
     ]
 
-    private struct Squish { var x = 1.0; var y = 1.0 }
+    private struct Squish: Sendable { var x = 1.0; var y = 1.0 }
 
     var members: [Member] = CharacterCrowd.ring
     /// Character size as a fraction of the container's shorter side.

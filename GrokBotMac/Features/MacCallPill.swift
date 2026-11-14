@@ -79,7 +79,10 @@ final class MacCallPill {
             open: { [weak self] in self?.openApp() },
             mute: { session.setMuted(!session.muted) },
             end: { [weak self] in self?.hub?.stop() })
-        panel.contentView = NSHostingView(rootView: view)
+        let hosting = NSHostingView(rootView: view)
+        // The pill sets the window's size itself; don't let SwiftUI resize or constrain it.
+        hosting.sizingOptions = []
+        panel.contentView = hosting
         return panel
     }
 

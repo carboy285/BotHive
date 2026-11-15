@@ -80,7 +80,7 @@ const {previewWorkspace}=require('../desktop-windows/app/workspace.cjs');
   assert.equal(await page.locator('.heads-up-banner.visible').count(),0);
 
   // Settings: off by default, sub-options disabled until the master switch is on.
-  await page.getByRole('button',{name:'Settings',exact:true}).click();
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();await page.getByRole('menuitem',{name:'Settings',exact:true}).click();
   await page.getByRole('button',{name:'Heads-ups',exact:true}).click();
   await page.getByRole('heading',{name:'Let Hive reach out first'}).waitFor();
   assert.equal(await page.getByRole('switch',{name:'Heads-ups'}).isChecked(),false);
@@ -146,7 +146,7 @@ const {previewWorkspace}=require('../desktop-windows/app/workspace.cjs');
 
   // The plain browser preview explains heads-ups need the desktop app.
   const plain=await browser.newPage();await plain.goto('http://127.0.0.1:4175');
-  await plain.getByRole('button',{name:'Settings',exact:true}).click();await plain.getByRole('button',{name:'Heads-ups',exact:true}).click();
+  await plain.getByRole('button',{name:'Account menu',exact:true}).click();await plain.getByRole('menuitem',{name:'Settings',exact:true}).click();await plain.getByRole('button',{name:'Heads-ups',exact:true}).click();
   await plain.getByText('Open the installed desktop app to turn on heads-ups.',{exact:false}).waitFor();
 
   assert.deepEqual(errors,[]);

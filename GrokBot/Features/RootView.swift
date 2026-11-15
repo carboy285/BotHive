@@ -176,10 +176,10 @@ struct RootView: View {
             HStack {
                 Button { settings = true } label: {
                     Group {
-                        if initials.isEmpty { Image(systemName: "person.crop.circle").font(.system(size: 25)) }
-                        else { Text(initials).font(.system(size: 16, weight: .medium)).foregroundStyle(.secondary) }
-                    }.frame(width: 48, height: 48).background(.primary.opacity(0.04), in: Circle())
-                        .padding(4).glassChrome(in: Circle())
+                        if initials.isEmpty { Image(systemName: "person.crop.circle").font(.system(size: 22)) }
+                        else { Text(initials).font(.system(size: 15, weight: .medium)).foregroundStyle(.secondary) }
+                    }.frame(width: 44, height: 44).background(.primary.opacity(0.04), in: Circle())
+                        .glassChrome(in: Circle())
                 }.buttonStyle(.plain).accessibilityLabel("Account and settings")
                 Spacer()
                 if remote.hasSnapshot {
@@ -188,6 +188,7 @@ struct RootView: View {
             }.padding(.horizontal, 20).padding(.top, 8)
             if remote.hasSnapshot { RemoteConnectionBanner() }
         }.padding(.bottom, 8).background(Palette.background)
+            .animation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 1), value: remote.online)
     }
 
     private var roster: some View {

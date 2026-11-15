@@ -62,10 +62,10 @@ struct RoundButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 23, weight: .regular))
-                .frame(width: 50, height: 50)
+                .font(.system(size: 20, weight: .regular))
+                .frame(width: 44, height: 44)
                 .glassChrome(in: Circle())
-                .shadow(color: .black.opacity(0.035), radius: 12, y: 4)
+                .shadow(color: .black.opacity(0.035), radius: 10, y: 3)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

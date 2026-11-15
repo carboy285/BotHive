@@ -11,6 +11,7 @@ struct MacConversationView: View {
     @FocusState private var composing: Bool
     @State private var followLatest = true
     @State private var dropTargeted = false
+    @AppStorage("chatWidth") private var chatWidthKey = "wide"
     @State private var showActions = false
     @ObservedObject private var voiceHub = MacVoiceHub.shared
     /// The message a search or pin jumped to, highlighted for a moment.
@@ -21,6 +22,9 @@ struct MacConversationView: View {
     @State private var scrollTask: Task<Void,Never>?
     @AppStorage(HeadsUpSettings.enabledKey) private var headsUpsOn = false
     private var showsToday: Bool { bot.isMain == true && headsUpsOn }
+
+    /// How wide the conversation column (messages and the message box) can grow. The Share menu in the top corner changes it.
+    private var chatWidth: CGFloat { MacChatWidth(rawValue: chatWidthKey)?.points ?? MacChatWidth.wide.points }
 
     private var avatarColor: String { bot.appearance?.color ?? bot.color }
     @AppStorage("accentStyle") private var accentStyle = "bot"
@@ -55,12 +59,12 @@ struct MacConversationView: View {
                         Color.clear.frame(height: 1).id("bottom")
                     }
                     .padding(.horizontal, 24).padding(.top, showsToday ? 160 : 88).padding(.bottom, 20)
-                    .frame(maxWidth: 780).frame(maxWidth: .infinity)
+                    .frame(maxWidth: chatWidth).frame(maxWidth: .infinity)
                     .background(ChatScrollMonitor(onUserScroll: { nearBottom in followLatest = nearBottom },
                         onLayout: { if followLatest { scrollToLatest(proxy) } }))
                 }
                 .overlay(alignment: .top) {
-                    if showsToday { MacTodayCard(headsUps: desktop.headsUps).padding(.horizontal, 24).padding(.top, 66).frame(maxWidth: 780) }
+                    if showsToday { MacTodayCard(headsUps: desktop.headsUps).padding(.horizontal, 24).padding(.top, 66).frame(maxWidth: chatWidth) }
                 }
                 .task(id: bot.id) { followLatest = true; scrollToLatest(proxy); jump(proxy) }
                 .onChange(of: desktop.jumpTo) { _, _ in jump(proxy) }
@@ -80,7 +84,7 @@ struct MacConversationView: View {
         }
         .overlay(alignment: .top) {
             Button {
-                if desktop.gateway != nil { desktop.sendFeedback[bot.id] = "Bot details aren’t available while viewing another computer yet. Provider and model are in the header menu, and its settings are under “You”."; return }
+                if desktop.gateway != nil { desktop.sendFeedback[bot.id] = "Bot details aren’t available while viewing another computer yet. Provider and model are in the model menu at the top, and its settings are under “You”."; return }
                 desktop.showBotInspector.toggle()
             } label: {
                 HStack(spacing: 10) {
@@ -107,8 +111,9 @@ struct MacConversationView: View {
             .padding(.top, 12)
         }
         .overlay(alignment: .topTrailing) {
+            // The model is chosen in the Bot's details (Providers & models). While viewing another computer, which has no details panel, the model menu stays.
             HStack(spacing: 10) {
-                MacModelMenu(bot: bot)
+                if desktop.gateway != nil { MacModelMenu(bot: bot) }
                 shareMenu
             }.padding(.top, 14).padding(.trailing, 18)
         }
@@ -166,7 +171,7 @@ struct MacConversationView: View {
         }
     }
 
-    /// A "Share" pill in the top corner, as in the reference: copy or export this conversation.
+    /// A liquid-glass Share button in the top corner: copy or export this conversation, and choose how wide the chat is.
     private var shareMenu: some View {
         Menu {
             Button("Copy conversation", systemImage: "doc.on.doc") {
@@ -175,12 +180,17 @@ struct MacConversationView: View {
             }
             Button("Export as Markdown\u{2026}", systemImage: "square.and.arrow.up") { desktop.exportConversation(bot, app: app) }
             Button("Export as PDF\u{2026}", systemImage: "doc.richtext") { desktop.exportConversation(bot, app: app, pdf: true) }
+            Divider()
+            Picker("Chat width", selection: $chatWidthKey) {
+                ForEach(MacChatWidth.allCases) { option in Text(option.title).tag(option.rawValue) }
+            }.pickerStyle(.inline)
         } label: {
-            Text("Share").font(.system(size: 14, weight: .medium)).padding(.horizontal, 16).frame(height: 38)
-                .contentShape(Capsule()).glassChrome(in: Capsule())
+            Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .medium)).frame(width: 40, height: 40)
+                .contentShape(Circle()).glassChrome(in: Circle())
+                .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-        .help("Copy or export this conversation").accessibilityLabel("Share conversation")
+        .help("Share, export and chat width").accessibilityLabel("Share conversation")
     }
 
     private var composer: some View {
@@ -189,7 +199,7 @@ struct MacConversationView: View {
                 MacApprovalCard(request: request, bot: app.workspace.bots.first { request.title.hasPrefix("Let \($0.name) ") }) { allowed in
                     approval.answer(id: request.id, approved: allowed)
                 }
-                .frame(maxWidth: 740)
+                .frame(maxWidth: chatWidth - 40)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if let recovery = desktop.recoverableDrafts[bot.id]?.first {
@@ -280,11 +290,11 @@ struct MacConversationView: View {
             }
             .padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 6).frame(minHeight: 52)
             .background { RoundedRectangle(cornerRadius: 26, style: .continuous).fill(MacTheme.panel.opacity(0.55)).glassChrome(in: RoundedRectangle(cornerRadius: 26, style: .continuous), interactive: false).allowsHitTesting(false) }
-            .frame(maxWidth: 780)
+            .frame(maxWidth: chatWidth)
             .onAppear { installPasteMonitor() }
             .onChange(of: bot.id) { _, _ in installPasteMonitor(); dictation.stop() }
             .onDisappear { removePasteMonitor(); dictation.stop() }
-            // Quiet by default: the model is in the header menu. This line only appears when something needs doing.
+            // Quiet by default: the model is chosen in the Bot's details. This line only appears when something needs doing.
             if desktop.scanningCLIs || desktop.needsProvider(bot) || desktop.runningBots.contains(bot.id) {
                 HStack(spacing: 8) {
                     if desktop.scanningCLIs { ProgressView().controlSize(.mini) }
@@ -297,7 +307,7 @@ struct MacConversationView: View {
                         Button("Stop") { desktop.stop(botID: bot.id) }.buttonStyle(.link)
                     }
                 }
-                .font(.system(size: 11)).foregroundStyle(MacTheme.secondary).frame(maxWidth: 760)
+                .font(.system(size: 11)).foregroundStyle(MacTheme.secondary).frame(maxWidth: chatWidth - 20)
             }
             if let feedback = desktop.sendFeedback[bot.id] {
                 HStack { Text(feedback).font(.caption); Button("AI CLI setup") { desktop.panel = .setup } }.foregroundStyle(.secondary)
@@ -379,6 +389,16 @@ struct MacConversationView: View {
                 ComposerActionRow(title: desktop.teach.recording ? "Recording…" : "Teach a task", icon: "record.circle", disabled: desktop.teach.recording, tint: .red) {
                     showActions = false
                     desktop.teach.start(for: bot.id)
+                }
+            }
+            if desktop.gateway == nil, bot.memberIDs == nil {
+                ComposerActionRow(title: "Add knowledge files", icon: "books.vertical", disabled: false, tint: tint) {
+                    showActions = false
+                    DispatchQueue.main.async { MacKnowledgeActions.add(for: bot, desktop: desktop) }
+                }
+                ComposerActionRow(title: "Open Knowledge folder", icon: "folder", disabled: false, tint: tint) {
+                    showActions = false
+                    MacKnowledgeActions.open(for: bot, desktop: desktop)
                 }
             }
             Divider().padding(.vertical, 4)
@@ -1062,5 +1082,27 @@ struct MacStarterCard: View {
                 .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain).onHover { hovering = $0 }
+    }
+}
+
+/// How wide the conversation can grow (10.1): the messages and the message box share it.
+enum MacChatWidth: String, CaseIterable, Identifiable {
+    case comfortable, wide, extra, fill
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .comfortable: "Comfortable"
+        case .wide: "Wide"
+        case .extra: "Extra wide"
+        case .fill: "Fill the window"
+        }
+    }
+    var points: CGFloat {
+        switch self {
+        case .comfortable: 780
+        case .wide: 1000
+        case .extra: 1280
+        case .fill: .infinity
+        }
     }
 }

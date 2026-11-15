@@ -64,20 +64,8 @@ struct MacModelMenu: View {
         .help("Switch the model for this Bot")
     }
 
-    private func addKnowledge() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true; panel.canChooseDirectories = false
-        panel.message = "Choose PDFs or text files that \(bot.name) can search"
-        guard panel.runModal() == .OK else { return }
-        let added = (try? KnowledgeSearch.add(panel.urls, to: desktop.workingDirectory(for: bot))) ?? 0
-        desktop.sendFeedback[bot.id] = added == 0 ? "No supported files were added. Use PDF, text, Markdown, CSV or similar files under 8 MB." : "Added \(added) file\(added == 1 ? "" : "s") to \(bot.name)’s Knowledge. Ask it to search them."
-    }
-
-    private func openKnowledge() {
-        let folder = KnowledgeSearch.folder(for: desktop.workingDirectory(for: bot))
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(folder)
-    }
+    private func addKnowledge() { MacKnowledgeActions.add(for: bot, desktop: desktop) }
+    private func openKnowledge() { MacKnowledgeActions.open(for: bot, desktop: desktop) }
 
     private func choose(_ provider: CLIProvider) {
         var value = configuration; value.activeProvider = provider; value.replyMode = .one
@@ -138,5 +126,24 @@ private struct RemoteModelMenu: View {
         .task(id: gateway.providers.map(\.provider.rawValue).joined(separator: ",")) {
             for provider in gateway.providers where models[provider.provider] == nil { models[provider.provider] = await gateway.models(provider.provider) }
         }
+    }
+}
+
+/// Knowledge files for a Bot: add PDFs and text it can search, or open its Knowledge folder. Shared by the "+" menu and the model menu.
+@MainActor
+enum MacKnowledgeActions {
+    static func add(for bot: Bot, desktop: MacAppModel) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true; panel.canChooseDirectories = false
+        panel.message = "Choose PDFs or text files that \(bot.name) can search"
+        guard panel.runModal() == .OK else { return }
+        let added = (try? KnowledgeSearch.add(panel.urls, to: desktop.workingDirectory(for: bot))) ?? 0
+        desktop.sendFeedback[bot.id] = added == 0 ? "No supported files were added. Use PDF, text, Markdown, CSV or similar files under 8 MB." : "Added \(added) file\(added == 1 ? "" : "s") to \(bot.name)\u{2019}s Knowledge."
+    }
+
+    static func open(for bot: Bot, desktop: MacAppModel) {
+        let folder = KnowledgeSearch.folder(for: desktop.workingDirectory(for: bot))
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(folder)
     }
 }

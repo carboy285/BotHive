@@ -11,6 +11,8 @@ struct MacWorkspaceView: View {
     @State private var renameDraft = ""
     @State private var folderFilter: String? = nil
     @State private var showAccountMenu = false
+    /// The sidebar width the person dragged it to; 0 means automatic (it follows the window).
+    @AppStorage("sidebarWidth") private var sidebarStored = 0.0
     private var sidebarBots: [Bot] { app.visibleBots.filter { folderFilter == nil || ($0.folder ?? "") == folderFilter } }
     private func pinned(_ bot: Bot) -> Bool { desktop.gateway?.isPinned(bot) ?? bot.isPinned ?? (bot.isMain == true) }
     private func touch(_ bot: Bot) { if let gateway = desktop.gateway { gateway.touch(bot.id) } else { _ = app.touchBot(bot.id); _ = app.setUnread(false, for: bot.id) } }
@@ -36,9 +38,13 @@ struct MacWorkspaceView: View {
             ZStack {
                 HStack(spacing: 0) {
                     let hideRoster = desktop.showBotInspector && geometry.size.width < 1180
-                    sidebar.frame(width: hideRoster ? 0 : min(370, max(280, geometry.size.width * 0.268)))
+                    let automaticWidth = min(370, max(280, geometry.size.width * 0.268))
+                    let widest = max(280, geometry.size.width * 0.45)
+                    let sidebarWidth = sidebarStored > 0 ? CGFloat(min(max(sidebarStored, 240), widest)) : automaticWidth
+                    sidebar.frame(width: hideRoster ? 0 : sidebarWidth)
                         .clipped().allowsHitTesting(!hideRoster).accessibilityHidden(hideRoster)
-                    Rectangle().fill(MacTheme.line).frame(width: hideRoster ? 0 : 1)
+                    if hideRoster { Rectangle().fill(MacTheme.line).frame(width: 0) }
+                    else { MacSidebarHandle(stored: $sidebarStored, current: sidebarWidth, widest: widest).zIndex(2) }
                     if let bot = desktop.selected(in: app) {
                         MacConversationView(bot: bot).id(bot.id)
                         if desktop.showBotInspector && desktop.gateway == nil {
@@ -334,5 +340,30 @@ struct MacConnectedIcons: View {
                 }
             }.accessibilityHidden(true)
         }
+    }
+}
+
+/// The line between the sidebar and the chat, with a wider grip: drag it to make the sidebar wider or narrower, double-click to reset.
+struct MacSidebarHandle: View {
+    @Binding var stored: Double
+    let current: CGFloat
+    let widest: CGFloat
+    @State private var startWidth: CGFloat?
+
+    var body: some View {
+        Rectangle().fill(MacTheme.line).frame(width: 1)
+            .overlay {
+                Color.clear.frame(width: 11).contentShape(Rectangle())
+                    .onHover { inside in if inside { NSCursor.resizeLeftRight.set() } else { NSCursor.arrow.set() } }
+                    .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                        .onChanged { value in
+                            if startWidth == nil { startWidth = current }
+                            stored = Double(min(max((startWidth ?? current) + value.translation.width, 240), widest))
+                        }
+                        .onEnded { _ in startWidth = nil })
+                    .onTapGesture(count: 2) { stored = 0 }
+                    .help("Drag to resize the sidebar. Double-click to reset.")
+                    .accessibilityLabel("Sidebar width").accessibilityAddTraits(.isButton)
+            }
     }
 }

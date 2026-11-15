@@ -25,7 +25,7 @@ enum KnowledgeSearch {
     /// The whole text of one Knowledge file, in parts a Bot can page through. `page` starts at 1.
     static func read(name: String, page: Int, in botDirectory: URL) -> String {
         let list = files(in: botDirectory)
-        guard !list.isEmpty else { return "This Bot’s Knowledge folder is empty. The human can add files from the model menu → Add knowledge files." }
+        guard !list.isEmpty else { return "This Bot’s Knowledge folder is empty. The human can add files from the + menu → Add knowledge files." }
         let wanted = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !wanted.isEmpty, let url = list.first(where: { $0.lastPathComponent.lowercased() == wanted }) ?? list.first(where: { $0.lastPathComponent.lowercased().contains(wanted) }) else {
             return "No Knowledge file matches “\(String(name.prefix(80)))”. Files: " + list.map(\.lastPathComponent).joined(separator: ", ")
@@ -111,7 +111,7 @@ enum KnowledgeSearch {
     /// The text a Bot receives for a search_knowledge request.
     static func search(query: String, in botDirectory: URL) -> String {
         let list = files(in: botDirectory)
-        guard !list.isEmpty else { return "This Bot’s Knowledge folder is empty. The human can add files from the model menu → Add knowledge files." }
+        guard !list.isEmpty else { return "This Bot’s Knowledge folder is empty. The human can add files from the + menu → Add knowledge files." }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "Knowledge files: " + list.map(\.lastPathComponent).joined(separator: ", ") }
         let all = list.flatMap { passages(from: text(of: $0), file: $0.lastPathComponent) }

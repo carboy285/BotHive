@@ -14,6 +14,7 @@
     "test:ui": "node scripts/test-desktop-ui.cjs",
     "test:cloud": "node scripts/test-cloud-db.cjs",
     "test:heads-ups": "node scripts/test-heads-ups-main.cjs && node scripts/test-heads-ups-ui.cjs",
+    "test:skills-ui": "node scripts/test-skills-routines-ui.cjs",
     "test:web": "node scripts/test-web-access.cjs"
   },
   "devDependencies": {

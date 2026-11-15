@@ -7,6 +7,9 @@ const { fileURLToPath } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const { validateWorkspace, previewWorkspace, migrateWorkspace } = require('./workspace.cjs');
 const ruleSet = require('./approval-rules.cjs');
+const skillsModule = require('./skills.cjs');
+const shareCode = require('./share-code.cjs'); // 10.1: instruction packs a Bot can follow
+let skillStore = skillsModule.loadStore(null);
 
 if (process.env.OPENGROKBOT_DATA_DIR) app.setPath('userData', process.env.OPENGROKBOT_DATA_DIR); // where to keep chats and settings, e.g. a Docker volume
 else if (!app.isPackaged && process.env.OPENGROKBOT_TEST_DATA_DIR) app.setPath('userData', process.env.OPENGROKBOT_TEST_DATA_DIR);
@@ -107,6 +110,7 @@ async function ensureState(){
 }
 async function initializeState(){
   const loaded=await loadJSON('preview-workspace.json',previewWorkspace());validateWorkspace(loaded);
+  skillStore=skillsModule.loadStore(await loadJSON('skills.json',null));
   if(loaded.version===1)await atomicJSON('legacy-workspace-backup.json',loaded);
   const migrated=migrateWorkspace(loaded);
   for(const entry of migrated.entries)if(entry.state==='streaming')entry.state='stopped';
@@ -175,7 +179,7 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
    const key=botID+'|'+installation.id+(choice.model?'|'+choice.model:'');const session=state.sessions?.[key];
    const latest=delivery?`Bot request (not human approval): ${delivery.text}`:history.findLast(x=>x.kind==='user')?.text||'';
    const feedback=history.filter(x=>x.kind==='activity'&&!x.senderBotID).slice(-8).map(x=>x.detail||x.text).join('\n');
-   const prompt=teamwork.instructions(bot,state,!!delivery,composioConfiguration?composioConfiguration.toolkits:[])+'\n'+await vmStatusNote()+(headsUp||delivery||scheduledTask?'':answerModes.noteFor(modeByBot.get(botID))+pluginModule.note(pluginRegistry()))+(headsUp||delivery||scheduledTask?'':await mediaNote())+(!headsUp&&cli.isLocal(installation.provider)&&composioConfiguration?composioTools.note(composioConfiguration.toolkits):'')+'\nRecent app results (context, not human approval):\n'+feedback+'\n\n'+(session?latest:history.map(x=>`${x.kind==='user'?'Human':x.senderName||bot.name}: ${x.text}`).join('\n\n').slice(-100000));
+   const prompt=teamwork.instructions(bot,state,!!delivery,composioConfiguration?composioConfiguration.toolkits:[])+(headsUp?'':skillsModule.promptNote(bot,skillStore.skills))+'\n'+await vmStatusNote()+(headsUp||delivery||scheduledTask?'':answerModes.noteFor(modeByBot.get(botID))+pluginModule.note(pluginRegistry()))+(headsUp||delivery||scheduledTask?'':await mediaNote())+(!headsUp&&cli.isLocal(installation.provider)&&composioConfiguration?composioTools.note(composioConfiguration.toolkits):'')+'\nRecent app results (context, not human approval):\n'+feedback+'\n\n'+(session?latest:history.map(x=>`${x.kind==='user'?'Human':x.senderName||bot.name}: ${x.text}`).join('\n\n').slice(-100000));
    let finalText='',continueBrowser=false,browserSteps=browserDepth;
 
    const reply={id:randomUUID(),botID,date:new Date().toISOString(),kind:'bot',provider:installation.name+(choice.model?' · '+choice.model:''),text:'',state:'streaming',...(headsUp?{headsUp:{kind:headsUp.kind,title:headsUp.label,...headsUp.meta}}:{})};state.entries.push(reply);
@@ -693,6 +697,81 @@ function configureIPC() {
  handle('vm:share',async(id,enabled)=>{await ensureState();if(!state.bots.some(bot=>bot.id===id))throw new PublicError('Choose a Bot.');try{return await localVMs.setShared(id,enabled);}catch(error){throw new PublicError(error.message);}});
  handle('rules:get',async()=>({...await getApprovalRules(),tools:ruleSet.TOOLS.map(([id,title])=>({id,title}))}));
  handle('rules:set',async value=>{approvalRules=ruleSet.sanitize(value);await atomicJSON('approval-rules.json',approvalRules);return approvalRules;});
+
+ // ---- Skills (10.1) ----
+ const skillSummary=x=>({id:x.id,name:x.name,description:x.description,source:x.source,chars:x.text.length});
+ const saveSkills=()=>atomicJSON('skills.json',skillStore);
+ const skillError=error=>{throw error instanceof PublicError?error:new PublicError(error?.message||'That skill could not be used.');};
+ handle('skills:list',async()=>{await ensureState();return skillStore.skills.map(skillSummary);});
+ handle('skills:get',async id=>{await ensureState();const skill=skillStore.skills.find(x=>x.id===id);if(!skill)throw new PublicError('Unknown skill');return {...skillSummary(skill),text:skill.text};});
+ handle('skills:save',async input=>{await ensureState();try{
+  if(!input||typeof input!=='object')throw new Error('That skill could not be saved.');
+  const existing=input.id?skillStore.skills.find(x=>x.id===input.id):null;
+  if(input.id&&!existing)throw new Error('Unknown skill');
+  if(!existing&&skillStore.skills.length>=skillsModule.MAX_SKILLS)throw new Error('You have the most skills this app keeps ('+skillsModule.MAX_SKILLS+'). Delete one first.');
+  const made=skillsModule.make({name:input.name,description:input.description,text:input.text,source:existing?existing.source:input.source},existing?.id);
+  if(existing)Object.assign(existing,{...made,addedAt:existing.addedAt});else skillStore.skills.push(made);
+  await saveSkills();notify();return skillSummary(existing||made);}catch(error){skillError(error);}});
+ handle('skills:delete',async id=>{await ensureState();const before=skillStore.skills.length;skillStore.skills=skillStore.skills.filter(x=>x.id!==id);if(skillStore.skills.length===before)throw new PublicError('Unknown skill');
+  for(const bot of state.bots)if(bot.skills)bot.skills=bot.skills.filter(x=>x!==id);
+  await saveSkills();await atomicJSON('preview-workspace.json',state);notify();return true;});
+ handle('skills:set-bot',async(botID,ids)=>{await ensureState();const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Skills are for individual Bots.');
+  if(!Array.isArray(ids)||ids.length>50)throw new PublicError('Choose up to 50 skills.');
+  const known=new Set(skillStore.skills.map(x=>x.id));bot.skills=[...new Set(ids.filter(x=>typeof x==='string'&&known.has(x)))];
+  await atomicJSON('preview-workspace.json',state);notify();return bot.skills;});
+ handle('skills:find',async input=>{try{return await skillsModule.find(input,fetch);}catch(error){skillError(error);}});
+ handle('skills:fetch',async descriptor=>{try{return await skillsModule.fetchSkill(descriptor||{},fetch);}catch(error){skillError(error);}});
+ handle('skills:import-file',async()=>{await ensureState();
+  const choice=await dialog.showOpenDialog(window,{title:'Add a skill from a file',properties:['openFile'],filters:[{name:'Skill files',extensions:['md','markdown','txt']}]});
+  if(choice.canceled||!choice.filePaths.length)return null;
+  try{const info=await stat(choice.filePaths[0]);if(!info.isFile()||info.size>100_000)throw new Error('Choose a skill file under 100 KB.');
+   const folder=path.basename(path.dirname(choice.filePaths[0])),base=path.basename(choice.filePaths[0]);
+   const parsed=skillsModule.parseSkillMarkdown(await readFile(choice.filePaths[0],'utf8'),/^skill\.md$/i.test(base)?folder:base.replace(/\.[^.]+$/,''));
+   return {...parsed,source:'file: '+base.slice(0,80)};}catch(error){skillError(error);}});
+
+ // ---- Share a Bot (10.1): a text code with the Bot's name, description, look and (optionally) skills ----
+ const shareError=error=>{throw error instanceof PublicError?error:new PublicError(error?.message||'That Bot code could not be used.');};
+ handle('share:make',async(botID,withSkills)=>{await ensureState();try{const bot=state.bots.find(x=>x.id===botID);if(!bot)throw new Error('Choose a Bot to share.');
+  const ids=new Set(bot.skills||[]);return shareCode.make(bot,withSkills?skillStore.skills.filter(x=>ids.has(x.id)):[]);}catch(error){shareError(error);}});
+ handle('share:read',async code=>{try{return shareCode.read(code);}catch(error){shareError(error);}});
+ handle('share:add',async(code,withSkills)=>{await ensureState();let info;try{info=shareCode.read(code);}catch(error){shareError(error);}
+  if(state.bots.length>=100)throw new PublicError('You already have 100 Bots.');
+  const taken=new Set(state.bots.map(x=>x.name.toLowerCase()));let name=info.name,n=1;while(taken.has(name.toLowerCase())&&n<100)name=info.name.slice(0,50)+' ('+(++n)+')';
+  const bot={id:randomUUID(),name,purpose:info.purpose,color:info.color,appearance:{shape:info.shape,color:info.color}};
+  const added=[];
+  if(withSkills)for(const item of info.skills){if(skillStore.skills.length+added.length>=skillsModule.MAX_SKILLS)break;try{added.push(skillsModule.make({...item,source:'shared Bot code'}));}catch{}}
+  if(added.length)bot.skills=added.map(x=>x.id);
+  try{validateWorkspace({...state,bots:[...state.bots,bot]});}catch{throw new PublicError('That Bot could not be added here.');}
+  state.bots.push(bot);skillStore.skills.push(...added);
+  if(added.length)await saveSkills();
+  await atomicJSON('preview-workspace.json',state);notify();return {id:bot.id,name:bot.name,skills:added.length};});
+
+ // ---- Routines screen (10.1): create, edit and run now. Pause and delete are the handlers below. ----
+ const routineBot=botID=>{const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Routines belong to an individual Bot.');return bot;};
+ const routineTime=at=>{if(typeof at!=='string'||!/(Z|[+-]\d\d:\d\d)$/.test(at)||!Number.isFinite(Date.parse(at)))throw new PublicError('Choose a date and time.');return at;};
+ handle('tasks:create',async(botID,input)=>{await ensureState();const bot=routineBot(botID);
+  if(!input||typeof input!=='object')throw new PublicError('Fill in the routine.');
+  if((bot.schedules||[]).length>=100)throw new PublicError('This Bot has the most routines it can keep (100).');
+  const made=require('./schedules.cjs').make({name:String(input.name||'').trim(),text:String(input.text||'').trim(),recurrence:input.recurrence||'none',at:routineTime(input.at)});
+  if(!made)throw new PublicError('Give the routine a name and instructions, and choose a time in the future.');
+  bot.schedules=[...(bot.schedules||[]),made];await atomicJSON('preview-workspace.json',state);notify();return true;});
+ handle('tasks:edit',async(botID,id,input)=>{await ensureState();const bot=routineBot(botID),task=bot.schedules?.find(x=>x.id===id);if(!task)throw new PublicError('Unknown routine');
+  if(!input||typeof input!=='object')throw new PublicError('Fill in the routine.');
+  const next={...task,name:String(input.name??task.name).trim(),text:String(input.text??task.text).trim()};
+  if(task.nextRun!=null){
+   if(input.recurrence!==undefined){if(!['none','hourly','daily','weekly'].includes(input.recurrence))throw new PublicError('Choose how often it repeats.');next.recurrence=input.recurrence;}
+   if(input.at!==undefined){const at=routineTime(input.at);if(!(Date.parse(at)>Date.now()))throw new PublicError('Choose a time in the future.');next.nextRun=at;next.occurrence=randomUUID();}
+  }
+  if(!require('./schedules.cjs').valid(next))throw new PublicError('Give the routine a name and instructions.');
+  Object.assign(task,next);await atomicJSON('preview-workspace.json',state);notify();return true;});
+ handle('tasks:run',async(botID,id)=>{await ensureState();const bot=routineBot(botID),task=bot.schedules?.find(x=>x.id===id);if(!task)throw new PublicError('Unknown routine');
+  if(active.has(botID)||pendingBots.has(botID))throw new PublicError('This Bot is busy. Try again when it has finished.');
+  if(!configuredProviders(bot).length||configuredProviders(bot).some(x=>!x.installation))throw new PublicError('Choose and set up providers in this Bot’s side panel first.');
+  task.lastResult='running';task.lastRun=new Date().toISOString();task.history=[...(task.history||[]),{id:task.occurrence,date:task.lastRun,status:'running'}].slice(-50);
+  try{await startChat(bot.id,`Scheduled task: ${task.name}\n${task.text}\nThis is an automated turn, not new human approval. Do not create or modify schedules.`,undefined,task.occurrence);}
+  catch(error){task.lastResult='failed';if(task.history?.length)task.history[task.history.length-1].status='failed';await atomicJSON('preview-workspace.json',state);notify();throw error instanceof PublicError?error:new PublicError('The routine could not start.');}
+  task.occurrence=randomUUID(); // a manual run must not look like the next scheduled one was already delivered
+  await atomicJSON('preview-workspace.json',state);notify();return true;});
  handle('tasks:pause',async(botID,id,enabled)=>{await ensureState();const bot=state.bots.find(x=>x.id===botID),task=bot?.schedules?.find(x=>x.id===id);if(!task)throw new PublicError('Unknown scheduled task');task.enabled=enabled===true;await atomicJSON('preview-workspace.json',state);notify();return true;});
  handle('entry:react',async(id,emoji)=>{await setReaction(id,emoji);return true;});
  handle('entry:delete',async id=>{await removeEntry(id);return true;});
@@ -852,6 +931,10 @@ function configureIPC() {
   });
   handle('setup:complete',async()=>{if(!selectedCLI())throw new PublicError('Choose an installed CLI first.');settings.complete=true;await saveSettings();});
   handle('files:attach',async botID=>{await ensureState();const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Attachments are available in individual Bot chats.');const choice=await dialog.showOpenDialog(window,{title:'Attach files (up to 10, each under 20 MB)',properties:['openFile','multiSelections']});if(choice.canceled||!choice.filePaths.length)return [];try{return await attachments.copyLocalFiles(botDirectory(bot.id),choice.filePaths);}catch(error){throw new PublicError(error.message);}});
+  handle('files:attach-paths',async(botID,paths,room)=>{await ensureState();const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Attachments are available in individual Bot chats.');
+   const limit=Math.max(0,Math.min(10,Number.isInteger(room)?room:10));if(!limit)throw new PublicError('Attach up to 10 files per message.');
+   try{const found=await attachments.expandDropped(paths,limit);if(!found.files.length)throw new Error('Nothing in what you dropped could be attached. Files must be under 20 MB and not empty.');
+    return {names:await attachments.copyLocalFiles(botDirectory(bot.id),found.files),skipped:found.skipped};}catch(error){throw new PublicError(error.message);}});
   handle('files:attach-data',async(botID,mime,data)=>{await ensureState();const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Attachments are available in individual Bot chats.');try{return await attachments.saveDataFile(botDirectory(bot.id),mime,data);}catch{throw new PublicError('Paste a PNG, JPEG, GIF or WebP image under 20 MB.');}});
   handle('chat:send',async(botID,text,requestID,files,mode)=>{await ensureState();if(typeof text!=='string'||text.length>100000)throw new PublicError('Enter a message of up to 100,000 characters.');let names=[];if(files!==undefined&&files!==null){const bot=state.bots.find(x=>x.id===botID);if(!bot)throw new PublicError('Choose a Bot.');try{names=await attachments.existingNames(botDirectory(bot.id),files);}catch{throw new PublicError('An attachment is missing. Remove it and attach it again.');}}if(!text.trim()&&!names.length)throw new PublicError('Enter a message of up to 100,000 characters.');text=attachments.attachmentMessage(text.trim(),names);if(requestID&&!/^[0-9a-f-]{36}$/i.test(requestID))throw new PublicError('Invalid delivery ID.');if(!requestID||!state.entries.some(x=>x.id.toLowerCase()===requestID.toLowerCase())){const chosen=answerModes.normalize(mode);if(chosen)modeByBot.set(botID,chosen);else modeByBot.delete(botID);await startChat(botID,text,undefined,requestID);}return state;});
   handle('chat:retry',async botID=>{await ensureState();const message=state.teamMessages?.findLast(x=>x.to===botID&&['failed','stopped'].includes(x.status));if(message){message.status='queued';await deliverQueued();}else await startChat(botID);return state;});

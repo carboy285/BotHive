@@ -2,6 +2,10 @@ import { preview } from './seed.js';
 import { createVoice } from './voice.js';
 import { renderApiKeys } from './api-keys.js';
 import { renderSecureLogins } from './secure-logins.js';
+import { renderSkills, renderBotSkills } from './skills-ui.js';
+import { renderShareBot, renderAddFromCode } from './share-ui.js';
+import { installDrop } from './drop-ui.js';
+import { renderRoutines } from './routines-ui.js';
 import { encodeWav, splitSuggestions, starters } from './voice-core.mjs';
 import { renderMarkdown } from './markdown.js';
 import * as catalog from './catalog.js';
@@ -500,6 +504,8 @@ function renderInspector(){
   append(body,node('h3','','Linux VM'),node('p','muted','All Bots share one VM (set up once, here or on another computer).'),button('Shared Linux VM settings…',()=>showBotVM(workspace.bots.find(x=>x.isMain)||bot)));
   append(body,node('h3','','Knowledge'),node('p','muted','Text, Markdown and CSV files this Bot can search instead of needing them attached to every message.'),button('Add knowledge files…',async()=>{try{const added=await result(bridge.knowledgeAdd(bot.id));if(added)toast(`Added ${added} file${added===1?'':'s'} to ${bot.name}’s Knowledge. Ask it to search them.`);}catch(error){toast(error.message);}}));
   append(body,node('h3','','Local browser'),node('p','muted','Its own browser profile, in a window on this PC.'),button('Open local browser',async()=>{try{await result(bridge.openBrowser(bot.id));}catch(error){toast(error.message);}}));
+  if(!bot.memberIDs){const skillsBox=node('div','bot-skills');body.append(skillsBox);renderBotSkills({bridge,result,toast,bot,container:skillsBox,manage:()=>showSettings('Skills')});}
+  if(!bot.memberIDs){const shareBox=node('div','bot-share');body.append(shareBox);renderShareBot({bridge,result,toast,bot,container:shareBox});}
   append(body,node('h3','','Routines'),node('p','muted','Ask the Bot to run a task once, on a repeat, or when another Bot messages it. The app must be running; missed runs catch up once.'));
   for(const task of bot.schedules||[]){const history=node('details'),summary=node('summary','','Run history');history.append(summary);for(const run of task.history||[])history.append(node('p','muted',`${run.date} · ${run.status}`));if(task.history?.length)body.append(history);append(body,node('p','',`${task.name} · ${task.enabled?(task.nextRun||'Incoming Bot message'):'Paused'} · ${task.recurrence} · ${task.timezone}${task.lastRun?' · Last run: '+task.lastRun+' · '+(task.lastResult||'outcome unavailable'):''}`),append(node('div','row-actions'),...(bridge.pauseTask?[button(task.enabled?'Pause':'Resume',async()=>{try{await result(bridge.pauseTask(bot.id,task.id,!task.enabled));}catch(error){toast(error.message);}})]:[]),button('Delete',async()=>{try{await result(bridge.cancelTask(bot.id,task.id));}catch(error){toast(error.message);}})));}
   if(!(bot.schedules||[]).length)body.append(node('p','muted','No routines yet. You can also ask in chat to add one.'));
@@ -627,7 +633,7 @@ function unavailable(title, detail) { return append(node('div', 'unavailable'), 
 function showSettings(tab = 'General') {
   dialog.replaceChildren();
   const layout = node('div', 'settings-layout'); const nav = node('nav', 'settings-nav'); const page = node('section', 'settings-page');
-  for (const [name, glyph] of [['General','⚙'],['Heads-ups','✦'],['Computer','▣'],['Web access','⌂'],['Permissions','♧'],['API Keys','⚷'],['Secure Logins','⚿'],['Vault','⚿'],['Voice','♫'],['Local models','◫'],['Backup','⛁'],['Usage & Billing','▥'],['Updates','⇩']]) {const icon=node('span','',glyph);icon.setAttribute('aria-hidden','true');nav.append(append(button('', () => showSettings(name), name === tab ? 'active' : ''), icon, node('div','',name)));}
+  for (const [name, glyph] of [['General','⚙'],['Heads-ups','✦'],['Routines','↻'],['Skills','✎'],['Computer','▣'],['Web access','⌂'],['Permissions','♧'],['API Keys','⚷'],['Secure Logins','⚿'],['Vault','⚿'],['Voice','♫'],['Local models','◫'],['Backup','⛁'],['Usage & Billing','▥'],['Updates','⇩']]) {const icon=node('span','',glyph);icon.setAttribute('aria-hidden','true');nav.append(append(button('', () => showSettings(name), name === tab ? 'active' : ''), icon, node('div','',name)));}
   append(page, append(node('header','panel-head'), node('h1','',tab), button('×', () => dialog.close(), 'close-panel')));
   append(layout, nav, page); dialog.append(layout); if (!dialog.open) dialog.showModal();
   if (tab === 'General') {
@@ -649,6 +655,8 @@ function showSettings(tab = 'General') {
   else if (tab === 'Vault') renderVault(page);
   else if (tab === 'API Keys') renderApiKeys({ bridge, result, toast, page });
   else if (tab === 'Secure Logins') renderSecureLogins({ bridge, result, toast, page });
+  else if (tab === 'Skills') renderSkills({ bridge, result, toast, page });
+  else if (tab === 'Routines') renderRoutines({ bridge, result, toast, page, workspace: () => workspace, refresh: () => showSettings('Routines') });
   else if (tab === 'Voice') voice.renderSettings(page);
   else if (tab === 'Backup') renderBackup(page);
 }
@@ -739,6 +747,7 @@ function renderChips(){
 }
 function addFiles(bot,names){if(!bot||!names?.length)return;const list=[...(pendingFiles.get(bot.id)||[]),...names];if(list.length>10){toast('Attach up to 10 files per message.');return;}pendingFiles.set(bot.id,list);renderChips();}
 async function attachFiles(bot=currentBot()){if(!bot)return;if(!window.desktop){toast('Attachments are available in the installed app.');return;}try{addFiles(bot,await result(bridge.attachFiles(bot.id)));}catch(error){toast(error.message);}}
+installDrop({target:document.querySelector('main.conversation'),bridge,result,toast,currentBot:()=>currentBot(),pendingCount:bot=>(pendingFiles.get(bot.id)||[]).length,addFiles});
 $('#draft').addEventListener('paste',async event=>{
  const bot=currentBot(),items=[...(event.clipboardData?.items||[])].filter(item=>item.kind==='file'&&/^image\/(png|jpeg|gif|webp)$/.test(item.type));
  if(!bot||!items.length||!window.desktop)return;event.preventDefault();
@@ -1048,7 +1057,10 @@ function showNewBot() {
     const chip = button(item.name, () => { name.value = item.name; purpose.value = item.purpose; more.open = true; shape = item.shape; color = item.color; create.disabled = false; redraw(); }, 'character-chip');
     chip.title = item.tagline; characters.append(chip);
   }
-  append(form, preview, name, node('p', 'panel-footnote', 'Or start from a character:'), characters, shapes, dots, more, append(node('div', 'panel-bottom'), button('Cancel', () => dialog.close()), create));
+  const fromCode = node('details', 'new-bot-more'); const codeBox = node('div', 'share-add');
+  append(fromCode, node('summary', '', 'Have a Bot code from a friend?'), codeBox);
+  renderAddFromCode({ bridge, result, toast, container: codeBox, onAdded: async added => { try { workspace = await result(bridge.load()); } catch {} selectBot(added.id); render(); dialog.close(); } });
+  append(form, preview, name, node('p', 'panel-footnote', 'Or start from a character:'), characters, shapes, dots, more, fromCode, append(node('div', 'panel-bottom'), button('Cancel', () => dialog.close()), create));
   form.addEventListener('submit', async event => {
     event.preventDefault(); const clean = name.value.trim(); if (!clean) return;
     if (workspace.bots.some(bot => bot.name.toLowerCase() === clean.toLowerCase())) { toast('A Bot with this name already exists.'); return; }

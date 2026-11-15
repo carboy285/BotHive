@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const { mkdtemp, readdir, readFile, rm } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { saveRemoteImages, attachmentMessage, savePageScreenshot } = require('./attachments.cjs');
+const { saveRemoteImages, attachmentMessage, savePageScreenshot, expandDropped } = require('./attachments.cjs');
+const { mkdir, writeFile, symlink } = require('node:fs/promises');
 
 const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
@@ -73,4 +74,21 @@ test('stores page screenshots, rejects non-JPEG bytes, and keeps only the newest
     assert.equal(files.length, 12);
     assert.ok(files.includes(paths[14].slice('Attachments/'.length)));
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('dropped folders expand to files, skipping hidden, linked and build folders, and respecting the limit', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'drop-'));
+  try {
+    await mkdir(path.join(root, 'docs', 'deep'), { recursive: true }); await mkdir(path.join(root, 'node_modules')); await mkdir(path.join(root, '.git'));
+    await writeFile(path.join(root, 'a.txt'), 'a'); await writeFile(path.join(root, 'docs', 'b.md'), 'b'); await writeFile(path.join(root, 'docs', 'deep', 'c.txt'), 'c');
+    await writeFile(path.join(root, 'node_modules', 'x.js'), 'x'); await writeFile(path.join(root, '.git', 'config'), 'x'); await writeFile(path.join(root, '.secret'), 'x'); await writeFile(path.join(root, 'empty.txt'), '');
+    await symlink('/etc/hosts', path.join(root, 'link.txt')).catch(() => {});
+    const all = await expandDropped([root]);
+    assert.deepEqual(all.files.map(x => path.relative(root, x)).sort(), ['a.txt', path.join('docs', 'b.md'), path.join('docs', 'deep', 'c.txt')]);
+    const limited = await expandDropped([root], 2);
+    assert.equal(limited.files.length, 2); assert.equal(limited.skipped, 2, 'one real file left out plus the empty file');
+    const single = await expandDropped([path.join(root, 'a.txt'), path.join(root, 'missing.txt')]);
+    assert.equal(single.files.length, 1);
+    await assert.rejects(expandDropped([]), /Drop files/); await assert.rejects(expandDropped([42]), /Drop files/);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

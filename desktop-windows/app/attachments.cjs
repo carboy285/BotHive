@@ -61,6 +61,38 @@ async function copyLocalFiles(directory, sources) {
   return names;
 }
 
+const SKIP_FOLDERS = new Set(['node_modules', '__pycache__', 'venv', 'dist', 'build', 'target']);
+const WALK_DEPTH = 4, WALK_ENTRIES = 2000;
+
+/**
+ * Turns what a person dropped (files and folders) into a list of regular files to attach, at most `limit`.
+ * Folders are read breadth-first, up to 4 levels, skipping hidden entries, links and build folders. Nothing is followed outside what was dropped.
+ * Returns { files, skipped } where skipped counts files left out because of the limit or their size.
+ */
+async function expandDropped(paths, limit = LOCAL_MAX_FILES) {
+  if (!Array.isArray(paths) || !paths.length || paths.length > 50 || paths.some(x => typeof x !== 'string' || !x || x.length > 4096)) throw new Error('Drop files or a folder.');
+  const files = []; let skipped = 0, visited = 0;
+  const take = (file, size) => { if (size > LOCAL_MAX_BYTES || !size) { skipped++; return; } if (files.length < limit) files.push(file); else skipped++; };
+  const queue = [];
+  for (const source of paths) {
+    const info = await lstat(source).catch(() => null);
+    if (!info || info.isSymbolicLink()) continue;
+    if (info.isFile()) take(source, info.size); else if (info.isDirectory()) queue.push([source, 0]);
+  }
+  while (queue.length && visited < WALK_ENTRIES) {
+    const [folder, depth] = queue.shift();
+    let names; try { names = (await readdir(folder)).sort(); } catch { continue; }
+    for (const name of names) {
+      if (++visited > WALK_ENTRIES) break;
+      if (name.startsWith('.') || SKIP_FOLDERS.has(name)) continue;
+      const full = path.join(folder, name), info = await lstat(full).catch(() => null);
+      if (!info || info.isSymbolicLink()) continue;
+      if (info.isFile()) take(full, info.size); else if (info.isDirectory() && depth < WALK_DEPTH) queue.push([full, depth + 1]);
+    }
+  }
+  return { files, skipped };
+}
+
 /** Saves an image pasted from the clipboard. */
 async function saveDataFile(directory, mime, base64) {
   const extension = DATA_EXTENSIONS[mime];
@@ -111,4 +143,4 @@ function attachmentMessage(base, names) {
   return `${lead}\n\nAttached files in this Bot’s working folder:\n${names.map(name => `- Attachments/${name}`).join('\n')}\nUse your available tools to read these files; do not assume an image was viewed.`;
 }
 
-module.exports = { savePageScreenshot, saveRemoteImages, copyLocalFiles, saveDataFile, existingNames, attachmentMessage, MAX_COUNT, MAX_TOTAL_BYTES };
+module.exports = { expandDropped, savePageScreenshot, saveRemoteImages, copyLocalFiles, saveDataFile, existingNames, attachmentMessage, MAX_COUNT, MAX_TOTAL_BYTES };

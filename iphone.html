@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install on iPhone · Bothive</title>
+<meta name="description" content="How to build the Bothive iPhone app with Xcode and a free Apple account.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="doc">
+<header class="bar">
+  <a class="brand" href="./"><svg class="brand-bot" aria-hidden="true"><use href="bots.svg#bot-circle-white"/></svg>Bothive</a>
+  <nav><a href="./#download">Download</a><a href="iphone.html">iPhone</a><a href="https://github.com/carboy285/opengrokbot">GitHub</a></nav>
+</header>
+
+<main class="prose">
+<h1>Install Bothive on your iPhone</h1>
+<p>The iPhone app isn't on the App Store yet, so you build it yourself with Xcode. It takes about 15 minutes the first time. The iPhone app controls the Bots on your Mac or Windows PC, so set that up first.</p>
+
+<h2>What you need</h2>
+<ul>
+  <li>A Mac with <a href="https://apps.apple.com/app/xcode/id497799835">Xcode 26 or later</a> (free from the App Store).</li>
+  <li>An iPhone with iOS 18 or later, and a cable to connect it to the Mac.</li>
+  <li>An Apple Account. A free one works; you don't need the paid developer program.</li>
+  <li>Bothive installed and signed in on your Mac or PC, with <strong>Allow phone access</strong> turned on in Settings → Computer.</li>
+</ul>
+
+<h2>1. Get the source</h2>
+<p>Download <code>Bothive-&lt;version&gt;-Source.zip</code> from the <a href="https://github.com/carboy285/opengrokbot/releases/latest">latest release</a> and unzip it, or clone the repository:</p>
+<pre>git clone https://github.com/carboy285/opengrokbot.git</pre>
+
+<h2>2. Open it in Xcode</h2>
+<ol>
+  <li>Open <code>GrokBot.xcodeproj</code>. (The project keeps its original file names.)</li>
+  <li>In Xcode, open <strong>Settings → Accounts</strong> and add your Apple Account if it isn't there.</li>
+</ol>
+
+<h2>3. Sign it with your account</h2>
+<p>Do this for two targets: <strong>GrokBot</strong> (the app) and <strong>GrokBotLiveActivity</strong> (calls in the Dynamic Island).</p>
+<ol>
+  <li>Select the project in the sidebar, then the target, then <strong>Signing &amp; Capabilities</strong>.</li>
+  <li>Choose your account under <strong>Team</strong>.</li>
+  <li>Change the <strong>Bundle Identifier</strong> to something only you use, for example <code>com.yourname.bothive</code> for the app and <code>com.yourname.bothive.live</code> for GrokBotLiveActivity. The second must start with the first.</li>
+</ol>
+
+<h2>4. Run it on your iPhone</h2>
+<ol>
+  <li>Connect your iPhone and unlock it. If it asks, choose <strong>Trust This Computer</strong>.</li>
+  <li>At the top of Xcode, choose the <strong>GrokBot</strong> scheme and your iPhone, then press <strong>Run</strong> (▶).</li>
+  <li>The first time, your iPhone asks you to turn on <strong>Developer Mode</strong> (Settings → Privacy &amp; Security → Developer Mode). Turn it on, let the iPhone restart, then run again.</li>
+  <li>If iPhone says the developer isn't trusted, open Settings → General → VPN &amp; Device Management, choose your Apple Account and tap <strong>Trust</strong>.</li>
+</ol>
+
+<h2>5. Connect it to your computer</h2>
+<ol>
+  <li>Open Bothive on the iPhone and sign in with the same account you use on your computer.</li>
+  <li>Choose your computer. On the computer, compare the fingerprint the phone shows, then choose <strong>Approve phone</strong>.</li>
+</ol>
+
+<h2>Good to know</h2>
+<ul>
+  <li>With a free Apple Account, apps you build stop opening after 7 days. Connect the iPhone and press Run again to renew it; your settings stay.</li>
+  <li>To update, download the new source and run it the same way, with the same bundle identifiers.</li>
+</ul>
+<p>Stuck? <a href="https://github.com/carboy285/opengrokbot/issues">Open an issue</a> and say which step went wrong.</p>
+</main>
+
+<!--footer-->
+<footer class="foot">
+<nav><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="licenses.html">Licenses</a><a href="https://github.com/carboy285/opengrokbot">Source code</a><a href="https://github.com/carboy285/opengrokbot/issues">Report a problem</a></nav>
+<p>Bots are AI. They can be wrong, and they act through the AI accounts you connect.</p>
+<p>Bothive is free, open-source software under the MIT License. It is an independent project, not affiliated with or endorsed by xAI, Anthropic, OpenAI, Google, Microsoft or Composio. Their names are used only to say which tools Bothive works with.</p>
+</footer>
+<!--/footer-->
+</body>
+</html>

@@ -219,6 +219,37 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
     assert.equal(gmailFill.toLowerCase(), '#ea4335', 'Gmail uses its own colour');
     await page.keyboard.press('Escape');
 
+    // ---------- Sidebar resize, Share menu, chat width ----------
+    const sidebarWidth = () => page.locator('.sidebar').evaluate(n => Math.round(n.getBoundingClientRect().width));
+    const start = await sidebarWidth();
+    const grip = await page.locator('.sidebar-handle').boundingBox();
+    if (process.env.DEBUG_GRIP) console.log(JSON.stringify(grip), await page.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); return e && (e.className || e.tagName) + ' ' + getComputedStyle(document.querySelector('#workspace')).gridTemplateColumns; }, [grip.x + grip.width / 2, grip.y + 300]));
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + 300); await page.mouse.down();
+    await page.mouse.move(grip.x + grip.width / 2 + 90, grip.y + 300, { steps: 6 });
+    if (process.env.DEBUG_GRIP) console.log('start', start, 'now', await sidebarWidth(), await page.evaluate(() => document.querySelector('#workspace').style.cssText + ' | ' + document.querySelector('#workspace').className));
+    assert.ok(await sidebarWidth() >= start + 80, 'the sidebar follows the pointer while dragging');
+    await page.mouse.up();
+    await page.waitForTimeout(350);
+    assert.ok(Math.abs(await sidebarWidth() - (start + 90)) <= 2, 'and stays where it was let go');
+    assert.equal(await page.evaluate(() => Number(localStorage.getItem('sidebarWidth'))), start + 90);
+    await page.locator('.sidebar-handle').dblclick(); await page.waitForTimeout(350);
+    assert.equal(await sidebarWidth(), start, 'double-click puts it back');
+    await page.locator('.sidebar-handle').focus(); await page.keyboard.press('ArrowRight'); await page.waitForTimeout(300);
+    assert.equal(await sidebarWidth(), start + 16, 'the arrow keys move it too');
+    await page.keyboard.press('Home'); await page.waitForTimeout(300);
+    assert.equal(await sidebarWidth(), start, 'Home resets it');
+    assert.equal(await page.locator('.model-menu, .model-select, #model-button').count(), 0, 'no model selector in the corner');
+    await page.locator('#share-button').click();
+    if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/share.png', clip: { x: 700, y: 0, width: 670, height: 260 } });
+    for (const name of ['Copy conversation', 'Export as Markdown…', 'Export as PDF…']) await page.getByRole('menuitem', { name, exact: true }).waitFor();
+    await page.getByRole('menuitemradio', { name: 'Chat width: Extra wide', exact: true }).click();
+    assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--chat-w')), '1280px');
+    await page.locator('#share-button').click();
+    await page.getByRole('menuitemradio', { name: 'Chat width: Comfortable', exact: true }).click();
+    assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--chat-w')), '780px');
+    assert.ok(await page.locator('.composer-area').evaluate(n => parseFloat(getComputedStyle(n).paddingLeft)) > 80, 'a narrower chat setting narrows the message box');
+    await page.locator('#share-button').click(); await page.getByRole('menuitemradio', { name: 'Chat width: Wide', exact: true }).click();
+
     // ---------- Account menu ----------
     await page.keyboard.press('Escape');
     await page.locator('#profile-button').click();

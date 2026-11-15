@@ -7,6 +7,7 @@ import { renderShareBot, renderAddFromCode } from './share-ui.js';
 import { installDrop } from './drop-ui.js';
 import { openAccountMenu } from './account-menu.js';
 import { connectorIcon } from './connector-icon.js';
+import { installSidebarResize, installChatTools } from './layout-ui.js';
 import { renderRoutines } from './routines-ui.js';
 import { encodeWav, splitSuggestions, starters } from './voice-core.mjs';
 import { renderMarkdown } from './markdown.js';
@@ -749,6 +750,8 @@ function renderChips(){
 }
 function addFiles(bot,names){if(!bot||!names?.length)return;const list=[...(pendingFiles.get(bot.id)||[]),...names];if(list.length>10){toast('Attach up to 10 files per message.');return;}pendingFiles.set(bot.id,list);renderChips();}
 async function attachFiles(bot=currentBot()){if(!bot)return;if(!window.desktop){toast('Attachments are available in the installed app.');return;}try{addFiles(bot,await result(bridge.attachFiles(bot.id)));}catch(error){toast(error.message);}}
+installSidebarResize();
+installChatTools({copyText:()=>{const bot=currentBot();return bot?workspace.entries.filter(x=>x.botID===bot.id&&x.kind!=='activity').map(x=>`${x.kind==='user'?'You':bot.name}: ${x.text}`).join('\n\n'):'';},exportAs:kind=>exportConversation(currentBot(),kind),toast});
 installDrop({target:document.querySelector('main.conversation'),bridge,result,toast,currentBot:()=>currentBot(),pendingCount:bot=>(pendingFiles.get(bot.id)||[]).length,addFiles});
 $('#draft').addEventListener('paste',async event=>{
  const bot=currentBot(),items=[...(event.clipboardData?.items||[])].filter(item=>item.kind==='file'&&/^image\/(png|jpeg|gif|webp)$/.test(item.type));
@@ -773,6 +776,8 @@ $('#search-button').addEventListener('click',openPalette);
 $('#new-button').addEventListener('click',showNewBot); $('#profile-button').addEventListener('click',event=>{if(document.querySelector('.account-menu')){document.querySelector('.account-menu').remove();return;}openAccountMenu({anchor:event.currentTarget,bridge,result,toast,openSettings:tab=>showSettings(tab)});}); $('#apps-button').addEventListener('click',showApps); $('#status-button').addEventListener('click',()=>showConnection()); $('#attachment-button').addEventListener('click',()=>{const content=panel('Conversation actions');const bot=currentBot();append(content,button('Attach files…',()=>{dialog.close();attachFiles(bot);}),button('Export conversation…',()=>exportConversation()),node('p','muted','Tip: press Ctrl+V in the message box to paste an image.'));});
 for(const control of document.querySelectorAll('[data-window]')) control.addEventListener('click',async()=>{if(control.dataset.window==='close'&&bridge.saveDrafts){clearTimeout(draftTimer);try{await result(bridge.saveDrafts(Object.fromEntries(drafts)));}catch(error){toast(error.message);return;}}window.desktop?.windowAction(control.dataset.window);});
 window.addEventListener('blur',()=>{focusGeneration++;for(const secret of document.querySelectorAll('.revealed-secret')){secret.textContent='';secret.hidden=true;}for(const field of document.querySelectorAll('input[type=password]'))field.value='';});
+async function refreshAppsPill(){const pill=$('#apps-button');if(!pill||!bridge.composioStatus)return;try{const status=await result(bridge.composioStatus());const slugs=(status.toolkits||[]).filter(x=>x.connected||x.noAuth).map(x=>x.slug).slice(0,3);pill.querySelector('.pill-icons')?.remove();if(slugs.length){const box=node('span','pill-icons');for(const slug of slugs)box.append(connectorIcon(slug,catalog.find(slug)?.name||slug,{size:20}));pill.append(box);}}catch{}}
+refreshAppsPill();dialog.addEventListener('close',refreshAppsPill);
 document.addEventListener('keydown',event=>{if(!(event.ctrlKey||event.metaKey))return;if(event.key==='n'){event.preventDefault();showNewBot();}else if(event.key===','){event.preventDefault();showSettings();}else if(event.key==='f'){event.preventDefault();$('#search-button').click();}else if(event.key==='Enter'&&!dialog.open){event.preventDefault();$('#composer').requestSubmit();}});
 bridge.onChange?.(value=>{workspace=value.workspace;running=new Set(value.running);noticeHeadsUps();render();});
 // ---- Narrow screens and web access (0.9.7): the Bot list becomes a panel that slides in from the left ----
@@ -1157,7 +1162,8 @@ async function renderCatalog(content) {
   const header = node('div', 'apps-head'), stack = node('span', 'avatar-stack');
   for (const slug of [...connected].slice(0, 4)) stack.append(Object.assign(connectorIcon(slug, catalog.find(slug)?.name || slug, { size: 26 }), { title: catalog.find(slug)?.name || slug }));
   if (connected.size) append(header, stack, node('span', 'muted', `${connected.size} connected`));
-  const search = node('input', 'search-input'); search.placeholder = 'Search across apps'; search.setAttribute('aria-label', 'Search apps');
+  const search = node('input', 'search-input'); search.placeholder = 'Search across apps and skills'; search.setAttribute('aria-label', 'Search apps and skills');
+  let skills = []; if (bridge.skillsList) { try { skills = await result(bridge.skillsList()); } catch { skills = []; } }
   const chips = node('div', 'category-chips'), body = node('div', 'apps-body'), setup = node('div', 'apps-setup');
   const key = node('input', 'field'); key.type = 'password'; key.placeholder = 'Composio project API key'; key.autocomplete = 'off'; key.setAttribute('aria-label', 'Composio project API key');
   const link = button('Connect project', async () => { link.disabled = true; try { const value = key.value; key.value = ''; await result(bridge.composioConnect(value, [...chosen])); await showApps(); } catch (error) { toast(error.message); link.disabled = false; } }, 'pill primary');
@@ -1175,15 +1181,23 @@ async function renderCatalog(content) {
   const draw = () => {
     chips.replaceChildren(...[['All', null], ...catalog.categories.map(x => [x, x])].map(([label, value]) => { const chip = button(label, () => { category = value; draw(); }, `chip ${category === value ? 'active' : ''}`); chip.setAttribute('aria-pressed', String(category === value)); return chip; }));
     body.replaceChildren();
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const skillMatches = !category && words.length ? skills.filter(x => words.every(w => (x.name + ' ' + (x.description || '')).toLowerCase().includes(w))) : [];
     if (query.trim() || category) { const results = catalog.filter(query, category); if (!results.length) body.append(node('p', 'muted', 'No apps match your search.')); else section(category && !query.trim() ? category : 'Results', results); }
     else { section('Recommended for you', catalog.recommended.map(catalog.find).filter(Boolean)); for (const name of catalog.categories) section(name, catalog.filter('', name), 4, name); }
+    if (skillMatches.length) {
+      const wrap = node('section', 'app-section'), head = node('div', 'app-section-head'); head.append(node('strong', 'muted', 'Skills')); const grid = node('div', 'catalog-grid');
+      for (const skill of skillMatches) grid.append(append(node('div', 'app-card'), connectorIcon('skill', '\u270E', { size: 42 }), append(node('span', 'details'), node('strong', '', skill.name), node('small', 'muted', skill.description || skill.source)), button('Manage', () => showSettings('Skills'))));
+      append(wrap, head, grid); body.append(wrap);
+    }
   };
   search.addEventListener('input', () => { query = search.value; draw(); });
   if (!status.configured && window.desktop) append(setup, node('p', 'muted', 'Use your own Composio project to connect apps to your CLI. This is optional. Add the apps you want, paste your project key, then connect.'), key, append(node('div', 'panel-bottom'), button('Get a project key ↗', () => bridge.openDocs('https://platform.composio.dev')), link), node('p', 'muted', 'The project key and tool session are encrypted with Windows device storage. Composio has its own pricing and usage limits.')), link.disabled = true;
   else if (!window.desktop) append(setup, node('p', 'muted', 'Open the installed desktop app to store your project key securely.'));
   else { if ((connected.has('gmail') || connected.has('googlecalendar')) && bridge.proactiveStatus) setup.append(append(node('div', 'heads-up-nudge'), append(node('div'), node('strong', '', 'Want Hive to keep an eye on these?'), node('p', 'muted', 'Turn on heads-ups and it will message you about important email and upcoming meetings.')), button('Set up heads-ups', () => showSettings('Heads-ups'), 'pill primary')));
     append(setup, node('p', 'muted', 'Apps are chosen when the project is connected. To change them, remove the project below and connect again.'), button('Remove project from this device', async () => { try { await result(bridge.composioRemove()); await showApps(); } catch (error) { toast(error.message); } }), button('Manage or revoke accounts in Composio ↗', () => bridge.openDocs('https://platform.composio.dev'))); addAllowToggle(setup); }
-  append(content, header, search, chips, setup, body); draw();
+  const searchRow = node('div', 'apps-search-row'); append(searchRow, search, button('Bot templates \u2197', () => showNewBot(), 'pill'));
+  append(content, header, searchRow, chips, setup, body); draw();
 }
 
 // Accent: Bot colour or neutral.

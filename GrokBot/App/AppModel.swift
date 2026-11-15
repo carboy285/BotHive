@@ -115,6 +115,42 @@ final class AppModel: ObservableObject {
         return commit { $0.bots.append(Bot(id: UUID(), name: cleanName, purpose: purpose, color: color, symbol: "sparkles")) }
     }
 
+    /// Turns skills on for a Bot (10.1). Unknown ids are the caller's to filter; only the count and uniqueness are checked here.
+    @discardableResult
+    func setSkills(_ ids: [UUID], for bot: Bot) -> Bool {
+        guard let index = workspace.bots.firstIndex(where: { $0.id == bot.id }), workspace.bots[index].memberIDs == nil, ids.count <= 50 else { return false }
+        var seen = Set<UUID>()
+        let unique = ids.filter { seen.insert($0).inserted }
+        return commit { $0.bots[index].skills = unique.isEmpty ? nil : unique }
+    }
+
+    /// Removes a deleted skill from every Bot that used it.
+    func forgetSkill(_ id: UUID) {
+        guard workspace.bots.contains(where: { $0.skills?.contains(id) == true }) else { return }
+        _ = commit { value in
+            for index in value.bots.indices where value.bots[index].skills?.contains(id) == true {
+                let rest = value.bots[index].skills?.filter { $0 != id } ?? []
+                value.bots[index].skills = rest.isEmpty ? nil : rest
+            }
+        }
+    }
+
+    /// Adds a Bot from a share code the person has looked at and agreed to. Returns the new Bot's id.
+    func addSharedBot(_ card: BotShare.Card, skills: [UUID]) -> UUID? {
+        guard previewEnabled, workspace.bots.count < 100 else { return nil }
+        var name = card.name
+        var attempt = 1
+        while workspace.bots.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }), attempt < 100 {
+            attempt += 1
+            name = String(card.name.prefix(50)) + " (\(attempt))"
+        }
+        var bot = Bot(id: UUID(), name: name, purpose: card.purpose, color: card.color, symbol: "sparkles")
+        bot.appearance = BotAppearance(shape: card.shape, color: card.color)
+        if !skills.isEmpty { bot.skills = Array(skills.prefix(50)) }
+        let created = bot
+        return commit({ $0.bots.append(created) }) ? created.id : nil
+    }
+
     @discardableResult
     func setAIConfiguration(_ configuration: BotAIConfiguration, for bot: Bot) -> Bool {
         guard let index = workspace.bots.firstIndex(where: { $0.id == bot.id }),

@@ -49,6 +49,7 @@ Bothive works with services you sign up for yourself. When you use one, the data
 - **The web.** Bots that search or browse visit the sites involved, for example DuckDuckGo for searches, and feeds you ask about.
 - **Phone notifications on Mac (optional).** If you turn on ntfy notifications, notification text goes through ntfy.sh to your phone. You can choose to send titles only.
 - **Updates.** The apps check GitHub for new releases, so GitHub sees your IP address when they do.
+- **Skills from GitHub (optional).** If you ask Bothive to find skills at a GitHub or skills.sh address, it asks GitHub for the files in that public repository, so GitHub sees your IP address and the repository you asked for. Only text is kept. Share codes for Bots are text you copy and send yourself; Bothive does not upload them anywhere.
 
 ## What we don't do
 

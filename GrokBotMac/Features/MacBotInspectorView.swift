@@ -153,6 +153,10 @@ struct MacBotInspectorView: View {
                 }
             }
             if bot.memberIDs == nil {
+                MacBotSkillsCard(bot: bot)
+                MacShareBotCard(bot: bot)
+            }
+            if bot.memberIDs == nil {
                 DisclosureGroup(isExpanded: $showProviders) {
                     MacBotProviderSettingsView(bot: bot).padding(.top, 10)
                 } label: {

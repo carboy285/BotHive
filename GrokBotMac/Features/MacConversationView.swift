@@ -10,6 +10,7 @@ struct MacConversationView: View {
     @AppStorage("spellChecking") private var spellChecking = true
     @FocusState private var composing: Bool
     @State private var followLatest = true
+    @State private var dropTargeted = false
     @State private var showActions = false
     @ObservedObject private var voiceHub = MacVoiceHub.shared
     /// The message a search or pin jumped to, highlighted for a moment.
@@ -125,7 +126,14 @@ struct MacConversationView: View {
         .background(MacTheme.canvas)
         .dropDestination(for: URL.self) { urls, _ in
             guard urls.allSatisfy(\.isFileURL), bot.memberIDs == nil else { return false }
-            desktop.importAttachments(urls, for: bot); return true
+            desktop.importDropped(urls, for: bot); return true
+        } isTargeted: { dropTargeted = $0 }
+        .overlay {
+            if dropTargeted {
+                RoundedRectangle(cornerRadius: 20).strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 6])).foregroundStyle(MacTheme.secondary)
+                    .overlay { Text("Drop files, a folder or a screenshot to give this Bot context").font(.system(size: 15, weight: .medium)).padding(16).background(.regularMaterial, in: Capsule()) }
+                    .padding(10).allowsHitTesting(false)
+            }
         }
     }
 

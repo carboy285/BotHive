@@ -89,3 +89,12 @@ test('10.0: updates work before and after the repository is renamed to bothive',
   assert.equal(trustedDownload('https://github.com/carboy285/bothive-fake/releases/download/v1/a.exe'), false);
   assert.equal(trustedDownload('https://github.com/someone/bothive/releases/download/v1/a.exe'), false);
 });
+
+test('10.0: the repository name is matched without regard to case (it is shown as BotHive)', async () => {
+  const shown = 'https://github.com/carboy285/BotHive/releases/';
+  const exe = { name: 'Bothive-10.0.0-Windows-x64-Setup.exe', browser_download_url: shown + 'download/v10.0.0/Bothive-10.0.0-Windows-x64-Setup.exe', size: 3, digest: 'sha256:abc' };
+  const result = await check('0.9.9', async () => new Response(JSON.stringify([{ tag_name: 'v10.0.0', draft: false, prerelease: false, html_url: shown + 'tag/v10.0.0', assets: [exe] }])));
+  assert.equal(result.available, true);
+  assert.equal(result.installer.url, exe.browser_download_url);
+  assert.equal(trustedDownload('https://github.com/carboy285/BOTHIVE-evil/releases/download/v1/a.exe'), false);
+});

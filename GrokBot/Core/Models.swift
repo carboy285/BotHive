@@ -126,9 +126,11 @@ struct Workspace: Codable, Equatable, Sendable {
     // Kept as a source-compatible alias; no demo Bots or messages are seeded.
     static var preview: Workspace { .fresh }
 
+    /// Recognises the demo data older versions seeded. The names and texts below are what those versions wrote,
+    /// so they keep the old app name on purpose.
     mutating func migrateLegacyDemo() {
         guard schemaVersion != 2 else { return }
-        let signatures = ["Hive": "A place to bring it all together", "Soccer & Percussion": "Practice plans, one day at a time", "AI Brief": "Research worth your time", "STEMBound": "Make room for your next idea", "School": "Make a plan for the week ahead"]
+        let signatures = ["Grok Bot": "A place to bring it all together", "Soccer & Percussion": "Practice plans, one day at a time", "AI Brief": "Research worth your time", "STEMBound": "Make room for your next idea", "School": "Make a plan for the week ahead"]
         let seeded = Set(bots.filter { signatures[$0.name] == $0.purpose }.map(\.id))
         let fixtures: Set<String> = [
             "Your week is coming together. You’ve got percussion practice, a STEMBound meeting, and a Spanish test on Wednesday.\n\nWant me to have the School bot help you study for Wednesday’s Spanish test?",
@@ -138,7 +140,7 @@ struct Workspace: Codable, Equatable, Sendable {
             "Want me to set up those snare drum routines for the week?",
             "Which workflow do you want? A quick daily brief, a deeper research note, or a running list of ideas?",
             "What’s on your plate right now?", "What do you need help with for Wednesday’s Spanish test?",
-            "This is an offline interface preview. Nothing here is sent to Hive. You can explore conversations, write local notes, and create preview Bots.",
+            "This is an offline interface preview. Nothing here is sent to Grok Bot. You can explore conversations, write local notes, and create preview Bots.",
             "Example handoff · School",
             "A study guide, a few practice questions, and time to review. This is where a Bot’s progress and finished work would appear.",
             "What would you like to work on? Add a local note below to try the conversation layout."

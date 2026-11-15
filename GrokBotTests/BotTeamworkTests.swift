@@ -92,7 +92,7 @@ final class BotTeamworkTests: XCTestCase {
         XCTAssertTrue(app.setAIConfiguration(config, for: main))
         XCTAssertEqual(app.workspace.bots.first?.aiConfiguration?.replyMode, .one)
         let reply = app.beginReply(for: main, provider: "fixture")
-        XCTAssertTrue(app.applyBotActions("```opengrokbot-action\n{\"action\":\"create_group\",\"name\":\"Project\",\"members\":[\"Grok Bot\",\"School\"]}\n```", replyID: reply, bot: main, configuration: config, delivery: nil))
+        XCTAssertTrue(app.applyBotActions("```opengrokbot-action\n{\"action\":\"create_group\",\"name\":\"Project\",\"members\":[\"Hive\",\"School\"]}\n```", replyID: reply, bot: main, configuration: config, delivery: nil))
         let group = try XCTUnwrap(app.workspace.bots.first { $0.name == "Project" })
         XCTAssertTrue(app.sendGroup("Plan together", group: group))
         XCTAssertEqual(app.workspace.teamMessages?.count, 2)

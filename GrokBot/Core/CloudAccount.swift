@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CryptoKit
+import Security
 import AuthenticationServices
 #if os(macOS)
 import AppKit
@@ -44,7 +45,15 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
         do {
             if let data = try self.secrets.read(account: "session") { session = try JSONDecoder().decode(CloudSession.self, from: data) }
             if let session { try loadIdentity(owner: session.user.id) }
-        } catch { self.error = "Unlock this device’s Keychain to restore sign-in."; session = nil }
+        } catch {
+            session = nil
+            // 10.0: only a locked device is worth mentioning at launch: a saved sign-in exists but can't be read yet.
+            // Anything else (no keychain access in a Simulator build, a damaged item) stays quiet here; signing in
+            // reports it if it's real. A first-time user never sees an error.
+            if case KeychainSecretStore.StoreError.status(errSecInteractionNotAllowed) = error {
+                self.error = "Unlock this device, then sign in again."
+            }
+        }
     }
     /// Desktop controllers use their own encryption identity but one shared auth refresher.
     func useAccount(from source: CloudAccount) {

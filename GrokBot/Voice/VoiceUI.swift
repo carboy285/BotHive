@@ -180,7 +180,7 @@ struct VoiceModeView: View {
                 Text(session.speakingText).font(.system(size: large ? 24 : 13, weight: large ? .medium : .regular))
                     .lineLimit(large ? 4 : 2).multilineTextAlignment(large ? .center : .leading)
             }
-            Text(session.message ?? status).font(.system(size: large ? 14 : 12))
+            Text(session.message ?? session.setupLine ?? status).font(.system(size: large ? 14 : 12))
                 .foregroundStyle(session.message == nil ? Color.secondary : Color.orange)
                 .lineLimit(2).multilineTextAlignment(large ? .center : .leading)
         }

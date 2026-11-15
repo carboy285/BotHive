@@ -6,7 +6,7 @@ import SwiftUI
 struct GrokBotMacApp: App {
     @StateObject private var app = AppModel(deferSaves: true)
     @StateObject private var desktop = MacAppModel()
-    @AppStorage("macAppearance") private var appearance = "dark"
+    @AppStorage("macAppearance") private var appearance = "system"
 
     var body: some Scene {
         WindowGroup {

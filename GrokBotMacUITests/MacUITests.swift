@@ -93,7 +93,9 @@ final class MacUITests: XCTestCase {
         app.buttons["Check sign-in"].click()
         XCTAssertTrue(app.staticTexts["Codex is signed in and ready."].waitForExistence(timeout: 15))
         app.buttons["Continue"].click()
-        XCTAssertTrue(app.secureTextFields["composio-project-key"].waitForExistence(timeout: 5))
+        // A Mac that already has a Composio project shows its connected apps instead of the key field.
+        let keyField = app.secureTextFields["composio-project-key"], refresh = app.buttons["Refresh connections"]
+        XCTAssertTrue(keyField.waitForExistence(timeout: 5) || refresh.exists, app.debugDescription)
         capture(app, name: "macos-composio-setup")
         app.buttons["Continue to chat"].click()
         app.buttons["Start chatting"].click()

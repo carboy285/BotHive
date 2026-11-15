@@ -318,23 +318,37 @@ struct RootView: View {
         }.buttonStyle(.plain).padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 12)
     }
 
+    /// 10.0: scrolls instead of truncating at the largest text sizes; at normal sizes it fills the screen as before.
     private var connectionWelcome: some View {
-        VStack(spacing: 22) {
-            Spacer()
-            BotAvatar(size: 100)
-            Text("Your Bots, wherever you go").font(.title2.weight(.medium)).multilineTextAlignment(.center)
-            Text(remote.status).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            if remote.needsApproval, let phone = remote.account.localDevice {
-                Text(phone.fingerprint).font(.system(.body, design: .monospaced))
-                Text("Match this fingerprint on your computer, then choose Approve phone.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 22) {
+                    Spacer(minLength: 0)
+                    BotAvatar(size: 100)
+                    Text("Your Bots, wherever you go").font(.title2.weight(.medium)).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(remote.status).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if remote.needsApproval, let phone = remote.account.localDevice {
+                        Text(phone.fingerprint).font(.system(.body, design: .monospaced)).multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("Match this fingerprint on your computer, then choose Approve phone.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Button { remote.showConnection = true } label: {
+                        Label("Connect your computer", systemImage: "desktopcomputer").font(.body.weight(.medium))
+                            .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 22).padding(.vertical, 14).glassChrome(in: Capsule())
+                    }.buttonStyle(.plain)
+                    Spacer(minLength: 0)
+                    Text("Your computer runs the work. Your iPhone keeps you connected.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(30)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
-            Button { remote.showConnection = true } label: {
-                Label("Connect your computer", systemImage: "desktopcomputer").font(.body.weight(.medium))
-                    .padding(.horizontal, 22).padding(.vertical, 14).glassChrome(in: Capsule())
-            }.buttonStyle(.plain)
-            Spacer()
-            Text("Your computer runs the work. Your iPhone keeps you connected.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
-        }.padding(30).frame(maxWidth: .infinity, maxHeight: .infinity)
+            .scrollBounceBehavior(.basedOnSize)
+        }
     }
 }
 
@@ -392,7 +406,7 @@ struct CreateBotView: View {
                     Button("Create") {
                         saving = true
                         let appearance = BotAppearance(shape: shape, color: color)
-                        Task { if await remote.command(RemoteCommand(action: "create_bot", name: cleanName, purpose: purpose, color: "purple", appearance: appearance)) { dismiss() }; saving = false }
+                        Task { if await remote.command(RemoteCommand(action: "create_bot", name: cleanName, purpose: purpose, color: color, appearance: appearance)) { dismiss() }; saving = false }
                     }.disabled(saving || !remote.online || cleanName.isEmpty)
                 }
             }

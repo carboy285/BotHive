@@ -12,6 +12,13 @@ struct MacComposioSetupView: View {
 
     private var filtering: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty || category != nil }
 
+    /// Counts only apps added to this project, and says so, so an un-added app showing "Add" doesn't look like a miscount.
+    private var connectionSummary: String {
+        let waiting = max(0, service.applied.count - service.connectedCount)
+        let connected = service.connectedCount == 1 ? "1 app connected" : "\(service.connectedCount) apps connected"
+        return waiting == 0 ? connected : connected + " · \(waiting) waiting for you to connect"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             if service.configured { configuredBar } else { setupCard }
@@ -21,7 +28,11 @@ struct MacComposioSetupView: View {
                 else { section("Results", results) }
             } else {
                 section("Recommended for you", ComposioCatalog.recommended.compactMap(ComposioCatalog.app))
-                ForEach(ComposioCatalog.categories, id: \.self) { name in section(name, ComposioCatalog.filter(query: "", category: name), limit: 4, viewAllCategory: name) }
+                // 10.0: an app already under "Recommended for you" isn't repeated in its category.
+                let recommended = Set(ComposioCatalog.recommended)
+                ForEach(ComposioCatalog.categories.filter { name in ComposioCatalog.filter(query: "", category: name).contains { !recommended.contains($0.slug) } }, id: \.self) { name in
+                    section(name, ComposioCatalog.filter(query: "", category: name).filter { !recommended.contains($0.slug) }, limit: 4, viewAllCategory: name)
+                }
             }
             if let feedback = service.feedback { Text(feedback).font(.system(size: 14)).lineSpacing(4).foregroundStyle(MacTheme.secondary) }
             if service.configured { footer }
@@ -50,7 +61,7 @@ struct MacComposioSetupView: View {
 
     private var configuredBar: some View {
         HStack(spacing: 10) {
-            Text(service.toolkits.isEmpty && !service.busy ? "Refresh to load your apps" : "\(service.connectedCount) of \(service.applied.count) apps connected").font(.system(size: 14)).foregroundStyle(MacTheme.secondary)
+            Text(service.toolkits.isEmpty && !service.busy ? "Refresh to load your apps" : connectionSummary).font(.system(size: 14)).foregroundStyle(MacTheme.secondary)
             Spacer()
             if service.hasPendingChanges {
                 let changes = service.selected.symmetricDifference(service.applied).count
@@ -80,7 +91,7 @@ struct MacComposioSetupView: View {
                     Text(title).font(.system(size: 14)).foregroundStyle(MacTheme.secondary)
                     Spacer()
                     if let limit, let viewAllCategory, apps.count > limit, let viewAll {
-                        Button("View all (\(apps.count))") { viewAll(viewAllCategory) }.buttonStyle(.plain).font(.system(size: 13, weight: .medium)).foregroundStyle(MacTheme.secondary)
+                        Button("View all") { viewAll(viewAllCategory) }.buttonStyle(.plain).font(.system(size: 13, weight: .medium)).foregroundStyle(MacTheme.secondary)
                             .accessibilityLabel("View all \(title) apps")
                     }
                 }

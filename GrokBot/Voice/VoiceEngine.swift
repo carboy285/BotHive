@@ -417,8 +417,14 @@ private final class PlayerDelegate: NSObject, AVAudioPlayerDelegate {
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) { finished?() }
 }
 
-private final class SpeechDelegate: NSObject, AVSpeechSynthesizerDelegate {
-    var finished: (@Sendable () -> Void)?
+private final class SpeechDelegate: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
+    // Set on the main actor, read on the synthesizer's thread: the lock makes that safe.
+    private let lock = NSLock()
+    private var storedFinished: (@Sendable () -> Void)?
+    var finished: (@Sendable () -> Void)? {
+        get { lock.withLock { storedFinished } }
+        set { lock.withLock { storedFinished = newValue } }
+    }
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) { finished?() }
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) { finished?() }
 }
@@ -430,6 +436,8 @@ final class VoiceSession: ObservableObject {
     @Published private(set) var partial = ""
     @Published private(set) var level: Float = 0
     @Published var message: String?
+    /// One-time setup progress (downloading the open-source voice models). Neutral, unlike `message`, which is for problems.
+    @Published private(set) var setupLine: String?
     /// While muted nothing you say is heard. The Bot can still speak.
     @Published private(set) var muted = false
     /// While held (orb or Space), the app waits however long you pause, and sends when you let go.
@@ -488,14 +496,16 @@ final class VoiceSession: ObservableObject {
         transcriber = VoiceSettings.transcriber
         if transcriber == .local || VoiceSettings.speaker == .local {
             guard let backend = LocalVoice.backend else { message = "Open-source voice runs in the Mac app. Choose Apple in voice settings."; return false }
-            state = .thinking; message = "Getting the voice ready…"
+            state = .thinking; message = nil; setupLine = "Setting up the voice…"
             do {
-                try await backend.prepare(listening: transcriber == .local, speaking: VoiceSettings.speaker == .local) { [weak self] line in self?.message = line }
+                // An empty line means a download finished; the engine can report more later, as it loads model files lazily.
+                try await backend.prepare(listening: transcriber == .local, speaking: VoiceSettings.speaker == .local) { [weak self] line in self?.setupLine = line.isEmpty ? nil : line }
             } catch {
+                setupLine = nil
                 message = "The open-source voice isn’t ready: \(error.localizedDescription) Choose Apple in voice settings to keep going."
                 state = .idle; return false
             }
-            message = nil
+            setupLine = nil
         }
         if transcriber.needsKey, VoiceKeys.get(transcriber).isEmpty {
             message = "Add your \(transcriber.title) key in voice settings, or switch listening back to Apple."; return false
@@ -590,7 +600,7 @@ final class VoiceSession: ObservableObject {
     private func startEngine() throws {
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP])
         try session.setActive(true)
         #endif
         let input = engine.inputNode
@@ -666,7 +676,8 @@ final class VoiceSession: ObservableObject {
         state = .thinking; partial = "Transcribing…"
         let provider = transcriber, key = VoiceKeys.get(transcriber), rate = sampleRate
         let language = VoiceSettings.locale.identifier
-        Task {
+        Task { [weak self] in
+            guard let self else { return }
             do {
                 let text: String
                 if provider == .local, let backend = LocalVoice.backend {

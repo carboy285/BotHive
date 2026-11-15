@@ -146,7 +146,7 @@ struct MacSetupView: View {
             title("Install \(provider.name)")
             if let installation {
                 Label("Already installed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                Text(installation.path).font(.system(size: 13, design: .monospaced)).textSelection(.enabled)
+                Text(installation.path).font(.system(size: 13, design: .monospaced)).lineLimit(2).truncationMode(.middle).help(installation.path).textSelection(.enabled)
                 Text("You can continue to sign in. If this is not the installation you want, choose another executable.").foregroundStyle(MacTheme.secondary)
             } else {
                 lead("Install the CLI, then come back and scan again. Grok Bot never installs anything in the background.")

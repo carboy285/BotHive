@@ -285,7 +285,9 @@ final class MacLocalVoiceEngine: NSObject, LocalVoiceBackend, WKNavigationDelega
         view.navigationDelegate = self
         proxy.onMessage = { [weak self] loaded, total, kind in
             guard total > 0 else { return }
-            self?.progressLine?("Downloading the \(kind == "stt" ? "listening" : "speaking") model… \(Int(100 * Double(loaded) / Double(total)))%")
+            // 10.0: a finished download clears the line instead of sitting at 100%.
+            guard loaded < total else { self?.progressLine?(""); return }
+            self?.progressLine?("Setting up the \(kind == "stt" ? "listening" : "speaking") voice (one-time download)… \(Int(100 * Double(loaded) / Double(total)))%")
         }
         webView = view
         guard let start = URL(string: "ogb-models://local/engine.html") else { throw MacLocalVoiceStore.Failure(errorDescription: "The voice engine could not load.") }

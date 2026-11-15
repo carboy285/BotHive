@@ -4,7 +4,7 @@ import SwiftUI
 struct MacSettingsView: View {
     @EnvironmentObject private var app: AppModel
     @EnvironmentObject private var desktop: MacAppModel
-    @AppStorage("macAppearance") private var appearance = "dark"
+    @AppStorage("macAppearance") private var appearance = "system"
     @AppStorage("spellChecking") private var spellChecking = true
     @AppStorage("accentStyle") private var accentStyle = "bot"
     @AppStorage("profileName") private var profileName = "You"

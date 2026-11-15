@@ -15,6 +15,7 @@ struct OnboardingFlow: View {
     @State private var step = Step.welcome
     @State private var asking = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         ZStack {
@@ -52,23 +53,31 @@ struct OnboardingFlow: View {
 
     // MARK: Steps
 
+    /// 10.0: short steps sit in the middle of the screen instead of hugging the top. At accessibility text sizes the
+    /// bottom button scrolls with the content, so the two never overlap.
     private var page: some View {
         VStack(spacing: 0) {
             topBar
-            ScrollView {
-                VStack(spacing: 14) {
-                    hero.padding(.top, 28).padding(.bottom, 10)
-                    Text(title).font(.system(size: 28, weight: .semibold)).tracking(-0.4).multilineTextAlignment(.center)
-                    Text(subtitle).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                    content.padding(.top, 14)
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(spacing: 14) {
+                        Spacer(minLength: 0)
+                        hero.padding(.bottom, 10)
+                        Text(title).font(.title.weight(.semibold)).tracking(-0.4).multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(subtitle).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                        content.padding(.top, 14)
+                        Spacer(minLength: 0)
+                        if typeSize.isAccessibilitySize { bottom.padding(.top, 20) }
+                    }
+                    .padding(.horizontal, 28).padding(.vertical, 24)
+                    .frame(maxWidth: 520)
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                 }
-                .padding(.horizontal, 28).padding(.bottom, 24)
-                .frame(maxWidth: 520)
-                .frame(maxWidth: .infinity)
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .scrollBounceBehavior(.basedOnSize)
-            bottom.padding(.horizontal, 24).padding(.bottom, 12)
+            if !typeSize.isAccessibilitySize { bottom.padding(.horizontal, 24).padding(.bottom, 12) }
         }
     }
 
@@ -87,7 +96,9 @@ struct OnboardingFlow: View {
             }
             .accessibilityElement().accessibilityLabel("Step \(step.rawValue) of \(Step.allCases.count - 1)")
             Spacer()
-            Button("Skip") { advance() }.font(.body).foregroundStyle(.secondary).frame(width: 44, height: 44)
+            Button("Skip") { advance() }.font(.body).foregroundStyle(.secondary)
+                .lineLimit(1).fixedSize()
+                .frame(minWidth: 44, minHeight: 44)
                 .accessibilityIdentifier("onboarding-skip")
         }
         .padding(.horizontal, 12)
@@ -200,7 +211,9 @@ struct OnboardingFlow: View {
     private func primary(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title).font(.headline).foregroundStyle(Palette.background)
-                .frame(maxWidth: .infinity).frame(height: 54)
+                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 16).padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, minHeight: 54)
                 .background(Color.primary, in: Capsule())
                 .contentShape(Capsule())
         }
@@ -210,7 +223,9 @@ struct OnboardingFlow: View {
     private func quiet(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title).font(.headline).foregroundStyle(.primary)
-                .frame(maxWidth: .infinity).frame(height: 54)
+                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 16).padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, minHeight: 54)
                 .background(Color.primary.opacity(0.07), in: Capsule())
                 .contentShape(Capsule())
         }

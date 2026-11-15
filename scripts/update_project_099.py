@@ -128,7 +128,7 @@ for legal in ['THIRD_PARTY_NOTICES.md', 'LICENSE']: bundle_resource(legal, 'Grok
 
 # --- 10.1: Skills, Routines screen, share a Bot, drag and drop ----------------------------------------------------------------
 for name in ['GrokBot', 'GrokBotMac']: compile_in('GrokBot/Core/BotSkills.swift', name, 'GrokBot')
-for path in ['GrokBotMac/Features/MacSkillsView.swift', 'GrokBotMac/Features/MacRoutinesView.swift', 'GrokBotMac/Features/MacDrop.swift']:
+for path in ['GrokBotMac/Composio/ConnectorLogos.swift', 'GrokBotMac/Composio/ConnectorIcon.swift', 'GrokBotMac/Features/MacAccountMenu.swift', 'GrokBotMac/Features/MacSkillsView.swift', 'GrokBotMac/Features/MacRoutinesView.swift', 'GrokBotMac/Features/MacDrop.swift']:
     compile_in(path, 'GrokBotMac', 'GrokBotMac')
 for name in ['GrokBotTests', 'GrokBotMacTests']: compile_in('GrokBotTests/BotSkillsTests.swift', name, 'GrokBotTests')
 

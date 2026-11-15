@@ -104,7 +104,7 @@ struct MacComposioSetupView: View {
 
     private func card(_ app: CatalogApp) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: app.symbol).font(.system(size: 16)).frame(width: 38, height: 38).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 10))
+            ConnectorIcon(slug: app.slug, symbol: app.symbol, size: 40)
             VStack(alignment: .leading, spacing: 2) {
                 Text(app.name).font(.system(size: 15, weight: .medium)).lineLimit(1)
                 Text(app.category).font(.system(size: 11)).foregroundStyle(MacTheme.secondary)

@@ -27,7 +27,7 @@ struct MacSettingsView: View {
                     }.buttonStyle(.plain).accessibilityAddTraits(desktop.settingsTab == tab ? [.isSelected] : [])
                 }
                 Spacer()
-                Text("Bothive \(desktop.updates.current)").font(.system(size: 11)).foregroundStyle(MacTheme.secondary)
+                Text("Bothive \(desktop.updates.current) Beta").font(.system(size: 11)).foregroundStyle(MacTheme.secondary)
             }
             .padding(16).padding(.top, 6).frame(width: 238).background(MacTheme.sidebar)
             Rectangle().fill(MacTheme.line).frame(width: 1)

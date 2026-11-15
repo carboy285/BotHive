@@ -71,7 +71,7 @@ test('a /../ in a web address is collapsed by the URL parser, so it can only eve
 });
 
 test('refuses other hosts, odd names and path tricks', () => {
-  for (const bad of ['', 'https://evil.example/acme/x', 'http://github.com/acme/x', 'https://user:pw@github.com/acme/x', 'acme', 'a b/c', 'acme/x/../y/z', 'file:///etc/passwd', 'x'.repeat(700)])
+  for (const bad of ['', 'https://evil.example/acme/x', 'http://github.com/acme/x', 'https://user:pw@github.com/acme/x', 'acme', 'a b/c', 'acme/x/../y/z', '../etc/passwd', 'file:///etc/passwd', 'x'.repeat(700)])
     assert.throws(() => skills.parseSource(bad), undefined, bad);
 });
 

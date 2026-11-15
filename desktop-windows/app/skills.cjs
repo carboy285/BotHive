@@ -146,7 +146,7 @@ function parseSource(input) {
     else if (rest.length > 1) path = rest.join('/');
   }
   repo = String(repo || '').replace(/\.git$/i, '');
-  if (!NAME.test(owner || '') || !NAME.test(repo)) throw new Error('Paste an address like github.com/owner/repo or owner/repo.');
+  if (!NAME.test(owner || '') || !NAME.test(repo) || /^\.+$/.test(owner) || /^\.+$/.test(repo)) throw new Error('Paste an address like github.com/owner/repo or owner/repo.');
   if (ref !== null && (!REF.test(ref) || ref.includes('..'))) throw new Error('That branch name is not valid.');
   if (path !== null && path.split('/').some(part => part === '..' || part === '')) throw new Error('That path is not valid.');
   if (skill !== null && !NAME.test(skill)) throw new Error('That skill name is not valid.');

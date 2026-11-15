@@ -22,6 +22,8 @@ struct Bot: Identifiable, Codable, Hashable, Sendable {
     var unread: Bool? = nil
     /// This Bot's own voice choices. Anything left empty follows the app-wide voice settings.
     var voice: BotVoice? = nil
+    /// Skills (instruction packs, 10.1) this Bot follows. The skills themselves live in this computer's skill library.
+    var skills: [UUID]? = nil
 }
 
 struct BotVoice: Codable, Hashable, Sendable {
@@ -113,6 +115,7 @@ struct Workspace: Codable, Equatable, Sendable {
         var botIDs = Set<UUID>(), entryIDs = Set<UUID>(), teamIDs = Set<UUID>()
         for bot in bots {
             guard botIDs.insert(bot.id).inserted else { throw CloudError.message("The workspace contains duplicate Bot IDs. Restore a valid workspace on the computer.") }
+            guard (bot.skills ?? []).count <= 50 else { throw CloudError.message("The workspace contains too many skills for one Bot.") }
             let schedules = bot.schedules ?? []
             guard schedules.count <= 100, Set(schedules.map(\.id)).count == schedules.count,
                   schedules.allSatisfy({ !$0.name.isEmpty && $0.name.count <= 200 && !$0.text.isEmpty && $0.text.count <= 8000 && ["none","hourly","daily","weekly"].contains($0.recurrence) && TimeZone(identifier: $0.timezone) != nil && ($0.nextRun == nil || BotSchedule.date($0.nextRun ?? "") != nil) }) else { throw CloudError.message("The workspace contains invalid scheduled tasks.") }

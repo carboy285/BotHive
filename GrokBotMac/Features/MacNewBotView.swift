@@ -62,6 +62,7 @@ struct MacNewBotView: View {
                             }
                             TextField("What should it help with? (optional)", text: $purpose, axis: .vertical)
                                 .textFieldStyle(.plain).lineLimit(2...4).padding(12).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 12))
+                            DisclosureGroup("Have a Bot code from a friend?") { MacAddFromCodeView() }.font(.system(size: 13))
                             if let importNote { Text(importNote).font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
                         }.padding(.top, 8)
                     }.font(.system(size: 13)).foregroundStyle(MacTheme.secondary)

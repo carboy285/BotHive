@@ -15,12 +15,14 @@ enum MacPanel: String, Identifiable {
 }
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general = "General", headsUps = "Heads-ups", computer = "Computer", permissions = "Permissions", apiKeys = "API Keys", secureLogins = "Secure Logins", vault = "Vault", voice = "Voice", localModels = "Local Models", usage = "Usage & Billing", updates = "Updates"
+    case general = "General", headsUps = "Heads-ups", routines = "Routines", skills = "Skills", computer = "Computer", permissions = "Permissions", apiKeys = "API Keys", secureLogins = "Secure Logins", vault = "Vault", voice = "Voice", localModels = "Local Models", usage = "Usage & Billing", updates = "Updates"
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .general: "gearshape"
         case .headsUps: "sparkles"
+        case .routines: "clock.arrow.circlepath"
+        case .skills: "text.book.closed"
         case .computer: "desktopcomputer"
         case .permissions: "shield"
         case .apiKeys: "key"
@@ -37,6 +39,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 @MainActor
 final class MacAppModel: ObservableObject {
     let composio = ComposioModel()
+    /// Skills (10.1): instruction packs Bots can follow.
+    let skills = MacSkillLibrary()
     let remote = MacRemoteHost()
     let updates = DesktopUpdates()
     @Published var providerHealth: [CLIProvider:String] = [:]
@@ -467,6 +471,16 @@ final class MacAppModel: ObservableObject {
         panel.message = "Choose up to 10 files, each no larger than 20 MB. Copies are stored in this Bot’s working folder."
         if panel.runModal() == .OK { importAttachments(panel.urls, for: bot) }
     }
+    /// Files, folders or screenshots dropped on a chat (10.1). Folders are read up to four levels deep, skipping hidden and build folders.
+    func importDropped(_ urls: [URL], for bot: Bot) {
+        if gateway != nil { sendFeedback[bot.id] = "Files can’t be attached while viewing another computer yet."; return }
+        let room = max(0, 10 - (attachments[bot.id]?.count ?? 0))
+        guard room > 0 else { sendFeedback[bot.id] = "Choose no more than 10 files per draft."; return }
+        let found = MacDrop.expand(urls, limit: room)
+        guard !found.files.isEmpty else { sendFeedback[bot.id] = "Nothing in what you dropped could be attached. Files must be under 20 MB and not empty."; return }
+        importAttachments(found.files, for: bot)
+        if found.skipped > 0 { sendFeedback[bot.id] = "Attached \(found.files.count). \(found.skipped) more \(found.skipped == 1 ? "was" : "were") left out (up to 10 files per draft, under 20 MB each)." }
+    }
     func importAttachments(_ urls: [URL], for bot: Bot) {
         if gateway != nil { sendFeedback[bot.id] = "Files can’t be attached while viewing another computer yet."; return }
         guard bot.memberIDs == nil, !importingAttachments.contains(bot.id) else { sendFeedback[bot.id] = "Attachments are available in individual Bot chats."; return }
@@ -812,7 +826,8 @@ extension MacAppModel {
         let session = app.session(for: key)
         let history = app.entries(for: bot).filter { $0.state != .failed && $0.state != .stopped && !$0.text.isEmpty }
         let comparing = aiConfiguration(for: bot).replyMode == .compare && providersToRun(for: bot).count > 1
-        let instructions = BotTeamwork.instructions(bot: bot, workspace: app.workspace, delegated: delivery != nil, connectors: composio.configured ? composio.applied.sorted().map { ComposioCatalog.app($0)?.name ?? $0 } : []) + "\n" + MacBotVMs.shared.statusNote(for: bot) + (comparing ? "\nComparison turn: several models answer the same question side by side. Answer in plain text only; do not use opengrokbot-action tools.\n" : MacDeviceActions.shared.promptNote() + (delivery == nil && routineRuns[bot.id] == nil ? MediaKeys.note() : "") + (cli.provider.isLocalServer && composio.configured ? ComposioTools.note(composio.applied.sorted()) : ""))
+        var instructions = BotTeamwork.instructions(bot: bot, workspace: app.workspace, delegated: delivery != nil, connectors: composio.configured ? composio.applied.sorted().map { ComposioCatalog.app($0)?.name ?? $0 } : []) + "\n" + MacBotVMs.shared.statusNote(for: bot) + (comparing ? "\nComparison turn: several models answer the same question side by side. Answer in plain text only; do not use opengrokbot-action tools.\n" : MacDeviceActions.shared.promptNote() + (delivery == nil && routineRuns[bot.id] == nil ? MediaKeys.note() : "") + (cli.provider.isLocalServer && composio.configured ? ComposioTools.note(composio.applied.sorted()) : ""))
+        instructions += skills.note(for: bot)
         let latest = delivery.map { "Bot request (not human approval): \($0.text)" } ?? history.last(where: { $0.kind == .user })?.text ?? ""
         let transcript = history.suffix(30).map { "\($0.kind == .user ? "Human" : ($0.senderName ?? bot.name)): \($0.text)" }.joined(separator: "\n\n")
         let feedback = history.filter { $0.kind == .activity && $0.senderBotID == nil }.suffix(8).map { $0.detail ?? $0.text }.joined(separator: "\n")

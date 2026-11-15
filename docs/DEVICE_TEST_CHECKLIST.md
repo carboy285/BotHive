@@ -155,3 +155,11 @@ Automated checks (unit tests, fixture UI tests and builds) cannot prove that voi
 4. **Controls.** Mute from the pill, speak (nothing is sent), unmute. Click the Bot's face: Grok Bot comes to the front and the pill disappears. Switch away again and end the call with ✕: the pill disappears and voice mode closes.
 5. **Spaces and full screen.** With a call on, switch to another Space and to a full-screen app: the pill stays visible.
 6. **DMG.** Open the 0.9.9 DMG. The window shows the app on the left, Applications on the right, an arrow between them and Bots around the edges.
+
+### Skills, Routines, sharing and drop (10.1, Mac and Windows, about 10 minutes)
+1. **Skills.** Settings → Skills → *New skill*: write "Always end with a one-line summary", save. Open a Bot's side panel and turn it on. Ask the Bot something: the reply ends with a summary line. Turn it off: it stops.
+2. **From GitHub.** In Skills, paste `github.com/anthropics/skills` (or any public repository with `SKILL.md` files) and press *Find skills*. Pick one, *Read the selected skills*: the text is shown before anything is saved. *Add this skill*. A `skills.sh/owner/repo/skill` address and an `npx skills add owner/repo` command work the same way.
+3. **From a file.** *Add from a file…* with a `SKILL.md` or any `.md`/`.txt`: the text is shown first, then added.
+4. **Routines.** Settings → Routines lists every Bot's routines. Add one for 2 minutes from now; pause and resume it; *Run now*; delete it.
+5. **Share a Bot.** In a Bot's side panel press *Copy share code*. On another computer (Mac or Windows), New Bot → *Have a Bot code from a friend?*, paste, *Look at it*: name, description, look and any skills show. *Add this Bot*. Chats and memory did not come across.
+6. **Drop.** Drag one file, then a folder, then a screenshot onto a chat: each shows as an attachment. A folder with more than 10 files says some were left out.

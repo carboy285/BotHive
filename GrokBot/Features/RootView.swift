@@ -21,6 +21,7 @@ struct RootView: View {
     @AppStorage("pendingVoiceStart") private var pendingVoice = false
     @AppStorage("autoVoiceBotID") private var autoVoiceBotID = ""
     @Environment(\.scenePhase) private var phase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var matchingBots: [Bot] {
         model.visibleBots.filter { bot in
@@ -175,10 +176,10 @@ struct RootView: View {
             HStack {
                 Button { settings = true } label: {
                     Group {
-                        if initials.isEmpty { Image(systemName: "person.crop.circle").font(.system(size: 25)) }
-                        else { Text(initials).font(.system(size: 16, weight: .medium)).foregroundStyle(.secondary) }
-                    }.frame(width: 48, height: 48).background(.primary.opacity(0.04), in: Circle())
-                        .padding(4).glassChrome(in: Circle())
+                        if initials.isEmpty { Image(systemName: "person.crop.circle").font(.system(size: 22)) }
+                        else { Text(initials).font(.system(size: 15, weight: .medium)).foregroundStyle(.secondary) }
+                    }.frame(width: 44, height: 44).background(.primary.opacity(0.04), in: Circle())
+                        .glassChrome(in: Circle())
                 }.buttonStyle(.plain).accessibilityLabel("Account and settings")
                 Spacer()
                 if remote.hasSnapshot {
@@ -187,6 +188,7 @@ struct RootView: View {
             }.padding(.horizontal, 20).padding(.top, 8)
             if remote.hasSnapshot { RemoteConnectionBanner() }
         }.padding(.bottom, 8).background(Palette.background)
+            .animation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 1), value: remote.online)
     }
 
     private var roster: some View {
@@ -206,7 +208,7 @@ struct RootView: View {
                     }
                 }
                 ForEach(bots) { bot in
-                    NavigationLink(value: bot.id) { botRow(bot) }.buttonStyle(.plain)
+                    NavigationLink(value: bot.id) { botRow(bot) }.buttonStyle(PressableRowStyle())
                         .contextMenu { botActions(bot) }
                 }
                 if !messageMatches.isEmpty {
@@ -224,6 +226,7 @@ struct RootView: View {
                         .padding(.top, 56)
                 }
             }.padding(.bottom, 24)
+                .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 1), value: bots.map(\.id))
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
@@ -243,7 +246,7 @@ struct RootView: View {
                     .multilineTextAlignment(.center).lineLimit(2)
             }.frame(width: large ? min(max(heroSize + 24, 140), 180) : 100)
                 .contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityLabel("\(bot.name), pinned. Open chat")
+        }.buttonStyle(PressableTileStyle()).accessibilityLabel("\(bot.name), pinned. Open chat")
             .contextMenu { botActions(bot) }
     }
 
@@ -258,12 +261,32 @@ struct RootView: View {
         }
     }
 
+    /// "3:25 PM" today, "Yesterday", otherwise "Oct 31" (with the year when it is not this year).
+    private func rowDate(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return date.formatted(date: .omitted, time: .shortened) }
+        if calendar.isDateInYesterday(date) { return "Yesterday" }
+        if calendar.isDate(date, equalTo: Date(), toGranularity: .year) { return date.formatted(.dateTime.month(.abbreviated).day()) }
+        return date.formatted(.dateTime.month(.abbreviated).day().year())
+    }
+
+    /// The small symbol in front of the preview: what the last message was.
+    private func previewSymbol(_ entry: Entry?) -> String? {
+        if entry?.senderBotID != nil { return "arrow.left.arrow.right" }
+        switch entry?.kind {
+        case .user: return "paperplane"
+        case .bot: return "checklist"
+        default: return nil
+        }
+    }
+
     private func botRow(_ bot: Bot) -> some View {
         let latest = model.entries(for: bot).last
+        let running = remote.running.contains(bot.id)
         return HStack(spacing: 18) {
-            BotAvatar(color: bot.color, size: 46, appearance: bot.appearance)
+            BotAvatar(color: bot.color, size: 50, appearance: bot.appearance)
                 .overlay {
-                    if remote.running.contains(bot.id) {
+                    if running {
                         Circle().stroke(remote.approval != nil ? Palette.attention : Palette.working, lineWidth: 2.5).padding(-4)
                     }
                 }
@@ -272,25 +295,24 @@ struct RootView: View {
                     Text(bot.name).font(.system(.body, design: .default).weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
                     Spacer(minLength: 0)
                     if let date = latest?.date {
-                        Text(date, format: .relative(presentation: .named)).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                        Text(rowDate(date)).font(.subheadline).foregroundStyle(.tertiary).lineLimit(1)
                     }
                 }
-                HStack(spacing: 5) {
-                    if remote.running.contains(bot.id) {
-                        Text(remote.approval != nil ? "Needs your OK" : "Thinking it through…")
+                HStack(spacing: 6) {
+                    if running {
+                        Text(remote.approval != nil ? "Needs your OK" : "Thinking it through\u{2026}")
                             .font(.subheadline).foregroundStyle(remote.approval != nil ? Palette.attention : Palette.working).lineLimit(1)
                     } else {
-                        if latest?.senderBotID != nil {
-                            Image(systemName: "arrow.left.arrow.right").font(.caption).foregroundStyle(.secondary)
+                        if let symbol = previewSymbol(latest) {
+                            Image(systemName: symbol).font(.subheadline).foregroundStyle(.secondary).accessibilityHidden(true)
                         }
                         Text(FollowUps.split(ChoicePrompt.split(model.latest(for: bot)).text).text.split(separator: "\n").first.map { String($0) } ?? "")
                             .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
             }
-            Image(systemName: "chevron.right").font(.system(size: 14, weight: .medium)).foregroundStyle(.quaternary)
         }
-        .padding(.horizontal, 22).padding(.vertical, 14).contentShape(Rectangle())
+        .padding(.horizontal, 22).padding(.vertical, 15).contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 
@@ -306,7 +328,7 @@ struct RootView: View {
             }.accessibilityLabel("Filter Bots, \(filter.rawValue)")
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass").font(.system(size: 20)).accessibilityHidden(true)
-                TextField("Search your Bots", text: $model.search)
+                TextField("Search", text: $model.search)
                     .font(.body).textInputAutocapitalization(.never).autocorrectionDisabled()
                     .focused($searching).submitLabel(.search).onSubmit { searching = false }
                     .accessibilityLabel("Search your Bots")
@@ -316,6 +338,7 @@ struct RootView: View {
                 }
             }.padding(.horizontal, 17).frame(minHeight: 52).glassChrome(in: Capsule())
         }.buttonStyle(.plain).padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 12)
+            .sensoryFeedback(.selection, trigger: filter)
     }
 
     /// 10.0: scrolls instead of truncating at the largest text sizes; at normal sizes it fills the screen as before.

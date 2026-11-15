@@ -14,6 +14,8 @@ enum MacTheme {
     static let sidebar = adaptive(dark: 0x0A0A0B, light: 0xF5F5F6)
     static let panel = adaptive(dark: 0x1C1C1E, light: 0xF0F0F2)
     static let raised = adaptive(dark: 0x262628, light: 0xE6E6E9)
+    /// The big dialogs (Connect Apps, Settings): white in light mode, like a sheet floating over the chat.
+    static let modal = adaptive(dark: 0x1C1C1E, light: 0xFFFFFF)
     static let secondary = adaptive(dark: 0x8E8E93, light: 0x6C6C70)
     static let tertiary = adaptive(dark: 0x5C5C61, light: 0xA4A4A9)
     static let line = Color.primary.opacity(0.07)

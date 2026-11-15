@@ -106,7 +106,12 @@ struct MacConversationView: View {
             .help(desktop.showBotInspector ? "Close bot details" : "Open bot details")
             .padding(.top, 12)
         }
-        .overlay(alignment: .topTrailing) { MacModelMenu(bot: bot).padding(.top, 14).padding(.trailing, 18) }
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 10) {
+                MacModelMenu(bot: bot)
+                shareMenu
+            }.padding(.top, 14).padding(.trailing, 18)
+        }
         .overlay(alignment: .topLeading) {
             // Pinned messages in this chat (0.9.5): pick one to jump to it.
             let pins = app.entries(for: bot).filter { $0.pinned == true }
@@ -159,6 +164,23 @@ struct MacConversationView: View {
             guard let members = bot.memberIDs else { return nil }
             return "\(members.count) Bots"
         }
+    }
+
+    /// A "Share" pill in the top corner, as in the reference: copy or export this conversation.
+    private var shareMenu: some View {
+        Menu {
+            Button("Copy conversation", systemImage: "doc.on.doc") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(desktop.conversationText(for: bot, app: app), forType: .string)
+            }
+            Button("Export as Markdown\u{2026}", systemImage: "square.and.arrow.up") { desktop.exportConversation(bot, app: app) }
+            Button("Export as PDF\u{2026}", systemImage: "doc.richtext") { desktop.exportConversation(bot, app: app, pdf: true) }
+        } label: {
+            Text("Share").font(.system(size: 14, weight: .medium)).padding(.horizontal, 16).frame(height: 38)
+                .contentShape(Capsule()).glassChrome(in: Capsule())
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        .help("Copy or export this conversation").accessibilityLabel("Share conversation")
     }
 
     private var composer: some View {
@@ -229,11 +251,11 @@ struct MacConversationView: View {
                     .onExitCommand { if desktop.panel != nil { desktop.panel = nil } else { desktop.showBotInspector = false } }
                     .accessibilityIdentifier("chat-input").accessibilityLabel("Message for \(bot.name)")
                 // 0.9.4: dictation and send / voice read as one control.
-                HStack(spacing: 2) {
+                HStack(spacing: 8) {
                     Button { dictation.toggle(current: draft.wrappedValue) { draft.wrappedValue = $0 } } label: {
                         Image(systemName: dictation.listening ? "mic.fill" : "mic").font(.system(size: 17, weight: .regular))
                             .foregroundStyle(dictation.listening ? Color.red : MacTheme.secondary)
-                            .frame(width: 30, height: 36).contentShape(Rectangle())
+                            .frame(width: 36, height: 36).background(Color.primary.opacity(0.06), in: Circle()).contentShape(Circle())
                     }
                     .buttonStyle(.plain).help(dictation.listening ? "Stop dictation" : "Dictate a message").accessibilityLabel(dictation.listening ? "Stop dictation" : "Dictate a message")
                     .popover(isPresented: Binding(get: { dictation.note != nil }, set: { if !$0 { dictation.note = nil } })) {
@@ -254,8 +276,7 @@ struct MacConversationView: View {
                         }.buttonStyle(.plain).help("Start voice mode").accessibilityLabel("Start voice mode")
                     }
                 }
-                .padding(.leading, 4).padding(.trailing, 2).padding(.vertical, 2)
-                .background(Color.primary.opacity(0.06), in: Capsule())
+                .padding(.vertical, 2)
             }
             .padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 6).frame(minHeight: 52)
             .background { RoundedRectangle(cornerRadius: 26, style: .continuous).fill(MacTheme.panel.opacity(0.55)).glassChrome(in: RoundedRectangle(cornerRadius: 26, style: .continuous), interactive: false).allowsHitTesting(false) }

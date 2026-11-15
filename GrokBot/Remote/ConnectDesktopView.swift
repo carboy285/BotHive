@@ -39,7 +39,12 @@ struct ConnectDesktopView: View {
 }
 struct RemoteConnectionBanner: View {
     @EnvironmentObject private var remote: RemoteController
+    /// Shown only when the computer is not reachable. While it is connected there is nothing to say.
     var body: some View {
+        if !remote.online { banner }
+    }
+
+    private var banner: some View {
         Button { remote.showConnection = true } label: {
             HStack(spacing: 8) {
                 Circle().fill(remote.online ? .green : .orange).frame(width: 5, height: 5)

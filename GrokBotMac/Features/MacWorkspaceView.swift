@@ -10,6 +10,7 @@ struct MacWorkspaceView: View {
     @State private var renaming: Bot?
     @State private var renameDraft = ""
     @State private var folderFilter: String? = nil
+    @State private var showAccountMenu = false
     private var sidebarBots: [Bot] { app.visibleBots.filter { folderFilter == nil || ($0.folder ?? "") == folderFilter } }
     private func pinned(_ bot: Bot) -> Bool { desktop.gateway?.isPinned(bot) ?? bot.isPinned ?? (bot.isMain == true) }
     private func touch(_ bot: Bot) { if let gateway = desktop.gateway { gateway.touch(bot.id) } else { _ = app.touchBot(bot.id); _ = app.setUnread(false, for: bot.id) } }
@@ -172,12 +173,13 @@ struct MacWorkspaceView: View {
                 }.buttonStyle(.plain).padding(.bottom, 10)
             }
             HStack(spacing: 10) {
-                Button { desktop.openSettings() } label: {
+                Button { showAccountMenu.toggle() } label: {
                     Group {
                         if profileName.trimmingCharacters(in: .whitespaces).isEmpty || profileName == "You" { Image(systemName: "person.fill").font(.system(size: 14)) }
                         else { Text(String(profileName.prefix(2)).uppercased()).font(.system(size: 13, weight: .medium)) }
                     }.frame(width: 34, height: 34).glassChrome(in: Circle())
-                }.buttonStyle(.plain).help("Settings").accessibilityLabel("Settings")
+                }.buttonStyle(.plain).help("Account").accessibilityLabel("Account menu")
+                    .popover(isPresented: $showAccountMenu, arrowEdge: .top) { MacAccountMenu { showAccountMenu = false } }
                 Button { desktop.panel = desktop.gateway == nil ? .apps : .remoteSettings } label: {
                     HStack(spacing: 10) {
                         Text("Connect apps").font(.system(size: 15, weight: .medium))
@@ -328,7 +330,7 @@ struct MacConnectedIcons: View {
         if !connected.isEmpty {
             HStack(spacing: 3) {
                 ForEach(connected, id: \.slug) { toolkit in
-                    Image(systemName: ComposioCatalog.app(toolkit.slug)?.symbol ?? "app").font(.system(size: 10)).foregroundStyle(MacTheme.secondary)
+                    ConnectorIcon(slug: toolkit.slug, symbol: ComposioCatalog.app(toolkit.slug)?.symbol ?? "app", size: 20)
                 }
             }.accessibilityHidden(true)
         }

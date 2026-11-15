@@ -819,6 +819,9 @@
 				"672698F93AD5E475C09A1A49",
 				"18C20A87D500744DAC8275D5",
 				"D1B165434A24B15300AD3052",
+				"76792AFB0D1CBDE1CC4AECEB",
+				"9135EC216FDB48E55BEDD4E1",
+				"9925A2B0F960E501D1BD9400",
 			);
 			"name" = "GrokBotMac";
 			"sourceTree" = "<group>";
@@ -1453,6 +1456,9 @@
 				"F74D9CE8099A46BFD615070B",
 				"C2D5CE14027A7B7B1A544A3D",
 				"FBEB349E66F94378E305C949",
+				"7DD36E56084AB8AFB8F9310B",
+				"6A58DFC01BB01B975EC37A8B",
+				"F9488000BAF94ACF2A477492",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -2549,6 +2555,36 @@
 		"CDE00D4EE73ABDCC6EA0E649" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "C00EAA908627B07EE93E474A";
+		};
+		"76792AFB0D1CBDE1CC4AECEB" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Features/MacAccountMenu.swift";
+			"sourceTree" = "<group>";
+		};
+		"7DD36E56084AB8AFB8F9310B" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "76792AFB0D1CBDE1CC4AECEB";
+		};
+		"9135EC216FDB48E55BEDD4E1" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Composio/ConnectorLogos.swift";
+			"sourceTree" = "<group>";
+		};
+		"6A58DFC01BB01B975EC37A8B" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "9135EC216FDB48E55BEDD4E1";
+		};
+		"9925A2B0F960E501D1BD9400" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Composio/ConnectorIcon.swift";
+			"sourceTree" = "<group>";
+		};
+		"F9488000BAF94ACF2A477492" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "9925A2B0F960E501D1BD9400";
 		};
 	};
 	"rootObject" = "244210E48437B6556980A702";

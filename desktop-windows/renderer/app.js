@@ -5,6 +5,8 @@ import { renderSecureLogins } from './secure-logins.js';
 import { renderSkills, renderBotSkills } from './skills-ui.js';
 import { renderShareBot, renderAddFromCode } from './share-ui.js';
 import { installDrop } from './drop-ui.js';
+import { openAccountMenu } from './account-menu.js';
+import { connectorIcon } from './connector-icon.js';
 import { renderRoutines } from './routines-ui.js';
 import { encodeWav, splitSuggestions, starters } from './voice-core.mjs';
 import { renderMarkdown } from './markdown.js';
@@ -620,7 +622,7 @@ async function renderComposio(content){
     }else{
       append(body,node('p','',`${status.toolkits.filter(x=>x.connected).length} connected`),button('Refresh connections',async()=>{try{await result(bridge.composioRefresh());draw();}catch(error){toast(error.message);}}));
       for(const toolkit of status.toolkits.filter(x=>x.enabled)){
-        const row=append(node('div','setting-row'),node('strong','',toolkit.name),node('small','muted',toolkit.connected?'Connected':toolkit.noAuth?'No sign-in required':toolkit.status||'Not connected'));
+        const row=append(node('div','setting-row'),connectorIcon(toolkit.slug,toolkit.name,{size:30}),node('strong','',toolkit.name),node('small','muted',toolkit.connected?'Connected':toolkit.noAuth?'No sign-in required':toolkit.status||'Not connected'));
         if(!toolkit.connected&&!toolkit.noAuth)row.append(button('Connect',async()=>{try{await result(bridge.composioLink(toolkit.slug));toast('Finish authorizing in your browser, then refresh connections.');}catch(error){toast(error.message);}}));body.append(row);
       }
       if(status.toolkits.some(x=>['gmail','googlecalendar'].includes(x.slug)&&x.connected)&&bridge.proactiveStatus)body.append(append(node('div','heads-up-nudge'),append(node('div'),node('strong','','Want Hive to keep an eye on these?'),node('p','muted','Turn on heads-ups and it will message you about important email and upcoming meetings.')),button('Set up heads-ups',()=>showSettings('Heads-ups'),'pill primary')));
@@ -768,7 +770,7 @@ $('#voice-button').addEventListener('click', () => { if (!window.desktop) { toas
 $('#composer').addEventListener('submit',event=>{event.preventDefault();const bot=currentBot(),text=$('#draft').value.trim();if(!bot||(!text&&!(pendingFiles.get(bot.id)||[]).length)||running.has(bot.id))return;if(!window.desktop||!setup.installed.length){showConnection();return;}submitMessage(bot,text,pendingSends.get(bot.id)?.text===text?pendingSends.get(bot.id).id:undefined);});
 $('#draft').addEventListener('input',()=>{ drafts.set(selected,$('#draft').value);persistDrafts(); $('#draft').style.height='auto';$('#draft').style.height=Math.min(180,$('#draft').scrollHeight)+'px'; });
 $('#search-button').addEventListener('click',openPalette);
-$('#new-button').addEventListener('click',showNewBot); $('#profile-button').addEventListener('click',()=>showSettings()); $('#apps-button').addEventListener('click',showApps); $('#status-button').addEventListener('click',()=>showConnection()); $('#attachment-button').addEventListener('click',()=>{const content=panel('Conversation actions');const bot=currentBot();append(content,button('Attach files…',()=>{dialog.close();attachFiles(bot);}),button('Export conversation…',()=>exportConversation()),node('p','muted','Tip: press Ctrl+V in the message box to paste an image.'));});
+$('#new-button').addEventListener('click',showNewBot); $('#profile-button').addEventListener('click',event=>{if(document.querySelector('.account-menu')){document.querySelector('.account-menu').remove();return;}openAccountMenu({anchor:event.currentTarget,bridge,result,toast,openSettings:tab=>showSettings(tab)});}); $('#apps-button').addEventListener('click',showApps); $('#status-button').addEventListener('click',()=>showConnection()); $('#attachment-button').addEventListener('click',()=>{const content=panel('Conversation actions');const bot=currentBot();append(content,button('Attach files…',()=>{dialog.close();attachFiles(bot);}),button('Export conversation…',()=>exportConversation()),node('p','muted','Tip: press Ctrl+V in the message box to paste an image.'));});
 for(const control of document.querySelectorAll('[data-window]')) control.addEventListener('click',async()=>{if(control.dataset.window==='close'&&bridge.saveDrafts){clearTimeout(draftTimer);try{await result(bridge.saveDrafts(Object.fromEntries(drafts)));}catch(error){toast(error.message);return;}}window.desktop?.windowAction(control.dataset.window);});
 window.addEventListener('blur',()=>{focusGeneration++;for(const secret of document.querySelectorAll('.revealed-secret')){secret.textContent='';secret.hidden=true;}for(const field of document.querySelectorAll('input[type=password]'))field.value='';});
 document.addEventListener('keydown',event=>{if(!(event.ctrlKey||event.metaKey))return;if(event.key==='n'){event.preventDefault();showNewBot();}else if(event.key===','){event.preventDefault();showSettings();}else if(event.key==='f'){event.preventDefault();$('#search-button').click();}else if(event.key==='Enter'&&!dialog.open){event.preventDefault();$('#composer').requestSubmit();}});
@@ -1153,7 +1155,7 @@ async function renderCatalog(content) {
   const chosen = new Set(), connected = new Set(status.toolkits.filter(x => x.connected || x.noAuth).map(x => x.slug)), enabled = new Set(status.toolkits.filter(x => x.enabled).map(x => x.slug));
   let query = '', category = null;
   const header = node('div', 'apps-head'), stack = node('span', 'avatar-stack');
-  for (const slug of [...connected].slice(0, 4)) stack.append(Object.assign(node('i', '', (catalog.find(slug)?.name || slug)[0].toUpperCase()), { title: catalog.find(slug)?.name || slug }));
+  for (const slug of [...connected].slice(0, 4)) stack.append(Object.assign(connectorIcon(slug, catalog.find(slug)?.name || slug, { size: 26 }), { title: catalog.find(slug)?.name || slug }));
   if (connected.size) append(header, stack, node('span', 'muted', `${connected.size} connected`));
   const search = node('input', 'search-input'); search.placeholder = 'Search across apps'; search.setAttribute('aria-label', 'Search apps');
   const chips = node('div', 'category-chips'), body = node('div', 'apps-body'), setup = node('div', 'apps-setup');
@@ -1163,7 +1165,7 @@ async function renderCatalog(content) {
     const row = node('div', 'app-card'); const action = status.configured
       ? (enabled.has(app.slug) ? (connected.has(app.slug) ? node('span', 'muted', 'Connected ✓') : button('Connect', async () => { try { await result(bridge.composioLink(app.slug)); toast('Finish authorizing in your browser, then reopen Connect apps.'); } catch (error) { toast(error.message); } })) : node('span', 'muted', 'Not in project'))
       : (() => { const toggle = button(chosen.has(app.slug) ? 'Added ✓' : 'Add', () => { if (chosen.has(app.slug)) chosen.delete(app.slug); else chosen.add(app.slug); link.disabled = !chosen.size; draw(); }); toggle.setAttribute('aria-pressed', String(chosen.has(app.slug))); return toggle; })();
-    return append(row, node('span', 'app-initial', app.name[0]), append(node('span', 'details'), node('strong', '', app.name), node('small', 'muted', app.category)), action);
+    return append(row, connectorIcon(app.slug, app.name, { size: 42 }), append(node('span', 'details'), node('strong', '', app.name), node('small', 'muted', app.category)), action);
   };
   const section = (title, apps, limit, viewAll) => {
     if (!apps.length) return; const wrap = node('section', 'app-section'), head = node('div', 'app-section-head', ''); head.append(node('strong', 'muted', title));

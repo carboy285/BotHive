@@ -59,6 +59,9 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
         pathForFile: file => file.name === 'screenshot.png' ? '' : '/fixture/' + file.name,
         attachPaths: async (botID, paths, room) => { calls.push(['attachPaths', paths, room]); return ok({ names: paths.map((x, i) => '00000000-0000-4000-8000-00000000000' + i + '-' + x.split('/').pop()), skipped: paths.length >= 2 ? 3 : 0 }); },
         attachData: async (botID, mime, data) => { calls.push(['attachData', mime, data]); return ok('00000000-0000-4000-8000-000000000009-pasted.png'); },
+        cloudStatus: async () => ok({ signedIn: true, email: 'ben@example.com' }),
+        cloudSignOut: async () => { calls.push(['cloudSignOut']); return ok(true); },
+        openLink: async url => { calls.push(['openLink', url]); return ok(true); },
         pauseTask: async (botID, id, enabled) => { calls.push(['pauseTask', id, enabled]); task(botID, id).enabled = enabled; return ok(true); },
         runTask: async (botID, id) => { calls.push(['runTask', id]); const t = task(botID, id); t.lastRun = new Date().toISOString(); t.lastResult = 'running'; return ok(true); },
         editTask: async (botID, id, input) => { calls.push(['editTask', id, input]); const t = task(botID, id); Object.assign(t, { name: input.name, text: input.text }); if (input.recurrence) t.recurrence = input.recurrence; if (input.at) t.nextRun = input.at; return ok(true); },
@@ -69,7 +72,7 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
 
     await page.goto('http://127.0.0.1:4175');
     await page.locator('#chat-heading').getByText('Hive', { exact: true }).waitFor();
-    const openTab = async name => { await page.locator('#profile-button').click(); await page.locator('.settings-nav button', { hasText: name }).first().click(); };
+    const openTab = async name => { await page.locator('#profile-button').click(); await page.getByRole('menuitem', { name: 'Settings', exact: true }).click(); await page.locator('.settings-nav button', { hasText: name }).first().click(); };
     const calls = () => page.evaluate(() => window.__calls);
 
     // ---------- Skills ----------
@@ -203,6 +206,40 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
     assert.deepEqual(attach[1], ['/fixture/a.txt', '/fixture/MyFolder']); assert.equal(attach[2], 10);
     assert.equal(await page.locator('.attachment-chip').count(), 3, 'two files and the screenshot are attached');
     await page.getByText('left out', { exact: false }).waitFor();
+
+    // ---------- Connector logos ----------
+    await page.keyboard.press('Escape');
+    await page.locator('#apps-button').click();
+    await page.locator('.app-card').first().waitFor();
+    if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/connect-apps.png' });
+    assert.ok(await page.locator('.app-card .connector-icon svg path').count() >= 6, 'recommended apps show real logos');
+    assert.equal(await page.locator('.app-card .connector-icon svg path[d=""]').count(), 0);
+    assert.equal(await page.locator('.app-initial').count(), 0, 'no letter tiles are left');
+    const gmailFill = await page.locator('.app-card', { hasText: 'Gmail' }).first().locator('svg path').getAttribute('fill');
+    assert.equal(gmailFill.toLowerCase(), '#ea4335', 'Gmail uses its own colour');
+    await page.keyboard.press('Escape');
+
+    // ---------- Account menu ----------
+    await page.keyboard.press('Escape');
+    await page.locator('#profile-button').click();
+    const menu = page.locator('.account-menu').first();
+    await menu.getByText('ben@example.com', { exact: true }).waitFor();
+    for (const name of ['Get Bothive for iPhone', 'Support', 'Settings', 'Sign out']) await menu.getByRole('menuitem', { name, exact: true }).waitFor();
+    await menu.getByRole('menuitem', { name: 'Support', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Privacy', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'openLink'));
+    assert.equal((await calls()).filter(x => x[0] === 'openLink').at(-1)[1], 'https://carboy285.github.io/BotHive/privacy.html');
+    assert.equal(await page.locator('.account-menu').count(), 0, 'choosing an item closes the menu');
+    await page.locator('#profile-button').click();
+    await page.getByRole('menuitem', { name: 'Get Bothive for iPhone', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.filter(x => x[0] === 'openLink').length === 2);
+    assert.equal((await calls()).filter(x => x[0] === 'openLink').at(-1)[1], 'https://carboy285.github.io/BotHive/iphone.html');
+    await page.locator('#profile-button').click();
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('.account-menu').count(), 0, 'Escape closes it');
+    await page.locator('#profile-button').click();
+    await page.getByRole('menuitem', { name: 'Sign out', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'cloudSignOut'));
 
     assert.deepEqual(errors, []);
     console.log('PASS: skills (write, edit, add from a file, find and read from GitHub, hostile text stays text, per-Bot switches), sharing a Bot by code, dropping files/folders/screenshots, and routines (list, pause, resume, run now, edit, create, delete).');

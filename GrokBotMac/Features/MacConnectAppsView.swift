@@ -131,8 +131,8 @@ private struct ConnectedBadge: View {
             HStack(spacing: 8) {
                 HStack(spacing: -8) {
                     ForEach(Array(service.toolkits.filter { $0.connected || $0.is_no_auth }.prefix(4)), id: \.slug) { toolkit in
-                        Image(systemName: ComposioCatalog.app(toolkit.slug)?.symbol ?? "app").font(.system(size: 11))
-                            .frame(width: 26, height: 26).background(MacTheme.panel, in: Circle()).overlay(Circle().stroke(MacTheme.canvas, lineWidth: 2))
+                        ConnectorIcon(slug: toolkit.slug, symbol: ComposioCatalog.app(toolkit.slug)?.symbol ?? "app", size: 26)
+                            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(MacTheme.canvas, lineWidth: 2))
                     }
                 }.accessibilityHidden(true)
                 Text("\(service.connectedCount) connected").font(.system(size: 13)).foregroundStyle(MacTheme.secondary)

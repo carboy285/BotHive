@@ -39,6 +39,10 @@ Bothive is MIT-licensed (see LICENSE). It includes or downloads the components b
 
 Electron includes Chromium and Node.js. Their full notices ship with the Windows app as `LICENSES.chromium.html` and `LICENSE.electron.txt` in the install folder.
 
+## Connector logos (Mac and Windows apps)
+
+The logo shapes shown next to each app in Connect Apps come from [Simple Icons](https://simpleicons.org) (CC0-1.0, public domain). The logos themselves are trademarks of their respective owners (Google, Slack, Notion, GitHub and the others shown). They appear only to identify the service a connector talks to; Bothive is not affiliated with or endorsed by any of them. `scripts/build_connector_logos.py` regenerates them.
+
 ## iPhone and Mac apps
 
 The Swift apps use only Apple frameworks and the code in this repository.

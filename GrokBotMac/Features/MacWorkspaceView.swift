@@ -5,6 +5,7 @@ struct MacWorkspaceView: View {
     @EnvironmentObject private var app: AppModel
     @EnvironmentObject private var desktop: MacAppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     @State private var deleting: Bot?
     @State private var renaming: Bot?
     @State private var renameDraft = ""
@@ -60,16 +61,16 @@ struct MacWorkspaceView: View {
                     MacCommandPalette().transition(.opacity).zIndex(5)
                 }
                 if let panel = desktop.panel {
-                    Color.black.opacity(0.64)
+                    Color.black.opacity(scheme == .dark ? 0.64 : 0.34)
                         .ignoresSafeArea()
                         .onTapGesture { desktop.panel = nil }
                         .accessibilityHidden(true)
                     panelView(panel)
                         .frame(width: min(panelSize(panel).width, geometry.size.width - 80), height: min(panelSize(panel).height, geometry.size.height - 80))
-                        .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 22))
-                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.white.opacity(0.13), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.4), radius: 40, y: 16)
-                        .clipShape(RoundedRectangle(cornerRadius: 22))
+                        .background(MacTheme.modal, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Color.primary.opacity(scheme == .dark ? 0.13 : 0.06), lineWidth: 1))
+                        .shadow(color: .black.opacity(scheme == .dark ? 0.4 : 0.18), radius: 40, y: 16)
+                        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                         .transition(reduceMotion ? .opacity : .scale(scale: 0.98).combined(with: .opacity))
                         .accessibilityAddTraits(.isModal)
                 }
@@ -178,7 +179,10 @@ struct MacWorkspaceView: View {
                     }.frame(width: 34, height: 34).glassChrome(in: Circle())
                 }.buttonStyle(.plain).help("Settings").accessibilityLabel("Settings")
                 Button { desktop.panel = desktop.gateway == nil ? .apps : .remoteSettings } label: {
-                    Text("Connect apps").font(.system(size: 15, weight: .medium)).frame(maxWidth: .infinity).frame(height: 44).glassChrome(in: Capsule())
+                    HStack(spacing: 10) {
+                        Text("Connect apps").font(.system(size: 15, weight: .medium))
+                        MacConnectedIcons(service: desktop.composio)
+                    }.frame(maxWidth: .infinity).frame(height: 44).glassChrome(in: Capsule())
                 }.buttonStyle(.plain).accessibilityLabel("Connect apps")
                 if desktop.gateway == nil, desktop.updates.available || desktop.updates.stagedVersion != nil {
                     Button {
@@ -313,5 +317,20 @@ struct MacRosterRow: View {
         .contentShape(RoundedRectangle(cornerRadius: 14))
         .onHover { hovering = $0 }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A few tiny icons of the apps already connected, inside the sidebar's Connect apps button.
+struct MacConnectedIcons: View {
+    @ObservedObject var service: ComposioModel
+    var body: some View {
+        let connected = Array(service.toolkits.filter { $0.connected || $0.is_no_auth }.prefix(3))
+        if !connected.isEmpty {
+            HStack(spacing: 3) {
+                ForEach(connected, id: \.slug) { toolkit in
+                    Image(systemName: ComposioCatalog.app(toolkit.slug)?.symbol ?? "app").font(.system(size: 10)).foregroundStyle(MacTheme.secondary)
+                }
+            }.accessibilityHidden(true)
+        }
     }
 }

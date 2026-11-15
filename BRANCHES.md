@@ -7,7 +7,7 @@ Bothive's source is public. Each branch below is a complete, buildable copy of w
 | **`main`** | Everything: the iPhone, Mac and Windows apps, the account service, the website source, docs and release workflows. Releases are built from here. | All of the below |
 | **`app/apple`** | The iPhone and Mac apps. They share one Xcode project and about half their code (account, encrypted relay, Bots, voice), so they live together. | Open `GrokBot.xcodeproj`; scheme **GrokBot** for iPhone, **GrokBotMac** for Mac, or `scripts/build-macos.sh` for the DMG |
 | **`app/windows`** | The Windows app (Electron). | `npm ci`, then `npm run dist:windows` |
-| **`gh-pages`** | The built website, served at <https://carboy285.github.io/bothive/>. Generated from `site/` on `main` by `scripts/build_site.py`. | Nothing to build |
+| **`gh-pages`** | The built website, served at <https://carboy285.github.io/BotHive/>. Generated from `site/` on `main` by `scripts/build_site.py`. | Nothing to build |
 
 ## Where each app lives on `main`
 

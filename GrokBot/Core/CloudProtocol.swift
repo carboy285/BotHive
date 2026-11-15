@@ -9,11 +9,11 @@ enum CloudConfiguration {
 }
 /// 10.0: the project's public pages. The website is published from the gh-pages branch.
 enum LegalLinks {
-    static let site = URL(string: "https://carboy285.github.io/bothive/")!
-    static let privacy = URL(string: "https://carboy285.github.io/bothive/privacy.html")!
-    static let terms = URL(string: "https://carboy285.github.io/bothive/terms.html")!
-    static let licenses = URL(string: "https://carboy285.github.io/bothive/licenses.html")!
-    static let issues = URL(string: "https://github.com/carboy285/bothive/issues")!
+    static let site = URL(string: "https://carboy285.github.io/BotHive/")!
+    static let privacy = URL(string: "https://carboy285.github.io/BotHive/privacy.html")!
+    static let terms = URL(string: "https://carboy285.github.io/BotHive/terms.html")!
+    static let licenses = URL(string: "https://carboy285.github.io/BotHive/licenses.html")!
+    static let issues = URL(string: "https://github.com/carboy285/BotHive/issues")!
     /// Shown wherever the app introduces itself.
     static let aiNotice = "Bots are AI. They can be wrong, and they act through the AI accounts you connect."
     static let affiliation = "Bothive is an independent project, not affiliated with xAI, Anthropic, OpenAI, Google, Microsoft or Composio."

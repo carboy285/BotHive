@@ -1,6 +1,6 @@
 # Downloads
 
-Get the latest Bothive for Mac and Windows from the website, <https://carboy285.github.io/bothive/>, or straight from [GitHub Releases](https://github.com/carboy285/bothive/releases/latest).
+Get the latest Bothive for Mac and Windows from the website, <https://carboy285.github.io/BotHive/>, or straight from [GitHub Releases](https://github.com/carboy285/BotHive/releases/latest).
 
 | File | What it is |
 |---|---|
@@ -9,8 +9,8 @@ Get the latest Bothive for Mac and Windows from the website, <https://carboy285.
 | `Bothive-<version>-Windows-x64-Setup.exe` | Windows installer. |
 | `Bothive-<version>-Source.zip` | The source code for that release, including the iPhone Xcode project. |
 
-The installers are not yet signed by a registered developer, so macOS and Windows warn the first time you open them. The website's [first-open guide](https://carboy285.github.io/bothive/#first-open) shows how to open them anyway, and how to check the download first.
+The installers are not yet signed by a registered developer, so macOS and Windows warn the first time you open them. The website's [first-open guide](https://carboy285.github.io/BotHive/#first-open) shows how to open them anyway, and how to check the download first.
 
-The iPhone app is not on the App Store. Build it from the source with Xcode on a Mac: see the website's [iPhone guide](https://carboy285.github.io/bothive/iphone.html).
+The iPhone app is not on the App Store. Build it from the source with Xcode on a Mac: see the website's [iPhone guide](https://carboy285.github.io/BotHive/iphone.html).
 
 Releases before 10.0 were published as OpenGrokBot and keep that name on the Releases page.

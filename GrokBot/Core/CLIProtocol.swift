@@ -1,11 +1,14 @@
 import Foundation
 
 enum CLIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
-    case codex, claude, grok, opencode, gemini
+    case codex, claude, grok, opencode, gemini, ollama, lmstudio
     var id: String { rawValue }
-    var name: String { switch self { case .codex: "Codex"; case .claude: "Claude Code"; case .grok: "Grok Build"; case .opencode: "OpenCode"; case .gemini: "Gemini CLI" } }
+    var name: String { switch self { case .codex: "Codex"; case .claude: "Claude Code"; case .grok: "Grok Build"; case .opencode: "OpenCode"; case .gemini: "Gemini CLI"; case .ollama: "Ollama"; case .lmstudio: "LM Studio" } }
+    /// 0.9.3: Ollama and LM Studio are not CLIs. The app talks to the OpenAI-compatible server they run on this computer.
+    var isLocalServer: Bool { self == .ollama || self == .lmstudio }
+    var defaultServer: String { self == .lmstudio ? "http://127.0.0.1:1234" : "http://127.0.0.1:11434" }
     var executable: String { rawValue }
-    var loginCommand: String { switch self { case .codex: "codex login"; case .opencode: "opencode auth login"; default: executable } }
+    var loginCommand: String { switch self { case .codex: "codex login"; case .opencode: "opencode auth login"; case .ollama: "ollama pull llama3.2"; case .lmstudio: "lms server start"; default: executable } }
     var guideURL: URL {
         let address: String
         switch self {
@@ -14,6 +17,8 @@ enum CLIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .grok: address = "https://github.com/xai-org/grok-build#installing-the-released-binary"
         case .opencode: address = "https://opencode.ai/docs/"
         case .gemini: address = "https://geminicli.com/docs/get-started/installation/"
+        case .ollama: address = "https://ollama.com/download"
+        case .lmstudio: address = "https://lmstudio.ai/"
         }
         return URL(string: address)!
     }
@@ -24,6 +29,8 @@ enum CLIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .opencode: "npm install -g opencode-ai"
         case .gemini: "npm install -g @google/gemini-cli"
         case .grok: "See the official Grok Build install guide."
+        case .ollama: "Download Ollama from ollama.com, then run: ollama pull llama3.2"
+        case .lmstudio: "Download LM Studio from lmstudio.ai, load a model, and start its server (Developer tab)."
         }
     }
 
@@ -35,7 +42,8 @@ struct BotAIProvider: Codable, Hashable, Sendable, Identifiable {
     var id: String { provider.rawValue }
 }
 
-enum ProviderReplyMode: String, Codable, Hashable, Sendable { case one, all }
+/// `one`: only the active provider answers. `compare`: every enabled provider answers side by side, in plain text with no tools. (`all` is a legacy value that is always treated as `one`.)
+enum ProviderReplyMode: String, Codable, Hashable, Sendable { case one, all, compare }
 
 struct BotAIConfiguration: Codable, Hashable, Sendable {
     var providers: [BotAIProvider]
@@ -55,7 +63,8 @@ struct InstalledCLI: Identifiable, Hashable, Sendable {
     var id: String { provider.rawValue + ":" + path }
 }
 
-enum CLIEvent: Sendable, Equatable { case session(String), text(String), activity(String), failed }
+/// `notice` is a short explanation for the human (for example that connected apps did not load); it is shown in the chat.
+enum CLIEvent: Sendable, Equatable { case session(String), text(String), activity(String), notice(String), failed }
 
 enum CLIError: Error, LocalizedError, Equatable {
     case notInstalled, notLoggedIn, invalidModel, network, rateLimited, failed(Int32), invalidOutput, stopped, timedOut
@@ -86,16 +95,22 @@ enum CLIError: Error, LocalizedError, Equatable {
 struct CLICommand: Sendable {
     let arguments: [String]
     let input: String
-    static func chat(provider: CLIProvider, prompt: String, session: String?, promptFile: String? = nil, model: String = "") -> CLICommand {
+    /// The name Bots' connected apps (Composio) are registered under in each CLI.
+    static let connectedAppsServer = "opengrokbot-composio"
+    /// `allowConnectedApps` pre-approves only the connected-apps tools for Claude Code, which cannot ask for permission in the background.
+    /// `fast` (voice mode) asks Codex to think less, which is most of its wait.
+    static func chat(provider: CLIProvider, prompt: String, session: String?, promptFile: String? = nil, model: String = "", allowConnectedApps: Bool = false, fast: Bool = false) -> CLICommand {
         let modelArguments = model.isEmpty ? [String]() : ["--model", model]
         switch provider {
         case .codex:
             var args = ["exec", "--sandbox", "read-only"]
+            if fast { args += ["-c", "model_reasoning_effort=low"] }
             if let session { args += ["resume", session] }
             args += modelArguments + ["--json", "--skip-git-repo-check", "-"]
             return CLICommand(arguments: args, input: prompt)
         case .claude:
             var args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
+            if allowConnectedApps { args += ["--allowedTools", "mcp__" + connectedAppsServer] }
             if let session { args += ["--resume", session] }
             return CLICommand(arguments: args + modelArguments, input: prompt)
         case .opencode:
@@ -110,6 +125,9 @@ struct CLICommand: Sendable {
             var args = ["--prompt-file", promptFile ?? "prompt.txt", "--output-format", "streaming-messages-json", "--include-partial-messages"]
             if let session { args += ["--resume", session] }
             return CLICommand(arguments: args + modelArguments, input: "")
+        case .ollama, .lmstudio:
+            // Not a process: LocalCLIRun sends these to the local server over HTTP.
+            return CLICommand(arguments: [], input: prompt)
         }
     }
 }
@@ -124,6 +142,17 @@ struct CLIEventParser {
         var events: [CLIEvent] = []
         if let id = (value["thread_id"] ?? value["session_id"] ?? value["sessionID"]) as? String,
            !id.isEmpty, id.count <= 200, id.first != "-", id.rangeOfCharacter(from: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_" )).inverted) == nil { events.append(.session(id)) }
+        // Claude Code reports which MCP servers started and which tool calls it refused. Say so, instead of leaving the Bot to guess.
+        if type == "system", value["subtype"] as? String == "init", let servers = value["mcp_servers"] as? [[String:Any]] {
+            for server in servers where (server["name"] as? String) == CLICommand.connectedAppsServer {
+                let status = (server["status"] as? String) ?? "unknown"
+                if status != "connected" { events.append(.notice("Connected apps did not load: the Composio connection reported “\(status)”. Open Connect apps and choose Refresh connections, then send the message again.")) }
+            }
+        }
+        if type == "result", let denials = value["permission_denials"] as? [[String:Any]],
+           denials.contains(where: { ($0["tool_name"] as? String)?.hasPrefix("mcp__" + CLICommand.connectedAppsServer) == true }) {
+            events.append(.notice("Claude Code did not run a connected-app action because it needs your permission and cannot ask while it works in the background. In Connect apps, turn on “Let Claude Code use connected apps without asking” if you want it to."))
+        }
         if type == "turn.failed" || (type == "result" && (value["is_error"] as? Bool == true || value["status"] as? String == "error")) { events.append(.failed); return events }
         if type == "error" { events.append(.activity("The CLI is handling a connection or provider error…")) }
         if value["parent_tool_use_id"] is String { return events }
@@ -144,6 +173,15 @@ struct CLIEventParser {
                 text = codexOrder.compactMap { codexMessages[$0] }.joined(separator: "\n\n")
                 events.append(.text(text))
             } else if type == "item.updated" { events.append(.activity("Working…")) }
+        } else if let fragment = Self.agentDelta(type: type, value: value) {
+            // 0.9.5: Codex (and other CLIs) can send an answer in pieces; show and speak each piece as it arrives
+            // instead of waiting for the whole message. A later item.completed replaces it with the final text.
+            let msg = value["msg"] as? [String:Any]
+            let id = (value["item_id"] as? String) ?? (value["itemId"] as? String) ?? (msg?["item_id"] as? String) ?? "answer"
+            if codexMessages[id] == nil { codexOrder.append(id) }
+            codexMessages[id, default: ""] += fragment
+            text = codexOrder.compactMap { codexMessages[$0] }.joined(separator: "\n\n")
+            events.append(.text(text))
         } else if type == "stream_event", let event = value["event"] as? [String:Any], let delta = event["delta"] as? [String:Any], delta["type"] as? String == "text_delta", let fragment = delta["text"] as? String {
             text += fragment; events.append(.text(text))
         } else if type == "assistant", let message = value["message"] as? [String:Any], let content = message["content"] as? [[String:Any]], text.isEmpty {
@@ -153,5 +191,19 @@ struct CLIEventParser {
             text = result; events.append(.text(text))
         }
         return events
+    }
+
+    /// Text from an agent-message delta event, in the shapes Codex has used: {"type":"…agent_message…delta","delta":"…"},
+    /// {"type":"item.delta","delta":{"text":"…"}} and the older {"msg":{"type":"agent_message_delta","delta":"…"}}.
+    static func agentDelta(type: String, value: [String:Any]) -> String? {
+        let msg = value["msg"] as? [String:Any]
+        let kind = type.isEmpty ? (msg?["type"] as? String ?? "") : type
+        let lower = kind.lowercased()
+        guard lower.contains("delta"), lower.contains("agent") || lower.contains("message") || lower == "item.delta" else { return nil }
+        if lower.contains("reasoning") { return nil }
+        let source = type.isEmpty ? (msg ?? [:]) : value
+        if let fragment = source["delta"] as? String { return fragment }
+        if let delta = source["delta"] as? [String:Any], let fragment = delta["text"] as? String { return fragment }
+        return nil
     }
 }

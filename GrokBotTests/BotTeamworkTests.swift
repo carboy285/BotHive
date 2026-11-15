@@ -92,7 +92,7 @@ final class BotTeamworkTests: XCTestCase {
         XCTAssertTrue(app.setAIConfiguration(config, for: main))
         XCTAssertEqual(app.workspace.bots.first?.aiConfiguration?.replyMode, .one)
         let reply = app.beginReply(for: main, provider: "fixture")
-        XCTAssertTrue(app.applyBotActions("```opengrokbot-action\n{\"action\":\"create_group\",\"name\":\"Project\",\"members\":[\"Grok Bot\",\"School\"]}\n```", replyID: reply, bot: main, configuration: config, delivery: nil))
+        XCTAssertTrue(app.applyBotActions("```opengrokbot-action\n{\"action\":\"create_group\",\"name\":\"Project\",\"members\":[\"Hive\",\"School\"]}\n```", replyID: reply, bot: main, configuration: config, delivery: nil))
         let group = try XCTUnwrap(app.workspace.bots.first { $0.name == "Project" })
         XCTAssertTrue(app.sendGroup("Plan together", group: group))
         XCTAssertEqual(app.workspace.teamMessages?.count, 2)
@@ -102,5 +102,40 @@ final class BotTeamworkTests: XCTestCase {
     func testIncompleteOrOrdinaryJSONIsNeverExecuted() {
         XCTAssertTrue(BotTeamwork.parse("{\"action\":\"create_bot\"}").actions.isEmpty)
         XCTAssertTrue(BotTeamwork.parse("```opengrokbot-action\n{\"action\":\"create_bot\"}").actions.isEmpty)
+    }
+
+    func testChoicesBlockBecomesAQuestionCard() {
+        let single = ChoicePrompt.split("Which port?\n```choices\nGalveston, TX\n- Miami, FL\n```")
+        XCTAssertEqual(single.text, "Which port?")
+        XCTAssertEqual(single.prompt, ChoicePrompt(options: ["Galveston, TX", "Miami, FL"], multiple: false))
+        let several = ChoicePrompt.split("Pick any\n```choices\nmultiple\nA\nB\nC\n```")
+        XCTAssertEqual(several.prompt?.multiple, true)
+        XCTAssertEqual(several.prompt?.options, ["A", "B", "C"])
+        // One option, an unfinished block or an ordinary code block stay plain text.
+        XCTAssertNil(ChoicePrompt.split("```choices\nOnly one\n```").prompt)
+        XCTAssertNil(ChoicePrompt.split("```choices\nA\nB").prompt)
+        XCTAssertNil(ChoicePrompt.split("```swift\nlet a = 1\n```").prompt)
+    }
+
+    func testVoiceTurnsWaitThroughTrailingWordsAndSpeakToolSteps() {
+        XCTAssertTrue(VoiceTurns.continuesThought("I want to book a trip and"))
+        XCTAssertTrue(VoiceTurns.continuesThought("so um"))
+        XCTAssertTrue(VoiceTurns.continuesThought("Book it for Tuesday,"))
+        XCTAssertFalse(VoiceTurns.continuesThought("What is on my calendar?"))
+        XCTAssertFalse(VoiceTurns.continuesThought("Book the flight"))
+        XCTAssertGreaterThan(VoiceTurns.delay(after: "and then", patience: "normal"), VoiceTurns.delay(after: "Book the flight now", patience: "normal"))
+        XCTAssertLessThan(VoiceTurns.delay(after: "Is it raining today?", patience: "normal"), VoiceTurns.silence("normal"))
+        XCTAssertEqual(VoiceTurns.stepPhrase("Queued message · Calendar Agent"), "Asking Calendar Agent.")
+        XCTAssertEqual(VoiceTurns.stepPhrase("Read “Weather” · weather.com"), "Reading a page.")
+        XCTAssertEqual(VoiceTurns.stepPhrase("Couldn’t open example.com"), "")
+        XCTAssertTrue(BotTeamwork.voiceStyle.contains("VOICE MODE"))
+    }
+
+    func testSpeechIsMadeOneSentenceAtATimeAndStartsQuickly() {
+        XCTAssertEqual(VoiceText.sentences("Sure. I found three cruises! Want the cheapest?"), ["Sure.", "I found three cruises!", "Want the cheapest?"])
+        XCTAssertEqual(VoiceText.sentences("Dr. Smith said the 3.5 km walk is fine. Go."), ["Dr. Smith said the 3.5 km walk is fine.", "Go."])
+        let quick = VoiceText.sentences("The cheapest cruise leaves Galveston on Friday, and it costs about twelve hundred dollars for two.", quickStart: true)
+        XCTAssertEqual(quick.first, "The cheapest cruise leaves Galveston on Friday,")
+        XCTAssertEqual(quick.count, 2)
     }
 }

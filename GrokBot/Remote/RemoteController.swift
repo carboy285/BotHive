@@ -1,6 +1,10 @@
 import Foundation
 import SwiftUI
 import Combine
+#if os(iOS)
+import UIKit
+import UserNotifications
+#endif
 
 @MainActor
 final class RemoteController: ObservableObject {
@@ -15,6 +19,8 @@ final class RemoteController: ObservableObject {
     @Published private(set) var defaultProvider: CLIProvider?
     @Published private(set) var pinnedBotIDs: [UUID]?
     @Published private(set) var pinSyncNotice: String?
+    /// A Bot request the Mac is waiting on; answer it with answerApproval.
+    @Published private(set) var approval: RemoteApproval?
     private var serverPins: [UUID:Bool] = [:]
     private var pendingPins: [UUID:Bool] = [:]
     private var legacyPins = Set<UUID>()
@@ -22,6 +28,9 @@ final class RemoteController: ObservableObject {
     @Published var showConnection = false
     @Published var busy = false
     @Published var drafts: [UUID:String] = [:]
+    @Published var draftImages: [UUID:[RemoteAttachment]] = [:]
+    /// The chat on screen, so a finished reply there doesn't also raise a notification.
+    var viewingBotID: UUID?
     @Published var error: String?
     private let client: CloudRelayClient
     private let secrets: KeychainSecretStore
@@ -34,6 +43,12 @@ final class RemoteController: ObservableObject {
     private var active = true
     private var epoch = UUID()
     private var initialLoadFailed = false
+    /// Ends the state loop's wait early, e.g. right after a message is sent (0.9.9).
+    private let kick = CloudPulse()
+    /// A voice call runs in the background, and its replies arrive through the state loop (0.9.9).
+    var keepAliveInBackground = false {
+        didSet { if keepAliveInBackground, !active { setActive(true) } }
+    }
 
     init(account: CloudAccount = CloudAccount(kind:"controller"), secrets: KeychainSecretStore = KeychainSecretStore(service:"org.opengrokbot.ios.cloud-selection")) {
         self.account = account; self.client = CloudRelayClient(account:account); self.secrets = secrets
@@ -61,23 +76,26 @@ final class RemoteController: ObservableObject {
     }
     private func clearState() {
         epoch = UUID(); initialLoadFailed = false; polling?.cancel(); polling = nil; connection = nil; state = nil
-        online = false; hasSnapshot = false; needsApproval = false; running = []; providers = []; defaultProvider = nil; pinnedBotIDs = nil
-        drafts = [:]; pendingSends = [:]; serverPins = [:]; pendingPins = [:]; legacyPins = []; pinSyncNotice = nil
+        online = false; hasSnapshot = false; needsApproval = false; approval = nil; running = []; providers = []; defaultProvider = nil; pinnedBotIDs = nil
+        drafts = [:]; draftImages = [:]; pendingSends = [:]; serverPins = [:]; pendingPins = [:]; legacyPins = []; pinSyncNotice = nil
         model?.applyRemoteSnapshot(Workspace()); model?.leavePreview()
     }
     func setActive(_ active: Bool) {
+        if !active, keepAliveInBackground { return }
         if self.active == active, (!active || polling != nil) { return }
         self.active = active
-        if active { startPolling() } else { polling?.cancel(); polling = nil; online = false }
+        if active { startPolling() } else { polling?.cancel(); polling = nil; online = false; account.stopWake() }
     }
     private func startPolling(autoSelect: Bool = true) {
         polling?.cancel()
         guard active, account.signedIn else { status = "Sign in to connect your desktop"; return }
         restoreHost()
+        account.startWake()
         if connection == nil { status = "Finding your computer…" }
         let current = epoch
         polling = Task {
             var nextPinSync = Date.distantPast
+            var seenKick = kick.count
             var nextDiscovery = connection == nil ? Date.distantPast : Date().addingTimeInterval(15)
             while !Task.isCancelled, current == epoch {
                 do {
@@ -85,6 +103,7 @@ final class RemoteController: ObservableObject {
                         try await account.sync()
                         try Task.checkCancellation()
                         guard current == epoch else { return }
+                        account.startWake()
                         nextDiscovery = Date().addingTimeInterval(connection == nil ? 2 : 20)
                         if connection == nil, autoSelect, let owner = account.session?.user.id {
                             let selection = try secrets.read(account:owner.uuidString).flatMap { String(data:$0,encoding:.utf8) }
@@ -103,6 +122,7 @@ final class RemoteController: ObservableObject {
                             }
                         }
                     }
+                    seenKick = kick.count
                     if connection != nil {
                         if !hasSnapshot, !needsApproval, !initialLoadFailed { status = "Loading Bots from \(hostName)…" }
                         try await refresh()
@@ -112,7 +132,7 @@ final class RemoteController: ObservableObject {
                         }
                     } else {
                         status = account.hosts.isEmpty
-                            ? "Open OpenGrokBot on your computer and sign in with this account. In Settings → Computer, make sure Allow phone access is on."
+                            ? "Open Bothive on your computer and sign in with this account. In Settings → Computer, make sure Allow phone access is on."
                             : "Choose your computer in Connect Desktop to load its Bots."
                     }
                 } catch {
@@ -125,7 +145,7 @@ final class RemoteController: ObservableObject {
                     }
                 }
                 let interval: Duration = !online ? .seconds(2) : running.isEmpty ? .milliseconds(700) : .milliseconds(250)
-                try? await Task.sleep(for: interval)
+                await kick.wait(after: seenKick, upTo: interval)
             }
         }
     }
@@ -143,9 +163,11 @@ final class RemoteController: ObservableObject {
                 let patch = try CloudStatePatch.decode(response.body)
                 let snapshot = try patch.applying(to:state)
                 guard snapshot.protocolVersion == 1 else { throw RemoteError.incompatible }
-                state = snapshot; hostName = snapshot.hostName; running = Set(snapshot.running)
+                let wasLoaded = hasSnapshot, finished = running.subtracting(Set(snapshot.running))
+                state = snapshot; hostName = snapshot.hostName; running = Set(snapshot.running); approval = snapshot.approval
                 providers = snapshot.providers; defaultProvider = snapshot.defaultProvider
                 model?.applyRemoteSnapshot(snapshot.workspace)
+                if wasLoaded, !finished.isEmpty { ReplyNotifier.notify(finished: finished, workspace: snapshot.workspace, viewing: viewingBotID) }
                 if !hasSnapshot {
                     loadPins(); showConnection = false
                     if let owner = account.session?.user.id {
@@ -232,15 +254,22 @@ final class RemoteController: ObservableObject {
         do {
             _ = try await client.fetch(peer,target:"/v1/command",command:command)
             guard current == epoch else { return false }
+            // Check for the result now instead of at the next tick.
+            kick.signal()
             // The regular state poll publishes the result. Acknowledged commands
             // must not keep the composer busy waiting for another relay exchange.
             return true
         } catch { if current == epoch, !Task.isCancelled { self.error = error.localizedDescription }; return false }
     }
-    func send(_ text: String, bot: Bot) async -> Bool {
+    func answerApproval(_ approve: Bool) async {
+        guard let request = approval else { return }
+        approval = nil
+        _ = await command(RemoteCommand(action: "approval_response", text: request.id.uuidString, name: approve ? "approve" : "deny"))
+    }
+    func send(_ text: String, bot: Bot, images: [RemoteAttachment] = []) async -> Bool {
         let id = pendingSends[bot.id].flatMap { $0.0 == text ? $0.1:nil } ?? UUID()
         pendingSends[bot.id] = (text,id)
-        let accepted = await command(RemoteCommand(requestID:id,action:"send",botID:bot.id,text:text))
+        let accepted = await command(RemoteCommand(requestID:id,action:"send",botID:bot.id,text:text,attachments:images.isEmpty ? nil : images))
         if accepted, pendingSends[bot.id]?.1 == id { pendingSends[bot.id] = nil }; return accepted
     }
     func models(_ provider: CLIProvider) async -> [AvailableCLIModel] {
@@ -253,8 +282,128 @@ final class RemoteController: ObservableObject {
         let response = try await client.fetch(peer, target: "/v1/" + (vm ? "vm" : "browser") + "?bot=" + botID.uuidString)
         return try CloudCoding.decoder().decode(RemoteBrowserPreview.self, from: response.body)
     }
+    /// Linux VMs another computer is sharing with this account.
+    func vmList(on host: CloudDevice? = nil) async throws -> [RemoteVM] {
+        guard let peer = host ?? connection else { throw CloudError.message("Choose a computer first.") }
+        vmDiagnostics = ["host": peer.name, "checkedAt": ISO8601DateFormatter().string(from: Date()), "appVersion": Self.appVersion, "protocolVersion": "1"]
+        do {
+            let response = try await client.fetch(peer, target: "/v1/vms")
+            let list = try CloudCoding.decoder().decode([RemoteVM].self, from: response.body)
+            vmDiagnostics["lastStatus"] = "ok, \(list.count) VM(s)"
+            return list
+        } catch CloudError.approvalRequired {
+            vmDiagnostics["lastStatus"] = "waiting for approval on \(peer.name)"
+            throw CloudError.approvalRequired
+        } catch {
+            let text = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            vmDiagnostics["lastStatus"] = "failed"; vmDiagnostics["error"] = text
+            throw CloudError.message("Could not read \(peer.name)’s VM list: \(text) (this app \(Self.appVersion)). If it keeps happening, update Bothive on both computers.")
+        }
+    }
+    /// What the last attempt to list a shared VM did, for Copy diagnostics.
+    private(set) var vmDiagnostics: [String: String] = [:]
+    static var appVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown" }
+    var vmDiagnosticsText: String { (try? String(data: JSONSerialization.data(withJSONObject: vmDiagnostics, options: [.sortedKeys]), encoding: .utf8)) ?? "{}" }
+    /// A picture of a shared VM's screen on another computer (it must have remote VM viewing turned on).
+    func vmPreview(vm: UUID, on host: CloudDevice? = nil) async throws -> RemoteBrowserPreview {
+        guard let peer = host ?? connection else { throw CloudError.message("Choose a computer first.") }
+        let response = try await client.fetch(peer, target: "/v1/vm?bot=" + vm.uuidString)
+        return try CloudCoding.decoder().decode(RemoteBrowserPreview.self, from: response.body)
+    }
+    /// Opens a shared VM's console on the computer that has it, so the human can use it there.
+    func openVM(vm: UUID, on host: CloudDevice? = nil) async throws {
+        guard let peer = host ?? connection else { throw CloudError.message("Choose a computer first.") }
+        _ = try await client.fetch(peer, target: "/v1/command", command: RemoteCommand(action: "open_vm", botID: vm))
+    }
+    /// Runs a command inside a VM another computer is sharing and returns what it printed. The computer is asked to start the command, then
+    /// asked for the result every couple of seconds, because the relay answers within seconds but a command inside a VM may take a minute.
+    func runVMCommand(_ argv: [String], vm: UUID, on host: CloudDevice? = nil) async throws -> String {
+        guard let peer = host ?? connection else { throw CloudError.message("Choose a computer first.") }
+        guard (1...16).contains(argv.count) else { throw CloudError.message("Use 1–16 command words, with the program path first.") }
+        let requestID = UUID()
+        _ = try await client.fetch(peer, target: "/v1/command", command: RemoteCommand(requestID: requestID, action: "vm_exec", botID: vm, argv: argv))
+        let deadline = Date().addingTimeInterval(130)
+        while Date() < deadline {
+            try await Task.sleep(for: .milliseconds(700))
+            let response = try await client.fetch(peer, target: "/v1/vm-result?id=" + requestID.uuidString)
+            let result = try CloudCoding.decoder().decode(RemoteVMResult.self, from: response.body)
+            switch result.status {
+            case "done": return result.output ?? ""
+            case "error": throw CloudError.message(result.output ?? "The command did not run.")
+            default: continue
+            }
+        }
+        throw CloudError.message("The VM did not answer in time. Check that the other computer is awake and the VM is running.")
+    }
+    /// An encoded Bot package from the connected computer.
+    func botPackage(_ bot: Bot) async throws -> Data {
+        guard let peer = connection else { throw CloudError.message("Choose a hosting computer first.") }
+        return try await client.fetch(peer, target: "/v1/bot-package?bot=" + bot.id.uuidString).body
+    }
+    /// Sends a Bot package to a computer on this account (the connected one unless another is named).
+    func importPackage(_ data: Data, to host: CloudDevice? = nil) async throws {
+        guard let peer = host ?? connection else { throw CloudError.message("Choose a hosting computer first.") }
+        _ = try await client.fetch(peer, target: "/v1/command", command: RemoteCommand(action: "import_bot", package: data))
+    }
+    /// The connected computer's own settings (providers, which keys are set, connectors, versions).
+    func hostSettings() async throws -> RemoteHostSettings {
+        guard let peer = connection else { throw CloudError.message("Choose a hosting computer first.") }
+        let response = try await client.fetch(peer, target: "/v1/host-settings")
+        return try CloudCoding.decoder().decode(RemoteHostSettings.self, from: response.body)
+    }
+    /// Saves (or, with an empty key, removes) an AI provider API key on the connected computer.
+    func setAPIKey(_ key: String, for provider: CLIProvider) async throws {
+        guard let peer = connection else { throw CloudError.message("Choose a hosting computer first.") }
+        _ = try await client.fetch(peer, target: "/v1/command", command: RemoteCommand(action: "set_api_key", text: key, name: provider.rawValue))
+    }
+    /// Keys and connector settings from the connected computer (it must have sharing switched on).
+    func settingsBundle() async throws -> Data {
+        guard let peer = connection else { throw CloudError.message("Choose a hosting computer first.") }
+        return try await client.fetch(peer, target: "/v1/bundle").body
+    }
+    /// Sends keys and connector settings to a computer on this account (it must have sharing switched on).
+    func importSettings(_ data: Data, to host: CloudDevice? = nil) async throws {
+        guard let peer = host ?? connection else { throw CloudError.message("Choose a hosting computer first.") }
+        _ = try await client.fetch(peer, target: "/v1/command", command: RemoteCommand(action: "import_settings", package: data))
+    }
     func files(_ bot: Bot) async -> [RemoteFile] {
         guard let peer = connection, let response = try? await client.fetch(peer,target:"/v1/files?bot=" + bot.id.uuidString) else { return [] }
         return (try? CloudCoding.decoder().decode([RemoteFile].self,from:response.body)) ?? []
     }
 }
+
+/// Notifies you when a Bot finishes while you're in another chat or the app is in the background.
+/// The phone only learns about replies while it is connected, so this is not a push service.
+enum ReplyNotifier {
+    @MainActor static func notify(finished: Set<UUID>, workspace: Workspace, viewing: UUID?) {
+        #if os(iOS)
+        let foreground = UIApplication.shared.applicationState == .active
+        for id in finished where !(foreground && id == viewing) {
+            guard let bot = workspace.bots.first(where: { $0.id == id }),
+                  let reply = workspace.entries.last(where: { $0.botID == id && $0.kind == .bot }),
+                  reply.state != .stopped else { continue }
+            let content = UNMutableNotificationContent()
+            content.title = reply.state == .failed ? "\(bot.name) couldn’t finish" : "\(bot.name) replied"
+            content.body = String(reply.text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).prefix(160))
+            content.sound = .default
+            content.userInfo = ["botID": id.uuidString]
+            let request = UNNotificationRequest(identifier: reply.id.uuidString, content: content, trigger: nil)
+            Task {
+                let center = UNUserNotificationCenter.current()
+                guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
+                try? await center.add(request)
+            }
+        }
+        #endif
+    }
+}
+
+#if os(iOS)
+/// Shows reply banners even while Bothive is open.
+final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate, Sendable {
+    static let shared = NotificationPresenter()
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+}
+#endif

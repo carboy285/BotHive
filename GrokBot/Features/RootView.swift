@@ -8,6 +8,7 @@ private enum RosterFilter: String, CaseIterable, Identifiable {
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var remote: RemoteController
+    @StateObject private var voiceHub = PhoneVoiceHub()
     @State private var settings = false
     @State private var createBot = false
     @State private var filter = RosterFilter.all
@@ -16,6 +17,10 @@ struct RootView: View {
     @ScaledMetric(relativeTo: .largeTitle) private var heroSize: CGFloat = 104
     @State private var inspectedBot: Bot?
     @State private var chatPath: [UUID] = []
+    @AppStorage("seenWelcome") private var seenWelcome = false
+    @AppStorage("pendingVoiceStart") private var pendingVoice = false
+    @AppStorage("autoVoiceBotID") private var autoVoiceBotID = ""
+    @Environment(\.scenePhase) private var phase
 
     private var matchingBots: [Bot] {
         model.visibleBots.filter { bot in
@@ -29,6 +34,60 @@ struct RootView: View {
             (ids.firstIndex(of: $0.id) ?? 0) < (ids.firstIndex(of: $1.id) ?? 0)
         }
     }
+    /// Handles the "Talk to my Bot" shortcut once the desktop workspace has loaded.
+    private func openPendingVoice() {
+        guard pendingVoice, remote.hasSnapshot else { return }
+        pendingVoice = false
+        guard let bot = model.workspace.bots.first(where: { $0.isMain == true }) ?? model.workspace.bots.first else { return }
+        seenWelcome = true
+        autoVoiceBotID = bot.id.uuidString
+        chatPath = [bot.id]
+    }
+
+    /// Sends a request made with the "Ask a Bot" shortcut once the desktop workspace has loaded.
+    private func sendPendingAsk() {
+        guard remote.hasSnapshot, remote.online, let text = UserDefaults.standard.string(forKey: "pendingAskText"), !text.isEmpty else { return }
+        let wanted = (UserDefaults.standard.string(forKey: "pendingAskBot") ?? "").lowercased()
+        let bots = model.workspace.bots
+        let bot = (wanted.isEmpty ? nil : bots.first(where: { $0.name.lowercased() == wanted }) ?? bots.first(where: { $0.name.lowercased().contains(wanted) }))
+            ?? bots.first(where: { $0.isMain == true }) ?? bots.first
+        UserDefaults.standard.removeObject(forKey: "pendingAskText"); UserDefaults.standard.removeObject(forKey: "pendingAskBot")
+        guard let bot else { return }
+        seenWelcome = true; chatPath = [bot.id]
+        Task { _ = await remote.send(text, bot: bot) }
+    }
+
+    /// Messages in any chat that contain the search text, newest first.
+    private var messageMatches: [Entry] {
+        let query = model.search.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else { return [] }
+        return Array(model.workspace.entries.reversed().lazy
+            .filter { $0.kind != .activity && $0.text.localizedCaseInsensitiveContains(query) }
+            .prefix(25))
+    }
+
+    private func messageRow(_ entry: Entry) -> some View {
+        let bot = model.workspace.bots.first { $0.id == entry.botID }
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(bot?.name ?? "Bot").font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(entry.date, format: .relative(presentation: .named)).font(.caption).foregroundStyle(.secondary)
+            }
+            Text((entry.kind == .user ? "You: " : "") + snippet(entry.text)).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+        }
+        .padding(.horizontal, 24).padding(.vertical, 10).contentShape(Rectangle())
+        .accessibilityElement(children: .combine).accessibilityHint("Opens this chat")
+    }
+
+    /// Shows the part of a long message around the first match.
+    private func snippet(_ text: String) -> String {
+        let flat = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        guard let range = flat.range(of: model.search.trimmingCharacters(in: .whitespacesAndNewlines), options: .caseInsensitive) else { return String(flat.prefix(140)) }
+        let start = flat.index(range.lowerBound, offsetBy: -40, limitedBy: flat.startIndex) ?? flat.startIndex
+        return (start == flat.startIndex ? "" : "…") + String(flat[start...].prefix(140))
+    }
+
     private var bots: [Bot] { model.recentlyUsed(matchingBots.filter { !remote.isPinned($0) }) }
     private var initials: String {
         guard remote.account.signedIn else { return "" }
@@ -38,6 +97,37 @@ struct RootView: View {
     }
 
     var body: some View {
+        rootStack
+            .environmentObject(voiceHub)
+            // Voice mode floats above every chat so it keeps going while you open other Bots.
+            .overlay { voiceOverlay }
+            // 0.9.2: a Bot asking for your OK shows as a card over whatever you are looking at.
+            .overlay(alignment: .bottom) {
+                if let request = remote.approval {
+                    PhoneApprovalCard(request: request) { allowed in Task { await remote.answerApproval(allowed) } }
+                        .padding(.horizontal, 14).padding(.bottom, 10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.9), value: remote.approval)
+    }
+
+    @ViewBuilder private var voiceOverlay: some View {
+        if let id = voiceHub.botID, let bot = model.workspace.bots.first(where: { $0.id == id }) {
+            let color = bot.appearance?.color ?? bot.color
+            let plain = bot.appearance == nil && bot.color == "white"
+            VoiceModeView(conversation: voiceHub.conversation, botName: bot.name,
+                          tint: plain ? Color.primary : AvatarArtwork.color(color),
+                          ink: plain ? Palette.background : (["white", "amber", "orange", "green", "teal", "gray"].contains(color) ? Color.black : Color.white),
+                          face: AnyView(BotAvatar(color: bot.color, size: 26, appearance: bot.appearance)),
+                          layout: $voiceHub.layout,
+                          openBot: { if chatPath.last != id { chatPath = [id] }; if voiceHub.layout == .full { voiceHub.layout = .card } },
+                          close: { voiceHub.stop() })
+            .transition(.opacity)
+        }
+    }
+
+    private var rootStack: some View {
         NavigationStack(path: $chatPath) {
             Group {
                 if remote.hasSnapshot { roster }
@@ -50,6 +140,12 @@ struct RootView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settings) { SettingsView() }
+            .onAppear { openPendingVoice(); sendPendingAsk() }
+            .onChange(of: pendingVoice) { _, _ in openPendingVoice() }
+            .onChange(of: remote.hasSnapshot) { _, _ in openPendingVoice(); sendPendingAsk() }
+            .onChange(of: remote.online) { _, _ in sendPendingAsk() }
+            .onChange(of: phase) { _, new in if new == .active { sendPendingAsk() } }
+            .fullScreenCover(isPresented: Binding(get: { !seenWelcome }, set: { if !$0 { seenWelcome = true } })) { OnboardingFlow(account: remote.account) { seenWelcome = true }.environmentObject(remote) }
             .sheet(isPresented: $createBot) { CreateBotView() }
             .sheet(item: $inspectedBot) { bot in
                 NavigationStack {
@@ -113,6 +209,14 @@ struct RootView: View {
                     NavigationLink(value: bot.id) { botRow(bot) }.buttonStyle(.plain)
                         .contextMenu { botActions(bot) }
                 }
+                if !messageMatches.isEmpty {
+                    Text("Messages").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.top, 18).padding(.bottom, 6)
+                        .accessibilityAddTraits(.isHeader)
+                    ForEach(messageMatches) { entry in
+                        Button { chatPath.append(entry.botID) } label: { messageRow(entry) }.buttonStyle(.plain)
+                    }
+                }
                 if matchingBots.isEmpty {
                     ContentUnavailableView(filter == .working ? "No Bots working" : filter == .groups ? "No groups yet" : "No matches",
                         systemImage: filter == .working ? "sparkles" : "magnifyingglass",
@@ -158,7 +262,12 @@ struct RootView: View {
         let latest = model.entries(for: bot).last
         return HStack(spacing: 18) {
             BotAvatar(color: bot.color, size: 46, appearance: bot.appearance)
-            VStack(alignment: .leading, spacing: 7) {
+                .overlay {
+                    if remote.running.contains(bot.id) {
+                        Circle().stroke(remote.approval != nil ? Palette.attention : Palette.working, lineWidth: 2.5).padding(-4)
+                    }
+                }
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(bot.name).font(.system(.body, design: .default).weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
                     Spacer(minLength: 0)
@@ -168,17 +277,20 @@ struct RootView: View {
                 }
                 HStack(spacing: 5) {
                     if remote.running.contains(bot.id) {
-                        Image(systemName: "sparkles").font(.caption).foregroundStyle(.secondary)
-                    } else if latest?.senderBotID != nil {
-                        Image(systemName: "paperplane").font(.caption).foregroundStyle(.secondary)
+                        Text(remote.approval != nil ? "Needs your OK" : "Thinking it through…")
+                            .font(.subheadline).foregroundStyle(remote.approval != nil ? Palette.attention : Palette.working).lineLimit(1)
+                    } else {
+                        if latest?.senderBotID != nil {
+                            Image(systemName: "arrow.left.arrow.right").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text(FollowUps.split(ChoicePrompt.split(model.latest(for: bot)).text).text.split(separator: "\n").first.map { String($0) } ?? "")
+                            .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                     }
-                    Text(remote.running.contains(bot.id) ? "Working…" : model.latest(for: bot))
-                        .font(.body).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             Image(systemName: "chevron.right").font(.system(size: 14, weight: .medium)).foregroundStyle(.quaternary)
         }
-        .padding(.horizontal, 24).padding(.vertical, 19).contentShape(Rectangle())
+        .padding(.horizontal, 22).padding(.vertical, 14).contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 
@@ -206,23 +318,37 @@ struct RootView: View {
         }.buttonStyle(.plain).padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 12)
     }
 
+    /// 10.0: scrolls instead of truncating at the largest text sizes; at normal sizes it fills the screen as before.
     private var connectionWelcome: some View {
-        VStack(spacing: 22) {
-            Spacer()
-            BotAvatar(size: 100)
-            Text("Your Bots, wherever you go").font(.title2.weight(.medium)).multilineTextAlignment(.center)
-            Text(remote.status).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            if remote.needsApproval, let phone = remote.account.localDevice {
-                Text(phone.fingerprint).font(.system(.body, design: .monospaced))
-                Text("Match this fingerprint on your computer, then choose Approve phone.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 22) {
+                    Spacer(minLength: 0)
+                    BotAvatar(size: 100)
+                    Text("Your Bots, wherever you go").font(.title2.weight(.medium)).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(remote.status).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if remote.needsApproval, let phone = remote.account.localDevice {
+                        Text(phone.fingerprint).font(.system(.body, design: .monospaced)).multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("Match this fingerprint on your computer, then choose Approve phone.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Button { remote.showConnection = true } label: {
+                        Label("Connect your computer", systemImage: "desktopcomputer").font(.body.weight(.medium))
+                            .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 22).padding(.vertical, 14).glassChrome(in: Capsule())
+                    }.buttonStyle(.plain)
+                    Spacer(minLength: 0)
+                    Text("Your computer runs the work. Your iPhone keeps you connected.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(30)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
-            Button { remote.showConnection = true } label: {
-                Label("Connect your computer", systemImage: "desktopcomputer").font(.body.weight(.medium))
-                    .padding(.horizontal, 22).padding(.vertical, 14).glassChrome(in: Capsule())
-            }.buttonStyle(.plain)
-            Spacer()
-            Text("Your computer runs the work. Your iPhone keeps you connected.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
-        }.padding(30).frame(maxWidth: .infinity, maxHeight: .infinity)
+            .scrollBounceBehavior(.basedOnSize)
+        }
     }
 }
 
@@ -233,33 +359,58 @@ struct CreateBotView: View {
     @State private var saving = false
     @State private var name = ""
     @State private var purpose = ""
+    @State private var shape = BotAvatarShape.hexagon
     @State private var color = "purple"
+    @State private var showMore = false
+    @FocusState private var nameFocused: Bool
+
+    private let colors = ["purple", "pink", "red", "orange", "amber", "green", "teal", "blue", "gray", "black"]
+    private var cleanName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    HStack { Spacer(); BotAvatar(color: color, size: 72); Spacer() }.padding()
-                    TextField("Bot name", text: $name).textInputAutocapitalization(.words)
-                    TextField("What will this Bot help with?", text: $purpose, axis: .vertical).lineLimit(3...5)
-                    Picker("Color", selection: $color) {
-                        Text("Violet").tag("purple")
-                        Text("Rose").tag("pink")
-                        Text("Amber").tag("ochre")
+            ScrollView {
+                VStack(spacing: 20) {
+                    BotAvatar(color: color, size: 100, appearance: BotAppearance(shape: shape, color: color)).padding(.top, 8)
+                    TextField("Name your Bot", text: $name).focused($nameFocused).textInputAutocapitalization(.words)
+                        .font(.system(size: 18)).padding(14).background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
+                        ForEach(BotAvatarShape.allCases, id: \.self) { option in
+                            Button { shape = option } label: {
+                                BotAvatar(color: color, size: 46, appearance: BotAppearance(shape: option, color: color)).frame(width: 56, height: 56)
+                                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(shape == option ? Color.primary : .clear, lineWidth: 2))
+                            }.buttonStyle(.plain).accessibilityLabel(option.label + " shape").accessibilityAddTraits(shape == option ? [.isSelected] : [])
+                        }
                     }
-                } footer: { Text("Creates a Bot in your connected desktop workspace.") }
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 10) {
+                        ForEach(colors, id: \.self) { option in
+                            Button { color = option } label: {
+                                Circle().fill(AvatarArtwork.color(option)).frame(width: 30, height: 30).padding(5)
+                                    .overlay(Circle().stroke(color == option ? Color.primary : .clear, lineWidth: 2))
+                            }.buttonStyle(.plain).accessibilityLabel(option + " color").accessibilityAddTraits(color == option ? [.isSelected] : [])
+                        }
+                    }
+                    DisclosureGroup("Add a description", isExpanded: $showMore) {
+                        TextField("What will this Bot help with? (optional)", text: $purpose, axis: .vertical).lineLimit(3...5)
+                            .padding(12).background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12)).padding(.top, 8)
+                    }.font(.subheadline).foregroundStyle(.secondary)
+                    Text("Creates a Bot in your connected desktop workspace.").font(.footnote).foregroundStyle(.secondary)
+                }.padding(.horizontal, 22).padding(.bottom, 24)
             }
-            .navigationTitle("New Bot")
+            .navigationTitle("Create a Bot")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { nameFocused = true }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
                         saving = true
-                        Task { if await remote.command(RemoteCommand(action: "create_bot", name: name, purpose: purpose, color: color)) { dismiss() }; saving = false }
-                    }.disabled(saving || !remote.online || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        let appearance = BotAppearance(shape: shape, color: color)
+                        Task { if await remote.command(RemoteCommand(action: "create_bot", name: cleanName, purpose: purpose, color: color, appearance: appearance)) { dismiss() }; saving = false }
+                    }.disabled(saving || !remote.online || cleanName.isEmpty)
                 }
             }
         }
     }
 }
+

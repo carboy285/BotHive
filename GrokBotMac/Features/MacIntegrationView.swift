@@ -12,7 +12,7 @@ struct MacIntegrationView: View {
             Spacer()
             MacBotAvatar(size: 72)
             Text(desktop.statusText).font(.system(size: 24, weight: .medium))
-            Text(desktop.importFeedback ?? "Messages go to the AI CLI installed on this Mac. It uses its own login, model, and permission settings. OpenGrokBot is free; provider usage and limits follow your CLI account.")
+            Text(desktop.importFeedback ?? "Messages go to the AI CLI installed on this Mac. It uses its own login, model, and permission settings. Bothive is free; provider usage and limits follow your CLI account.")
                 .font(.system(size: 18)).lineSpacing(6)
             ForEach(desktop.installedCLIs) { cli in
                 HStack { Label(cli.provider.name, systemImage: "terminal"); Spacer(); Text(cli.version).foregroundStyle(MacTheme.secondary) }

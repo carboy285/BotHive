@@ -6,7 +6,7 @@ enum RemoteError: Error, LocalizedError, Sendable {
         switch self {
         case .incompatible: "Update the Mac and iPhone apps to compatible versions."
         case .unauthorized: "Sign in again and approve this phone on your computer."
-        case .unavailable: "Keep the Mac awake with OpenGrokBot running and phone access enabled."
+        case .unavailable: "Keep the Mac awake with Bothive running and phone access enabled."
         }
     }
 }
@@ -15,6 +15,26 @@ struct RemoteProvider: Codable, Equatable, Sendable, Identifiable {
     var provider: CLIProvider
     var version: String
     var id: String { provider.rawValue }
+}
+/// A computer's own settings as another computer shows them. Keys are never included, only whether each one is set.
+struct RemoteHostSettings: Codable, Sendable, Equatable {
+    struct Connectors: Codable, Sendable, Equatable { var configured: Bool; var toolkits: [String] }
+    var hostName: String
+    var platform: String
+    var appVersion: String
+    var providers: [RemoteProvider]
+    var defaultProvider: CLIProvider?
+    var apiKeys: [String: Bool]
+    var voiceKeys: [String: Bool]
+    var connectors: Connectors
+    var sharing: Bool
+}
+
+/// A Bot request waiting for a yes or no on the Mac that the approved phone can answer too.
+struct RemoteApproval: Codable, Sendable, Equatable, Identifiable {
+    var id: UUID
+    var title: String
+    var detail: String
 }
 struct RemoteSnapshot: Codable, Sendable {
     var protocolVersion: Int = 1
@@ -25,6 +45,7 @@ struct RemoteSnapshot: Codable, Sendable {
     var providers: [RemoteProvider]
     var defaultProvider: CLIProvider?
     var overview: Bool? = nil
+    var approval: RemoteApproval? = nil
 
     func botOverview() -> RemoteSnapshot {
         var result = self
@@ -50,6 +71,43 @@ struct RemoteCommand: Codable, Sendable {
     var configuration: BotAIConfiguration?
     var taskID: UUID?
     var appearance: BotAppearance?
+    var attachments: [RemoteAttachment]?
+    /// import_bot: an encoded Bot package from another computer on this account.
+    var package: Data?
+    /// vm_exec: the command to run inside a shared VM (program path first), at most 16 words.
+    var argv: [String]?
+}
+/// A Linux VM a computer is sharing with the others on the account.
+struct RemoteVM: Codable, Sendable, Identifiable, Hashable {
+    var botID: UUID
+    var botName: String
+    var state: String
+    var id: UUID { botID }
+    init(botID: UUID, botName: String, state: String) { self.botID = botID; self.botName = botName; self.state = state }
+    private enum Keys: String, CodingKey { case botID, botName, name, state }
+    /// Older Windows builds sent `name` instead of `botName`, so either is accepted. A missing botID is reported by name.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: Keys.self)
+        guard let id = try values.decodeIfPresent(UUID.self, forKey: .botID) else {
+            throw CloudError.message("The other computer’s VM list is missing “botID”. Update Bothive on both computers.")
+        }
+        botID = id
+        botName = try values.decodeIfPresent(String.self, forKey: .botName) ?? values.decodeIfPresent(String.self, forKey: .name) ?? "Shared VM"
+        state = try values.decodeIfPresent(String.self, forKey: .state) ?? "ready"
+    }
+}
+/// How a command sent to a shared VM is going. `status` is running, done or error.
+struct RemoteVMResult: Codable, Sendable {
+    var status: String
+    var output: String?
+}
+/// An image sent with a message. Hosts store it in the Bot's Attachments folder.
+struct RemoteAttachment: Codable, Sendable, Equatable {
+    static let maxCount = 3
+    static let maxTotalBytes = 2_400_000
+    var name: String
+    var mime: String
+    var data: Data
 }
 struct RemoteFile: Codable, Sendable, Identifiable { var name: String; var id: String { name } }
 

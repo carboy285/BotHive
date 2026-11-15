@@ -2,8 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Bothive uses the microphone for hands-free voice conversations with your Bots.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Bothive uses speech recognition to turn what you say into messages for your Bots.</string>
 	<key>CFBundleDisplayName</key>
-	<string>OpenGrokBot</string>
+	<string>Bothive</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -46,5 +50,18 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Bothive can speak Bot replies using a NVIDIA NIM speech server you run on your network, only if you choose it in voice settings.</string>
 </dict>
 </plist>

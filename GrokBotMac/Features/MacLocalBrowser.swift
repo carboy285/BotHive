@@ -3,23 +3,26 @@ import SwiftUI
 import WebKit
 
 @MainActor
-final class LocalBotBrowsers {
+final class LocalBotBrowsers: ObservableObject {
     static let shared = LocalBotBrowsers()
-    private var sessions: [UUID:LocalBotBrowserSession] = [:]
-    func open(_ bot: Bot, address: String? = nil) throws -> LocalBotBrowserSession {
-        if let session = sessions[bot.id] { session.window?.makeKeyAndOrderFront(nil); if let address { try session.navigate(address) }; return session }
-        guard sessions.count < 8 else { throw CloudError.message("Close a Bot browser before opening another. Up to eight browser windows can be open.") }
+    @Published private(set) var sessions: [UUID:LocalBotBrowserSession] = [:]
+    func session(for id: UUID) -> LocalBotBrowserSession? { sessions[id] }
+    /// A Bot using its browser never puts a window on the screen: the page loads in a window nobody can see. The human sees it only by
+    /// pressing Show browser (or Pause & take over), or by opening the browser from Bot details (`reveal: true`).
+    func open(_ bot: Bot, address: String? = nil, reveal: Bool = false) throws -> LocalBotBrowserSession {
+        if let session = sessions[bot.id] { if reveal { session.reveal() }; if let address { try session.navigate(address) }; return session }
+        guard sessions.count < 8 else { throw CloudError.message("Close a Bot browser before opening another. Up to eight browsers can be open.") }
         let session = LocalBotBrowserSession(bot: bot)
         sessions[bot.id] = session
         session.closed = { [weak self] in self?.sessions[bot.id] = nil }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 780), styleMask: [.titled,.closable,.miniaturizable,.resizable], backing: .buffered, defer: false)
         window.title = bot.name + " · Local browser"; window.isReleasedWhenClosed = false; window.delegate = session
         window.contentView = NSHostingView(rootView: LocalBotBrowserSurface(session: session)); session.window = window
-        window.center(); window.makeKeyAndOrderFront(nil)
+        if reveal { session.reveal() } else { session.conceal() }
         try session.navigate(address ?? "https://duckduckgo.com")
         return session
     }
-    func read(_ bot: Bot, address: String) async throws -> String { let session = try open(bot); return try await session.read(address) }
+    func read(_ bot: Bot, address: String, directory: URL) async throws -> String { let session = try open(bot); session.working = "\(bot.name) is reading a page…"; defer { session.working = nil }; return try await session.read(address, directory: directory) }
     func preview(_ bot: Bot) async throws -> RemoteBrowserPreview {
         guard let session = sessions[bot.id] else { return RemoteBrowserPreview(title: "Browser not open", url: "", imageData: nil) }
         let config = WKSnapshotConfiguration(); config.snapshotWidth = 900
@@ -43,9 +46,18 @@ final class LocalBotBrowserSession: NSObject, ObservableObject, WKNavigationDele
     @Published var feedback = "Local browser · this Bot’s private profile"
     @Published var back = false
     @Published var forward = false
+    /// What the Bot is doing right now (shown in a bar with Pause). nil when idle.
+    @Published var working: String?
+    /// While paused the human has the browser: a Bot's next step waits here until Resume.
+    @Published var paused = false
+    /// True while the window is on the screen. A Bot's own work leaves it false.
+    @Published private(set) var revealed = false
     private var reader: CheckedContinuation<String,Error>?
     private var readerNavigation: WKNavigation?
     private var timeout: Task<Void,Never>?
+    private var readDirectory: URL?
+    private var timedOut = false
+    private var readerAddress = ""
     init(bot: Bot) {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: bot.id)
@@ -58,30 +70,266 @@ final class LocalBotBrowserSession: NSObject, ObservableObject, WKNavigationDele
         if !forReader, reader != nil { finish(.failure(CloudError.message("The page was changed in the browser. Retry reading its new page."))) }
         let navigation = web.load(URLRequest(url: url)); if forReader { readerNavigation = navigation }; feedback = "Loading…"
     }
-    func read(_ address: String) async throws -> String {
+    func read(_ address: String, directory: URL) async throws -> String {
         guard reader == nil else { throw CloudError.message("This Bot’s browser is already reading a page.") }
+        readDirectory = directory; timedOut = false; readerAddress = address
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 reader = continuation
                 do { try navigate(address, forReader: true) } catch { finish(.failure(error)); return }
+                // A slow page is not a failure: after 45 seconds, stop loading and hand back whatever has rendered so far.
                 timeout = Task { [weak self] in
-                    do { try await Task.sleep(for: .seconds(20)); try Task.checkCancellation(); self?.web.stopLoading(); self?.finish(.failure(CloudError.message("The local browser timed out. Its window stays open so you can inspect it or sign in, then retry."))) } catch {}
+                    do {
+                        try await Task.sleep(for: .seconds(45)); try Task.checkCancellation()
+                        guard let self, self.reader != nil else { return }
+                        self.timedOut = true; self.web.stopLoading()
+                        await self.completeRead(note: "The page was slow to load, so this is what had loaded when I stopped waiting. If something is missing, try another page or approach.")
+                    } catch {}
                 }
             }
         } onCancel: { Task { @MainActor [weak self] in self?.web.stopLoading(); self?.finish(.failure(CancellationError())) } }
     }
+
+    // MARK: Interaction (click, type, scroll, search)
+    private static let findClick = """
+    const visible = el => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+    const label = el => String(el.innerText || el.value || el.getAttribute('aria-label') || el.title || '').trim().replace(/\\s+/g, ' ');
+    const nodes = [...document.querySelectorAll('a, button, input[type=button], input[type=submit], [role=button], [role=link], [role=tab], [role=menuitem], summary, label')].filter(visible);
+    const q = target.trim().toLowerCase();
+    let match = nodes.find(el => label(el).toLowerCase() === q) || nodes.find(el => label(el).toLowerCase().includes(q));
+    if (!match) { try { const bySelector = document.querySelector(target); if (bySelector && visible(bySelector)) match = bySelector; } catch (e) {} }
+    if (!match) return JSON.stringify({ ok: false, error: 'No visible link or button matched that text.', candidates: nodes.slice(0, 20).map(label).filter(Boolean) });
+    const form = match.closest('form');
+    const submits = !!form && ((match.tagName === 'BUTTON' && (!match.type || match.type === 'submit')) || match.type === 'submit');
+    if (mode === 'click') { match.scrollIntoView({ block: 'center' }); match.click(); }
+    return JSON.stringify({ ok: true, label: label(match).slice(0, 100), tag: match.tagName.toLowerCase(), submits: submits });
+    """
+
+    private static let findField = """
+    const visible = el => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' && !el.disabled && !el.readOnly; };
+    const fields = [...document.querySelectorAll('input, textarea, [contenteditable=true]')].filter(visible).filter(el => !['hidden', 'checkbox', 'radio', 'button', 'submit', 'file'].includes(el.type));
+    const hint = el => ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.autocomplete || '') + ' ' + (el.placeholder || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + ((el.labels && el.labels[0] && el.labels[0].innerText) || '')).toLowerCase();
+    const q = target.trim().toLowerCase();
+    let field = q ? fields.find(el => hint(el).includes(q)) : (fields.includes(document.activeElement) ? document.activeElement : fields[0]);
+    if (!field) return JSON.stringify({ ok: false, error: 'No visible text field matched.', candidates: fields.slice(0, 15).map(el => hint(el).trim().slice(0, 60)).filter(Boolean) });
+    const type = (field.type || 'text').toLowerCase();
+    const isSearch = type === 'search' || /search|query|(^|\\s)q(\\s|$)/.test(hint(field));
+    if (mode === 'type') {
+      field.scrollIntoView({ block: 'center' }); field.focus();
+      if (field.isContentEditable) { field.textContent = value; }
+      else { const proto = field.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(field, value); }
+      field.dispatchEvent(new Event('input', { bubbles: true })); field.dispatchEvent(new Event('change', { bubbles: true }));
+      if (submit) { const form = field.closest('form'); field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true })); if (form && form.requestSubmit) form.requestSubmit(); }
+    }
+    return JSON.stringify({ ok: true, type: type, hint: hint(field).trim().slice(0, 120), isSearch: isSearch });
+    """
+
+    private static let scrollScript = """
+    const step = Math.max(200, Math.round(window.innerHeight * 0.8));
+    if (direction === 'top') window.scrollTo(0, 0); else if (direction === 'bottom') window.scrollTo(0, document.documentElement.scrollHeight);
+    else window.scrollBy(0, direction === 'up' ? -step : step);
+    return JSON.stringify({ y: Math.round(window.scrollY), height: document.documentElement.scrollHeight });
+    """
+
+    private static let searchScript = """
+    const results = [...document.querySelectorAll('.result')].slice(0, 12).map(el => {
+      const link = el.querySelector('a.result__a'); if (!link) return null;
+      let url = link.href;
+      try { const u = new URL(link.href); const target = u.searchParams.get('uddg'); if (target) url = decodeURIComponent(target); } catch (e) {}
+      const snippet = el.querySelector('.result__snippet');
+      return { title: link.innerText.trim().slice(0, 140), url: url, snippet: snippet ? snippet.innerText.trim().slice(0, 240) : '' };
+    }).filter(Boolean).slice(0, 8);
+    return JSON.stringify({ results: results });
+    """
+
+    private func json(_ value: Any?) -> [String: Any] {
+        guard let text = value as? String, let data = text.data(using: .utf8) else { return [:] }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+    }
+
+    /// Finds a link or button by its text (or a CSS selector) without clicking it, so risk can be judged first.
+    func inspectClick(_ target: String) async throws -> (label: String, tag: String, submits: Bool) {
+        guard reader == nil else { throw CloudError.message("This Bot’s browser is busy. Try again in a moment.") }
+        let found = json(try await web.callAsyncJavaScript(Self.findClick, arguments: ["target": target, "mode": "inspect"], in: nil, contentWorld: .page))
+        guard found["ok"] as? Bool == true else { throw CloudError.message(Self.notFound(found)) }
+        return (found["label"] as? String ?? target, found["tag"] as? String ?? "", found["submits"] as? Bool ?? false)
+    }
+
+    func performClick(_ target: String) async throws {
+        _ = try await web.callAsyncJavaScript(Self.findClick, arguments: ["target": target, "mode": "click"], in: nil, contentWorld: .page)
+    }
+
+    func inspectField(_ target: String, submit: Bool) async throws -> (type: String, hint: String, isSearch: Bool) {
+        guard reader == nil else { throw CloudError.message("This Bot’s browser is busy. Try again in a moment.") }
+        let found = json(try await web.callAsyncJavaScript(Self.findField, arguments: ["target": target, "mode": "inspect", "value": "", "submit": submit], in: nil, contentWorld: .page))
+        guard found["ok"] as? Bool == true else { throw CloudError.message(Self.notFound(found)) }
+        return (found["type"] as? String ?? "text", found["hint"] as? String ?? "", found["isSearch"] as? Bool ?? false)
+    }
+
+    func typeText(field target: String, text: String, submit: Bool) async throws {
+        _ = try await web.callAsyncJavaScript(Self.findField, arguments: ["target": target, "mode": "type", "value": text, "submit": submit], in: nil, contentWorld: .page)
+    }
+
+    func scroll(_ direction: String) async throws {
+        _ = try await web.callAsyncJavaScript(Self.scrollScript, arguments: ["direction": direction], in: nil, contentWorld: .page)
+    }
+
+    /// Waits (up to ten minutes) while the human has paused the Bot, so a step never fights your clicks.
+    func waitIfPaused() async {
+        var waited = 0.0
+        while paused, waited < 600, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(300)); waited += 0.3 }
+        if waited >= 600 { paused = false }
+    }
+
+    func goBackPage() { if web.canGoBack { web.goBack() } }
+
+    private static func notFound(_ found: [String: Any]) -> String {
+        let options = (found["candidates"] as? [String] ?? []).prefix(12).joined(separator: " · ")
+        return (found["error"] as? String ?? "Nothing matched.") + (options.isEmpty ? "" : " Visible options: " + options + ".")
+    }
+
+    /// The page as it looks now (text, links and a screenshot), after waiting for it to settle. Used after every interaction.
+    func snapshot(directory: URL, note: String? = nil) async -> String {
+        readDirectory = directory
+        try? await Task.sleep(for: .milliseconds(500))
+        await settle(requireReader: false)
+        guard let raw = try? await web.evaluateJavaScript(Self.readScript) as? String else { return "{\"loadError\":\"The page could not be read.\"}" }
+        var page = (raw.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) }) as? [String: Any] ?? [:]
+        if let note { page["loadNote"] = note }
+        switch await captureScreenshot() {
+        case .success(let path): page["screenshot"] = path; page["screenshotNote"] = "A screenshot of the page as it looks now. Open this image file to see the result of your action."
+        case .failure(let error): page["screenshotError"] = (error as? CloudError)?.errorDescription ?? "The screenshot could not be captured."
+        }
+        let data = try? JSONSerialization.data(withJSONObject: page, options: [.withoutEscapingSlashes])
+        return data.flatMap { String(data: $0, encoding: .utf8) } ?? raw
+    }
+
+    /// Web search through the Bot's own browser (no key needed). Returns JSON with up to eight results.
+    func search(_ query: String) async throws -> String {
+        guard reader == nil else { throw CloudError.message("This Bot’s browser is busy. Try again in a moment.") }
+        var parts = URLComponents(string: "https://duckduckgo.com/html/")!
+        parts.queryItems = [URLQueryItem(name: "q", value: String(query.prefix(200)))]
+        guard let address = parts.string else { throw CloudError.message("That search could not be started.") }
+        try navigate(address)
+        try await waitUntilLoaded(timeout: 25)
+        try? await Task.sleep(for: .milliseconds(400))
+        return (try await web.callAsyncJavaScript(Self.searchScript, arguments: [:], in: nil, contentWorld: .page) as? String) ?? "{\"results\":[]}"
+    }
+
+    // MARK: Secure login
+    private static let fillScript = """
+    const visible = el => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' && !el.disabled && !el.readOnly; };
+    const setValue = (el, value) => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; el.focus(); setter.call(el, value); el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); };
+    const all = [...document.querySelectorAll('input')].filter(visible);
+    const password = all.find(el => el.type === 'password');
+    const inputs = password && password.form ? all.filter(el => el.form === password.form) : all;
+    const hint = el => ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.autocomplete || '') + ' ' + (el.placeholder || '') + ' ' + (el.getAttribute('aria-label') || '')).toLowerCase();
+    const userField = inputs.find(el => ['text', 'email', 'tel'].includes(el.type) && /user|email|login|account|name/.test(hint(el))) || inputs.find(el => ['text', 'email'].includes(el.type));
+    const submit = field => {
+      const form = field.closest('form');
+      const scope = form || document;
+      const button = scope.querySelector('button[type=submit], input[type=submit]') || [...scope.querySelectorAll('button, [role=button]')].find(b => visible(b) && /sign in|log in|login|continue|next|submit/i.test(b.innerText || b.value || ''));
+      if (button) { button.click(); return true; }
+      if (form && form.requestSubmit) { form.requestSubmit(); return true; }
+      return false;
+    };
+    if (password) { if (userField && !userField.value) setValue(userField, u); setValue(password, p); return submit(password) ? 'submitted' : 'filled'; }
+    if (userField) { setValue(userField, u); return submit(userField) ? 'username-submitted' : 'username-filled'; }
+    return 'no-form';
+    """
+
+    private func waitUntilLoaded(timeout: Double) async throws {
+        try await Task.sleep(for: .milliseconds(400))
+        let deadline = Date().addingTimeInterval(timeout)
+        while web.isLoading, Date() < deadline { try await Task.sleep(for: .milliseconds(250)) }
+    }
+
+    /// Opens the page and types a saved login into it. The credentials go straight into the page from this process: they are
+    /// never returned, logged, or added to a transcript. Fills only on `loginHost` (or a subdomain), re-checked after every redirect.
+    func fillLogin(url: String, loginHost: String, username: String, password: String) async throws -> String {
+        guard reader == nil else { throw CloudError.message("This Bot’s browser is reading a page. Try again in a moment.") }
+        try navigate(url)
+        try await waitUntilLoaded(timeout: 20)
+        var step = "no-form"
+        for attempt in 0..<3 {
+            guard let current = web.url?.host, SecureLoginStore.matches(loginHost: loginHost, pageHost: current) else {
+                throw CloudError.message("The page moved to \(web.url?.host ?? "another site"), which is not the site this login was saved for. Nothing was filled in.")
+            }
+            let value = try await web.callAsyncJavaScript(Self.fillScript, arguments: ["u": username, "p": password], in: nil, contentWorld: .page)
+            step = (value as? String) ?? "no-form"
+            guard step == "username-submitted", attempt < 2 else { break }
+            try await Task.sleep(for: .seconds(3))
+            try await waitUntilLoaded(timeout: 10)
+        }
+        switch step {
+        case "submitted": return "Entered the saved username and password for \(loginHost) and submitted the form. Read the page to see whether sign-in worked; a verification code may still be needed."
+        case "username-submitted": return "Entered the username for \(loginHost) and continued, but no password step appeared. Read the page to see where it stopped."
+        case "filled", "username-filled": return "Filled in the login fields for \(loginHost) but found no button to submit. Ask the user to press the sign-in button in the Bot browser."
+        default: return "No login form was found on the page."
+        }
+    }
+
     private func finish(_ result: Result<String,Error>) { timeout?.cancel(); timeout = nil; let pending = reader; reader = nil; readerNavigation = nil; pending?.resume(with: result) }
     private func update() { address = web.url?.absoluteString ?? address; back = web.canGoBack; forward = web.canGoForward }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         update(); feedback = "Local browser · this Bot’s private profile"
         guard reader != nil, navigation === readerNavigation else { return }
-        let script = "JSON.stringify({url:location.href,title:document.title,text:(document.body?.innerText||'').slice(0,16000),links:[...document.links].slice(0,25).map(a=>({text:a.innerText.slice(0,100),url:a.href}))})"
-        webView.evaluateJavaScript(script) { [weak self] value, error in
-            guard let self else { return }
-            if let text = value as? String { self.finish(.success(text)) } else { self.finish(.failure(error ?? CloudError.message("This page could not be read."))) }
+        readerNavigation = nil
+        Task { [weak self] in await self?.completeRead() }
+    }
+    private static let readScript = "JSON.stringify({url:location.href,title:document.title,text:(document.body?.innerText||'').slice(0,16000),links:[...document.links].slice(0,25).map(a=>({text:a.innerText.slice(0,100),url:a.href}))})"
+    /// Dynamic pages (fantasy draft rooms, dashboards) keep rendering after the load event: wait until loading stops and the text length is steady.
+    private func settle(requireReader: Bool = true) async {
+        var previous: String?; var stable = 0; let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline, !requireReader || reader != nil {
+            let state = try? await web.evaluateJavaScript("document.readyState+'|'+(document.body?.innerText||'').length") as? String
+            let ready = !web.isLoading && (state?.hasPrefix("complete|") ?? false)
+            stable = ready && state == previous ? stable + 1 : 0; previous = state
+            if stable >= 2 { return }
+            try? await Task.sleep(for: .milliseconds(300))
         }
     }
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { update(); feedback = "Page navigation failed. Retry or choose another page."; if navigation === readerNavigation { finish(.failure(error)) } }
+    private func completeRead(note: String? = nil) async {
+        await settle()
+        guard reader != nil else { return }
+        guard let raw = try? await web.evaluateJavaScript(Self.readScript) as? String else { finish(.failure(CloudError.message("This page could not be read."))); return }
+        guard reader != nil else { return }
+        var page = (raw.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) }) as? [String:Any] ?? [:]
+        guard !page.isEmpty else { finish(.success(raw)); return }
+        if let note { page["loadNote"] = note }
+        switch await captureScreenshot() {
+        case .success(let path):
+            page["screenshot"] = path
+            page["screenshotNote"] = "A screenshot of the page exactly as rendered (layout, images, charts, scores, canvas content that text extraction misses). Open this image file with your file or image viewing tool and use it together with the text."
+        case .failure(let error): page["screenshotError"] = (error as? CloudError)?.errorDescription ?? "The screenshot could not be captured."
+        }
+        guard reader != nil else { return }
+        let data = try? JSONSerialization.data(withJSONObject: page, options: [.withoutEscapingSlashes])
+        finish(.success(data.flatMap { String(data: $0, encoding: .utf8) } ?? raw))
+    }
+    /// Saves a JPEG of the rendered page as <Bot folder>/Attachments/<uuid>-Page.jpg and keeps only the newest twelve.
+    private func captureScreenshot() async -> Result<String,Error> {
+        guard let directory = readDirectory else { return .failure(CloudError.message("Screenshots are unavailable.")) }
+        let config = WKSnapshotConfiguration(); config.snapshotWidth = 1400
+        guard let image = try? await web.takeSnapshot(configuration: config), let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff), let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.8]), jpeg.count <= 20_000_000 else { return .failure(CloudError.message("The screenshot could not be captured. Make sure the browser window is not minimized.")) }
+        let folder = directory.appendingPathComponent("Attachments", isDirectory: true)
+        let name = UUID().uuidString.lowercased() + "-Page.jpg"
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            try jpeg.write(to: folder.appendingPathComponent(name), options: .atomic)
+            let old = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []).filter { $0.lastPathComponent.hasSuffix("-Page.jpg") && $0.lastPathComponent != name }
+                .sorted { ((try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) > ((try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) }
+            for url in old.dropFirst(11) { try? FileManager.default.removeItem(at: url) }
+            return .success("Attachments/" + name)
+        } catch { return .failure(CloudError.message("The screenshot could not be saved.")) }
+    }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        update(); feedback = "Page navigation failed. Retry or choose another page."
+        guard navigation === readerNavigation, !timedOut else { return }
+        // Tell the Bot exactly what went wrong so it can try another way, rather than ending its turn.
+        let page: [String: Any] = ["url": web.url?.absoluteString ?? readerAddress, "title": "", "text": "", "links": [], "loadError": (error as NSError).localizedDescription]
+        finish(.success((try? JSONSerialization.data(withJSONObject: page, options: [.withoutEscapingSlashes])).flatMap { String(data: $0, encoding: .utf8) } ?? "{\"loadError\":\"The page could not be loaded.\"}"))
+    }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { self.webView(webView, didFail: navigation, withError: error) }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         decisionHandler(Self.allowed(navigationAction.request.url) && !navigationAction.shouldPerformDownload ? .allow : .cancel)
@@ -89,6 +337,30 @@ final class LocalBotBrowserSession: NSObject, ObservableObject, WKNavigationDele
     func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) { decisionHandler(.deny) }
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if Self.allowed(navigationAction.request.url) { webView.load(navigationAction.request) }; return nil
+    }
+    /// Puts the browser window on the screen for the human.
+    func reveal() {
+        guard let window else { return }
+        let wasHidden = !revealed
+        revealed = true
+        window.alphaValue = 1; window.ignoresMouseEvents = false; window.hasShadow = true; window.isExcludedFromWindowsMenu = false
+        window.collectionBehavior = []
+        if wasHidden { window.center() }
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    /// Keeps the window out of sight and out of the way, but still "on screen" to WebKit so pages keep loading and rendering normally.
+    func conceal() {
+        guard let window else { return }
+        revealed = false
+        window.alphaValue = 0; window.ignoresMouseEvents = true; window.hasShadow = false; window.isExcludedFromWindowsMenu = true
+        window.collectionBehavior = [.transient, .ignoresCycle, .stationary, .fullScreenAuxiliary]
+        window.orderFrontRegardless()
+    }
+    /// Closing a window while the Bot is using it only hides it again, so its work is not cut off.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard working != nil || reader != nil else { return true }
+        conceal(); return false
     }
     func windowWillClose(_ notification: Notification) { web.stopLoading(); finish(.failure(CloudError.message("The Bot browser was closed."))); window?.contentView = nil; closed?(); closed = nil }
     func clearData() {
@@ -116,8 +388,46 @@ private struct LocalBotBrowserSurface: View {
                 Button("Clear data") { session.clearData() }
             }.padding(10)
             Text(session.feedback).font(.caption).foregroundStyle(.secondary).padding(.bottom, 5)
+            if let working = session.working {
+                HStack(spacing: 10) {
+                    if session.paused { Image(systemName: "pause.circle.fill").foregroundStyle(.orange) } else { ProgressView().controlSize(.small) }
+                    Text(session.paused ? "Paused. You have control of this browser. Press Resume to let the Bot continue." : working).font(.caption)
+                    Spacer()
+                    Button(session.paused ? "Resume" : "Pause & take over") { session.paused.toggle() }.controlSize(.small)
+                }.padding(.horizontal, 12).padding(.vertical, 7).background(Color.orange.opacity(0.14))
+            }
             Divider(); BotWebSurface(web: session.web)
         }.frame(minWidth: 650, minHeight: 450)
     }
     private func navigate() { do { try session.navigate(session.address) } catch { session.feedback = error.localizedDescription } }
+}
+
+/// Shown above the message box while a Bot is using its browser. The browser itself stays out of sight until Show browser is pressed.
+struct MacBrowserPill: View {
+    let botID: UUID
+    @ObservedObject private var browsers = LocalBotBrowsers.shared
+    var body: some View {
+        if let session = browsers.session(for: botID) { MacBrowserPillContent(session: session) }
+    }
+}
+
+private struct MacBrowserPillContent: View {
+    @ObservedObject var session: LocalBotBrowserSession
+    var body: some View {
+        if let working = session.working {
+            HStack(spacing: 10) {
+                if session.paused { Image(systemName: "pause.circle.fill").foregroundStyle(.orange) } else { ProgressView().controlSize(.small) }
+                Text(session.paused ? "Paused. You have control of the browser." : working).font(.system(size: 12)).lineLimit(1)
+                Spacer(minLength: 8)
+                Button(session.revealed ? "Hide browser" : "Show browser") { if session.revealed { session.conceal() } else { session.reveal() } }
+                Button(session.paused ? "Resume" : "Pause & take over") {
+                    session.paused.toggle()
+                    if session.paused { session.reveal() } else { session.conceal() }
+                }
+            }
+            .buttonStyle(.plain).font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 14).padding(.vertical, 8).background(MacTheme.raised, in: Capsule()).padding(.horizontal, 4)
+            .transition(.opacity)
+        }
+    }
 }

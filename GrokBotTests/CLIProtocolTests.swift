@@ -18,9 +18,20 @@ final class CLIProtocolTests: XCTestCase {
     func testFreshWorkspaceHasOnlyMainBotAndNoMessages() {
         let value = Workspace.fresh
         XCTAssertEqual(value.bots.count, 1)
-        XCTAssertEqual(value.bots.first?.name, "Grok Bot")
+        XCTAssertEqual(value.bots.first?.name, "Hive")
         XCTAssertEqual(value.bots.first?.isMain, true)
         XCTAssertTrue(value.entries.isEmpty)
+    }
+
+    func testDefaultMainBotIsRenamedToHiveButCustomNamesStay() throws {
+        func load(_ bots: [Bot]) throws -> Workspace {
+            try JSONDecoder().decode(Workspace.self, from: JSONEncoder().encode(Workspace(bots: bots, entries: [], schemaVersion: 2)))
+        }
+        var main = Bot(id: UUID(), name: "Grok Bot", purpose: "Help", color: "white", symbol: "sparkles"); main.isMain = true
+        let other = Bot(id: UUID(), name: "Grok Bot", purpose: "Not the main one", color: "pink", symbol: "sparkles")
+        XCTAssertEqual(try load([main, other]).bots.map(\.name), ["Hive", "Grok Bot"])
+        var renamed = main; renamed.name = "Ada"
+        XCTAssertEqual(try load([renamed]).bots.map(\.name), ["Ada"])
     }
 
     func testLegacyDemoMigrationKeepsUserNotesAndCustomBots() throws {
@@ -32,7 +43,7 @@ final class CLIProtocolTests: XCTestCase {
             Entry(botID: main.id, kind: .user, text: "Keep my actual note")
         ], schemaVersion: nil)
         value.migrateLegacyDemo()
-        XCTAssertEqual(value.bots.map(\.name), ["Grok Bot", "My work"])
+        XCTAssertEqual(value.bots.map(\.name), ["Hive", "My work"])
         XCTAssertEqual(value.entries.map(\.text), ["Keep my actual note"])
         XCTAssertTrue(value.bots[0].isMain == true)
     }
@@ -82,7 +93,7 @@ final class CLIProtocolTests: XCTestCase {
     }
 
     func testSpecificModelsArePassedAsArgumentsForEveryProvider() {
-        for provider in CLIProvider.allCases {
+        for provider in CLIProvider.allCases where !provider.isLocalServer {
             let command = CLICommand.chat(provider: provider, prompt: "private", session: "saved-session", promptFile: "/private/prompt.txt", model: "provider/specific-model")
             let index = command.arguments.firstIndex(of: "--model")!
             XCTAssertEqual(command.arguments[index + 1], "provider/specific-model")
@@ -99,11 +110,34 @@ final class CLIProtocolTests: XCTestCase {
     }
 
     func testCommandsKeepPromptsOutOfArgumentsAndResumeExplicitSessions() {
-        for provider in CLIProvider.allCases {
+        for provider in CLIProvider.allCases where !provider.isLocalServer {
             let command = CLICommand.chat(provider: provider, prompt: "private prompt; $(echo never)", session: "my-session", promptFile: "/private/prompt.txt")
             XCTAssertFalse(command.arguments.contains(where: { $0.contains("private prompt") }))
             XCTAssertTrue(command.arguments.contains("my-session"))
             XCTAssertFalse(command.arguments.contains(where: { $0.contains("bypass") || $0 == "--yolo" }))
         }
+    }
+
+    func testLocalModelServersNeverBuildAProcessCommandAndCodexCanThinkLessForVoice() {
+        for provider in CLIProvider.allCases where provider.isLocalServer {
+            XCTAssertTrue(CLICommand.chat(provider: provider, prompt: "private", session: nil).arguments.isEmpty)
+        }
+        let fast = CLICommand.chat(provider: .codex, prompt: "x", session: nil, fast: true).arguments
+        XCTAssertEqual(fast.prefix(5), ["exec", "--sandbox", "read-only", "-c", "model_reasoning_effort=low"])
+        XCTAssertEqual(BotTeamwork.voiceModel(provider: .claude, chatModel: "opus", custom: nil), "haiku")
+        XCTAssertEqual(BotTeamwork.voiceModel(provider: .codex, chatModel: "gpt-x", custom: nil), "gpt-x")
+        XCTAssertEqual(BotTeamwork.voiceModel(provider: .ollama, chatModel: "llama3.2", custom: "qwen3:4b"), "qwen3:4b")
+    }
+
+    func testCodexAnswerPiecesStreamAndFinalTextWins() {
+        var parser = CLIEventParser()
+        var texts: [String] = []
+        for line in [#"{"type":"item.agent_message.delta","item_id":"m1","delta":"Hello"}"#,
+                     #"{"type":"item.agent_message.delta","item_id":"m1","delta":" there."}"#,
+                     #"{"type":"item.completed","item":{"id":"m1","type":"agent_message","text":"Hello there!"}}"#] {
+            for case .text(let value) in parser.parse(Data(line.utf8)) { texts.append(value) }
+        }
+        XCTAssertEqual(texts, ["Hello", "Hello there.", "Hello there!"])
+        XCTAssertNil(CLIEventParser.agentDelta(type: "item.reasoning.delta", value: ["delta": "thinking"]))
     }
 }

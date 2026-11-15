@@ -78,6 +78,11 @@ final class MacUITests: XCTestCase {
         let (app, directory) = try application(setup: true)
         defer { app.terminate(); try? FileManager.default.removeItem(at: directory) }
         app.launch()
+        // 0.9.9: first run opens on the Bots saying hello.
+        if app.buttons["Get started"].waitForExistence(timeout: 15) {
+            capture(app, name: "macos-welcome")
+            app.buttons["Get started"].click()
+        }
         XCTAssertTrue(app.staticTexts["A free app for your AI CLIs"].waitForExistence(timeout: 15), app.debugDescription)
         capture(app, name: "macos-setup")
         app.buttons["Continue"].click()
@@ -88,7 +93,9 @@ final class MacUITests: XCTestCase {
         app.buttons["Check sign-in"].click()
         XCTAssertTrue(app.staticTexts["Codex is signed in and ready."].waitForExistence(timeout: 15))
         app.buttons["Continue"].click()
-        XCTAssertTrue(app.secureTextFields["composio-project-key"].waitForExistence(timeout: 5))
+        // A Mac that already has a Composio project shows its connected apps instead of the key field.
+        let keyField = app.secureTextFields["composio-project-key"], refresh = app.buttons["Refresh connections"]
+        XCTAssertTrue(keyField.waitForExistence(timeout: 5) || refresh.exists, app.debugDescription)
         capture(app, name: "macos-composio-setup")
         app.buttons["Continue to chat"].click()
         app.buttons["Start chatting"].click()

@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CryptoKit
+import Security
 import AuthenticationServices
 #if os(macOS)
 import AppKit
@@ -30,6 +31,8 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
     private var approvals: [String:String] = [:]
     private var pinnedHosts: [String:String] = [:]
     var signedIn: Bool { session != nil }
+    /// 0.9.9: pings this device the moment a packet is stored for it, so mailbox checks don't wait on a timer.
+    let wake = CloudWake()
     var email: String { session?.user.email ?? "Account" }
     var localDevice: CloudDevice? { devices.first { $0.id == identity?.id } }
     var controllers: [CloudDevice] { devices.filter { $0.kind == "controller" } }
@@ -42,7 +45,15 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
         do {
             if let data = try self.secrets.read(account: "session") { session = try JSONDecoder().decode(CloudSession.self, from: data) }
             if let session { try loadIdentity(owner: session.user.id) }
-        } catch { self.error = "Unlock this device’s Keychain to restore sign-in."; session = nil }
+        } catch {
+            session = nil
+            // 10.0: only a locked device is worth mentioning at launch: a saved sign-in exists but can't be read yet.
+            // Anything else (no keychain access in a Simulator build, a damaged item) stays quiet here; signing in
+            // reports it if it's real. A first-time user never sees an error.
+            if case KeychainSecretStore.StoreError.status(errSecInteractionNotAllowed) = error {
+                self.error = "Unlock this device, then sign in again."
+            }
+        }
     }
     /// Desktop controllers use their own encryption identity but one shared auth refresher.
     func useAccount(from source: CloudAccount) {
@@ -145,9 +156,26 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
         let oldSession = session
         browser?.cancel(); authCompletion?.finish(.failure(CloudError.signedOut))
         // Clear local state immediately, even if the network is unavailable.
+        wake.stop()
         generation = UUID(); refreshTask?.cancel(); refreshTask = nil; session = nil; identity = nil; devices = []; approvals = [:]; pinnedHosts = [:]
         do { try secrets.delete(account:"session") } catch { self.error = "Keychain sign-out failed. Unlock this device and sign out again." }
         if let oldSession { _ = try? await raw(path:"/auth/v1/logout?scope=local",method:"POST",data:Data("{}".utf8),token:oldSession.access_token) }
+    }
+    /// 10.0: deletes this account and everything the relay holds for it (devices, messages in flight, Bot pins),
+    /// then signs out here. Chats and Bots live on your computers and are not touched.
+    @discardableResult
+    func deleteAccount() async -> Bool {
+        guard signedIn else { return false }
+        busy = true; defer { busy = false }
+        do {
+            _ = try await request(path: "/rest/v1/rpc/opengrok_delete_account", body: [:])
+        } catch {
+            self.error = "The account could not be deleted. Check your connection and try again. (\(error.localizedDescription))"
+            return false
+        }
+        await signOut()
+        notice = "Your account was deleted. Your Bots and chats are still on your computers."
+        return true
     }
     private func accessToken() async throws -> String {
         guard let current = session else { throw CloudError.signedOut }
@@ -179,6 +207,8 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
     private func raw(path: String, method: String, data: Data?, token: String?) async throws -> Data {
         guard let url = URL(string:path,relativeTo:CloudConfiguration.url), url.scheme == "https", url.host == CloudConfiguration.url.host else { throw CloudError.invalidPacket }
         var request = URLRequest(url:url); request.httpMethod = method; request.httpBody = data
+        // Someone is waiting on every relay call: ask the system to treat it as interactive traffic.
+        request.networkServiceType = .responsiveData
         request.setValue(CloudConfiguration.publishableKey,forHTTPHeaderField:"apikey")
         request.setValue("application/json",forHTTPHeaderField:"Content-Type")
         if let token { request.setValue("Bearer " + token,forHTTPHeaderField:"Authorization") }
@@ -200,6 +230,15 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
         _ = try await request(path:"/rest/v1/rpc/opengrok_register_device",body:["device_id":identity.id.uuidString,"device_name":name,"device_kind":kind,"device_key":try identity.publicKey,"is_available":available ? "true":"false"])
         let data = try await request(path:"/rest/v1/opengrok_devices?select=id,name,kind,public_key,last_seen,available&order=last_seen.desc",method:"GET")
         devices = try CloudCoding.decoder().decode([CloudDevice].self,from:data)
+    }
+    /// Removes an old entry for one of this account's devices (for example a computer listed twice after a reinstall).
+    func forget(_ device: CloudDevice) async throws {
+        guard device.id != identity?.id else { throw CloudError.message("This device cannot remove itself.") }
+        guard !device.online else { throw CloudError.message("\(device.name) is online. Only old, offline entries can be removed.") }
+        do { _ = try await request(path: "/rest/v1/rpc/opengrok_forget_device", body: ["device_id": device.id.uuidString]) }
+        catch CloudError.signedOut { throw CloudError.signedOut }
+        catch { throw CloudError.message("The account service could not remove it. It may not have the 0.9.1 update yet (\(error.localizedDescription)).") }
+        devices.removeAll { $0.id == device.id }
     }
     func botPins(host: UUID) async throws -> [CloudBotPin] {
         let data = try await request(path: "/rest/v1/opengrok_bot_pins?select=bot_id,is_pinned&host_id=eq." + host.uuidString, method: "GET")
@@ -238,6 +277,19 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
         guard let identity else { throw CloudError.signedOut }
         _ = try await request(path:"/rest/v1/rpc/opengrok_ack",body:["device_id":identity.id.uuidString,"packet_id":packet.id.uuidString,"packet_kind":packet.kind])
     }
+    /// Acknowledges without making the caller wait: the reply it just read is already in hand.
+    func acknowledgeLater(_ packet: CloudPacket) {
+        Task { try? await self.acknowledge(packet) }
+    }
+    /// Opens the wake channel for this device once it is registered and signed in.
+    func startWake() {
+        guard signedIn, let device = identity?.id else { return }
+        wake.start(device: device) { [weak self] in
+            guard let self else { throw CloudError.signedOut }
+            return try await self.accessToken()
+        }
+    }
+    func stopWake() { wake.stop() }
     func decrypt(_ packet: CloudPacket, peer: CloudDevice) throws -> Data {
         guard let identity, let owner = session?.user.id else { throw CloudError.signedOut }
         return try identity.open(packet,from:peer,owner:owner)

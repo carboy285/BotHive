@@ -5,19 +5,23 @@ struct MacBotProviderSettingsView: View {
     @EnvironmentObject private var app: AppModel
     @EnvironmentObject private var desktop: MacAppModel
     @State private var modelDrafts: [CLIProvider:String] = [:]
+    @State private var serverDrafts: [CLIProvider:String] = [:]
     @State private var feedback: String?
     private var configuration: BotAIConfiguration { desktop.aiConfiguration(for: bot) }
     private var busy: Bool { desktop.runningBots.contains(bot.id) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Providers & models").font(.system(size: 17, weight: .medium))
-            Text("Choose available providers, then select the one provider and model that answers for this Bot. Model access follows each CLI’s account.")
-                .font(.system(size: 13)).foregroundStyle(MacTheme.secondary).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Providers & models").font(.system(size: 13, weight: .semibold)).foregroundStyle(MacTheme.secondary)
+                .padding(.horizontal, 4).accessibilityAddTraits(.isHeader)
             if configuration.providers.count > 1 {
                 Picker("Active provider", selection: Binding(get: { configuration.activeProvider ?? configuration.providers[0].provider }, set: { provider in update { $0.activeProvider = provider } })) {
                     ForEach(configuration.providers) { choice in Text(choice.provider.name).tag(choice.provider) }
-                }.disabled(busy).accessibilityIdentifier("bot-active-provider")
+                }.disabled(busy).accessibilityIdentifier("bot-active-provider").padding(.horizontal, 4).padding(.bottom, 4)
+            }
+            if configuration.providers.count > 1 {
+                Toggle("Ask every enabled provider and compare answers", isOn: Binding(get: { configuration.replyMode == .compare }, set: { on in update { $0.replyMode = on ? .compare : .one } }))
+                    .toggleStyle(.checkbox).font(.system(size: 13)).disabled(busy).padding(.horizontal, 4).accessibilityIdentifier("bot-compare-toggle")
             }
             ForEach(CLIProvider.allCases) { provider in
                 let installed = desktop.installedCLIs.first { $0.provider == provider }
@@ -33,11 +37,23 @@ struct MacBotProviderSettingsView: View {
                             .disabled(busy || (installed == nil && choice == nil))
                             .accessibilityIdentifier("bot-provider-\(provider.rawValue)")
                         Spacer()
-                        if installed == nil {
-                            Button("Set up") { desktop.setupProvider = provider; desktop.panel = .setup }.controlSize(.small)
+                        if installed == nil && provider.isLocalServer {
+                            Button("Check again") { desktop.setCLIPath(serverDrafts[provider] ?? provider.defaultServer, provider: provider) }.buttonStyle(InspectorButtonStyle(compact: true))
+                        } else if installed == nil {
+                            Button("Set up") { desktop.setupProvider = provider; desktop.panel = .setup }.buttonStyle(InspectorButtonStyle(compact: true))
                         }
                     }
-                    if installed == nil { Text("Not installed on this Mac").font(.system(size: 11)).foregroundStyle(MacTheme.secondary) }
+                    if choice != nil { Text(CLISignIn.credentialLabel(for: provider)).font(.system(size: 11)).foregroundStyle(MacTheme.secondary) }
+                    if installed == nil && provider.isLocalServer {
+                        // Ollama and LM Studio: a server on this Mac, not a CLI.
+                        Text("Not running. Open \(provider.name) and start its server\(provider == .lmstudio ? " (Developer tab)" : ""), then check again.").font(.system(size: 11)).foregroundStyle(MacTheme.secondary)
+                        HStack(spacing: 8) {
+                            TextField("Address", text: Binding(get: { serverDrafts[provider] ?? provider.defaultServer }, set: { serverDrafts[provider] = $0 }))
+                                .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                            Link("Get \(provider.name) ↗", destination: provider.guideURL).font(.system(size: 12))
+                        }
+                    } else if installed == nil { Text("Not installed on this Mac").font(.system(size: 11)).foregroundStyle(MacTheme.secondary) }
+                    else if let installed, provider.isLocalServer { Text(installed.version).font(.system(size: 11)).foregroundStyle(MacTheme.secondary) }
                     if let choice {
                         if !(desktop.modelCatalogs[provider] ?? []).isEmpty {
                             Picker("Model", selection: Binding(get: { choice.model }, set: { model in
@@ -54,22 +70,22 @@ struct MacBotProviderSettingsView: View {
                                 .accessibilityIdentifier("bot-model-id-\(provider.rawValue)")
                                 .onSubmit { saveModel(modelDrafts[provider] ?? choice.model, provider: provider) }
                             Button("Apply") { saveModel(modelDrafts[provider] ?? choice.model, provider: provider) }
-                                .controlSize(.small).accessibilityLabel("Apply \(provider.name) model")
+                                .buttonStyle(InspectorButtonStyle(compact: true)).accessibilityLabel("Apply \(provider.name) model")
                         }.disabled(busy)
-                        if provider == .codex || provider == .opencode {
+                        if provider == .codex || provider == .opencode || provider.isLocalServer {
                             Button(desktop.loadingModels.contains(provider) ? "Loading models…" : "Load available models") { desktop.loadModels(for: provider) }
-                                .font(.system(size: 12)).disabled(desktop.loadingModels.contains(provider) || installed == nil)
+                                .buttonStyle(InspectorButtonStyle(compact: true)).disabled(desktop.loadingModels.contains(provider) || installed == nil)
                                 .accessibilityLabel("Load \(provider.name) models")
                         }
                         if let note = desktop.modelCatalogFeedback[provider] { Text(note).font(.system(size: 11)).foregroundStyle(MacTheme.secondary) }
                     }
-                }.padding(14).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14))
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 16))
             }
-            Text("Only the active provider’s selected model responds to this Bot’s messages.")
-                .font(.system(size: 12)).foregroundStyle(MacTheme.secondary)
-
-            if busy { Text("Stop the current response to change providers or models.").font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
-            if let feedback { Text(feedback).font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
+            Text("Only the active provider and model answer for this Bot. Model access follows each CLI’s account.")
+                .font(.system(size: 12)).foregroundStyle(MacTheme.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
+            if busy { Text("Stop the current response to change providers or models.").font(.system(size: 12)).foregroundStyle(MacTheme.secondary).padding(.horizontal, 4) }
+            if let feedback { Text(feedback).font(.system(size: 12)).foregroundStyle(MacTheme.secondary).padding(.horizontal, 4) }
         }.onChange(of: bot.id) { _, _ in modelDrafts = [:]; feedback = nil }
     }
 
@@ -82,7 +98,7 @@ struct MacBotProviderSettingsView: View {
     }
     private func update(_ change: (inout BotAIConfiguration) -> Void) {
         guard !busy else { return }
-        var value = configuration; change(&value); value.replyMode = .one
+        var value = configuration; change(&value); if value.providers.count < 2 { value.replyMode = .one }
         _ = app.setAIConfiguration(value, for: bot)
     }
 }

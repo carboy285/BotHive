@@ -16,6 +16,19 @@ struct Bot: Identifiable, Codable, Hashable, Sendable {
     var sortOrder: Int? = nil
     var lastUsedAt: String? = nil
     var schedules: [BotSchedule]? = nil
+    /// Hidden from the sidebar (still reachable from search).
+    var hidden: Bool? = nil
+    /// Marked unread by the human; cleared when the Bot is opened.
+    var unread: Bool? = nil
+    /// This Bot's own voice choices. Anything left empty follows the app-wide voice settings.
+    var voice: BotVoice? = nil
+}
+
+struct BotVoice: Codable, Hashable, Sendable {
+    var speaker: String? = nil
+    var speed: Double? = nil
+    var language: String? = nil
+    var isEmpty: Bool { speaker == nil && speed == nil && language == nil }
 }
 
 struct BotAppearance: Codable, Hashable, Sendable {
@@ -32,6 +45,22 @@ enum BotAvatarShape: String, Codable, CaseIterable, Sendable {
     var label: String { rawValue.capitalized }
 }
 
+/// What a heads-up is about. Same shape as the Windows app's `headsUp`, so chats mirrored between computers decode.
+struct HeadsUpTag: Codable, Equatable, Sendable {
+    var kind: String
+    var title: String?
+    /// A meeting's join link (https only).
+    var link: String? = nil
+    /// People this heads-up is about, for Draft a reply and Mute (0.9.7).
+    var senders: [HeadsUpSender]? = nil
+}
+
+struct HeadsUpSender: Codable, Equatable, Sendable {
+    var name: String
+    var address: String
+    var subject: String?
+}
+
 struct Entry: Identifiable, Codable, Equatable, Sendable {
     enum Kind: String, Codable, Sendable { case user, bot, activity }
     let id: UUID
@@ -43,14 +72,24 @@ struct Entry: Identifiable, Codable, Equatable, Sendable {
     var senderBotID: UUID? = nil
     var senderName: String? = nil
     var delivery: String? = nil
+    /// Full text for the Bot's own context when `text` is only a short summary shown in the chat (for example a page the browser read).
+    var detail: String? = nil
+    /// A single emoji reaction the human added to this message.
+    var reaction: String? = nil
+    /// Pinned by the human so it is easy to find again (0.9.5).
+    var pinned: Bool? = nil
+    /// Set when the main Bot reached out on its own: a heads-up about mail, a meeting or the day (0.9.6).
+    var headsUp: HeadsUpTag? = nil
+    /// Short text shown instead of an automatic turn's full prompt (0.9.6).
+    var label: String? = nil
     let date: Date
 
-    init(botID: UUID, kind: Kind, text: String, id: UUID = UUID()) {
+    init(botID: UUID, kind: Kind, text: String, id: UUID = UUID(), date: Date = Date()) {
         self.id = id
         self.botID = botID
         self.kind = kind
         self.text = text
-        date = Date()
+        self.date = date
     }
 }
 
@@ -65,7 +104,7 @@ struct Workspace: Codable, Equatable, Sendable {
     var teamMessages: [TeamMessage]? = nil
 
     static var fresh: Workspace {
-        Workspace(bots: [Bot(id: UUID(), name: "Grok Bot", purpose: "Your AI assistant, powered by a CLI on this device.", color: "white", symbol: "sparkles", isMain: true)])
+        Workspace(bots: [Bot(id: UUID(), name: "Hive", purpose: "Your AI assistant, powered by a CLI on this device.", color: "white", symbol: "sparkles", isMain: true)])
     }
 
     /// Reject inconsistent identities before SwiftUI lists or dictionary construction
@@ -87,6 +126,8 @@ struct Workspace: Codable, Equatable, Sendable {
     // Kept as a source-compatible alias; no demo Bots or messages are seeded.
     static var preview: Workspace { .fresh }
 
+    /// Recognises the demo data older versions seeded. The names and texts below are what those versions wrote,
+    /// so they keep the old app name on purpose.
     mutating func migrateLegacyDemo() {
         guard schemaVersion != 2 else { return }
         let signatures = ["Grok Bot": "A place to bring it all together", "Soccer & Percussion": "Practice plans, one day at a time", "AI Brief": "Research worth your time", "STEMBound": "Make room for your next idea", "School": "Make a plan for the week ahead"]
@@ -123,6 +164,13 @@ struct Workspace: Codable, Equatable, Sendable {
             let value = bots.remove(at: main); bots.insert(value, at: 0)
         } else { bots.insert(Self.fresh.bots[0], at: 0) }
         schemaVersion = 2
+        renameDefaultMainBot()
+    }
+
+    /// 10.0: the main Bot's default name changed from "Grok Bot" to "Hive". Only an untouched default is renamed;
+    /// a main Bot the user named themselves keeps its name.
+    mutating func renameDefaultMainBot() {
+        for index in bots.indices where bots[index].isMain == true && bots[index].name == "Grok Bot" { bots[index].name = "Hive" }
     }
 
     private enum CodingKeys: String, CodingKey { case bots, entries, schemaVersion, sessions, sharedMemory, teamMessages }
@@ -137,6 +185,8 @@ struct Workspace: Codable, Equatable, Sendable {
         sessions = try values.decodeIfPresent([String:String].self, forKey: .sessions) ?? [:]
         sharedMemory = try values.decodeIfPresent([String].self, forKey: .sharedMemory)
         teamMessages = try values.decodeIfPresent([TeamMessage].self, forKey: .teamMessages)
+        // Older workspaces are renamed by migrateLegacyDemo, which still looks for the old name.
+        if schemaVersion == 2 { renameDefaultMainBot() }
     }
 }
 
@@ -148,7 +198,7 @@ enum IntegrationError: Error, LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .protocolUnverified: "The Grok Bot 0.78.1 client protocol has not been verified. No connection was attempted."
+        case .protocolUnverified: "The 0.78.1 client protocol has not been verified. No connection was attempted."
         case .insecureAddress: "Use an HTTPS address with a valid trusted certificate."
         case .invalidAddress: "Enter an HTTPS server address without credentials, a path, query, or fragment."
         case .loopbackAddress: "Localhost points to the device running this app. Use a reachable server hostname."

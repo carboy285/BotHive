@@ -35,7 +35,7 @@ struct MacRemoteAccessView: View {
                 }
                 if let date = remote.lastHeartbeat { Text("Last reached the account service \(date.formatted(date: .omitted, time: .standard)).").font(.caption).foregroundStyle(.secondary) }
             }
-            Text("Keep this Mac awake with OpenGrokBot running. Work continues if the phone disconnects. Commands and replies are encrypted between approved devices; Supabase relays them temporarily.").font(.callout).foregroundStyle(MacTheme.secondary)
+            Text("Keep this Mac awake with Bothive running. Work continues if the phone disconnects. Commands and replies are encrypted between approved devices; Supabase relays them temporarily.").font(.callout).foregroundStyle(MacTheme.secondary)
         }
     }
 }

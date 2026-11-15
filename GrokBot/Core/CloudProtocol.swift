@@ -7,6 +7,17 @@ enum CloudConfiguration {
     static let publishableKey = "sb_publishable_iDMMZU6icZ1Wjwrv_zkbLw_W4pr-nCK"
     static let callback = "opengrokbot://auth/callback"
 }
+/// 10.0: the project's public pages. The website is published from the gh-pages branch.
+enum LegalLinks {
+    static let site = URL(string: "https://carboy285.github.io/bothive/")!
+    static let privacy = URL(string: "https://carboy285.github.io/bothive/privacy.html")!
+    static let terms = URL(string: "https://carboy285.github.io/bothive/terms.html")!
+    static let licenses = URL(string: "https://carboy285.github.io/bothive/licenses.html")!
+    static let issues = URL(string: "https://github.com/carboy285/bothive/issues")!
+    /// Shown wherever the app introduces itself.
+    static let aiNotice = "Bots are AI. They can be wrong, and they act through the AI accounts you connect."
+    static let affiliation = "Bothive is an independent project, not affiliated with xAI, Anthropic, OpenAI, Google, Microsoft or Composio."
+}
 struct CloudUser: Codable, Sendable { let id: UUID; var email: String? }
 struct CloudSession: Codable, Sendable {
     var access_token: String
@@ -131,7 +142,7 @@ enum CloudError: LocalizedError {
         case .message(let text): text
         case .invalidPacket: "The device message could not be verified."
         case .resync: "Refreshing the desktop workspace…"
-        case .signedOut: "Sign in to your OpenGrokBot account."
+        case .signedOut: "Sign in to your Bothive account."
         case .timeout: "The hosting computer did not reply. Keep it awake, enable remote/phone access, and approve this viewing device after comparing its fingerprint."
         case .approvalRequired: "Your computer is connected, but this iPhone needs approval. On the computer, open Settings → Computer, compare this phone’s fingerprint, and choose Approve phone. Your Bots will load automatically."
         }

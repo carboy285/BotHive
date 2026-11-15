@@ -26,7 +26,7 @@ struct MacVaultView: View {
                     Text("Secure notes on this Mac").foregroundStyle(MacTheme.secondary)
                 }
             }
-            Text("Values are stored in your macOS Keychain. This is a local vault: Grok Bot cannot access it, and nothing is synced to its cloud Vault.")
+            Text("Values are stored in your macOS Keychain. This is a local vault: it stays on this Mac and is never synced.")
                 .font(.system(size: 14)).lineSpacing(5).foregroundStyle(MacTheme.secondary)
             if items.isEmpty {
                 HStack(spacing: 12) {

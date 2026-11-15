@@ -20,7 +20,7 @@
     if (!response.ok) return;
     const release = await response.json();
     const assets = release.assets || [];
-    const trusted = url => typeof url === 'string' && ['bothive', 'opengrokbot'].some(name => url.startsWith(`https://github.com/carboy285/${name}/releases/download/`));
+    const trusted = url => typeof url === 'string' && ['bothive', 'opengrokbot'].some(name => url.toLowerCase().startsWith(`https://github.com/carboy285/${name}/releases/download/`));
     const pick = (suffix, button, label) => {
       const asset = assets.find(item => item.name.endsWith(suffix) && trusted(item.browser_download_url));
       if (!asset) return;

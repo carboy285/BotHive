@@ -1,4 +1,0 @@
-# Development checks only. The iOS application has no third-party dependencies.
-tree-sitter==0.26.0
-tree-sitter-swift==0.7.4
-openstep-parser==2.0.3

@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>OpenGrokBot</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; media-src blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Bothive</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css"><script type="module" src="app.js"></script>
 </head>
@@ -12,10 +12,10 @@
   <aside class="sidebar">
     <header class="sidebar-header"><div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div><div class="sidebar-actions"><button class="circle" id="search-button" aria-label="Search Bots">⌕</button><button class="circle" id="new-button" aria-label="New Bot">＋</button></div></header>
     <div id="search-slot"></div><div id="primary-bot"></div><nav id="bot-list" aria-label="Bots"></nav>
-    <footer><button class="mode" id="status-button">Set up an AI CLI</button><div class="footer-actions"><button class="profile circle" id="profile-button" aria-label="Settings">You</button><button class="apps-pill glass" id="apps-button">Connect apps <span class="app-chips"><b>N</b><b>#</b><b>G</b></span></button></div></footer>
+    <footer><button class="mode" id="status-button">Set up an AI CLI</button><div class="footer-actions"><button class="profile circle" id="profile-button" aria-label="Settings">You</button><button class="apps-pill glass" id="apps-button">Connect apps</button></div></footer>
   </aside>
   <main class="conversation"><div class="window-actions"><button data-window="minimize" aria-label="Minimize">−</button><button data-window="maximize" aria-label="Maximize">□</button><button data-window="close" aria-label="Close">×</button></div><button id="chat-heading" class="chat-heading glass" type="button" aria-label="Bot details" aria-expanded="false" aria-controls="bot-inspector"></button><section id="messages" aria-label="Conversation"></section>
-    <div class="composer-area"><form id="composer" class="glass"><button type="button" id="attachment-button" class="plus" aria-label="Conversation actions">＋</button><textarea id="draft" rows="1" disabled placeholder="Message Grok Bot" aria-label="Message"></textarea><span class="microphone" title="Voice is not supported yet">♩</span><button type="submit" id="save-note" aria-label="Send message">↑</button></form><small>Uses your selected AI account</small></div>
+    <div class="composer-area"><div id="browser-pill" class="browser-pill" hidden></div><div id="attachment-chips" class="attachment-chips" hidden></div><form id="composer" class="glass"><button type="button" id="attachment-button" class="plus" aria-label="Conversation actions">＋</button><textarea id="draft" rows="1" disabled placeholder="Message Hive" aria-label="Message"></textarea><div class="composer-actions"><button type="button" id="mode-think" class="mode-chip" aria-pressed="false" title="Think: reason step by step before answering">Think</button><button type="button" id="mode-deep" class="mode-chip" aria-pressed="false" title="Deep Search: research the web with several searches and cite sources">Deep Search</button><button type="button" id="mic-button" class="mic" aria-label="Dictate a message" title="Dictate">🎤</button><button type="button" id="voice-button" class="voice-button" aria-label="Start voice mode" title="Voice mode">♫</button><button type="submit" id="save-note" aria-label="Send message">↑</button></div></form><small>Uses your selected AI account</small></div>
   </main>
   <aside id="bot-inspector" aria-label="Bot details panel" hidden></aside>
 </div>

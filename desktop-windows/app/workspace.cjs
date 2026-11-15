@@ -10,12 +10,14 @@ function validateWorkspace(value) {
   const ids = new Set();
   for (const bot of value.bots) {
     if (typeof bot.id !== 'string' || !/^[a-f0-9-]{36}$/i.test(bot.id) || ids.has(bot.id.toLowerCase()) || typeof bot.name !== 'string' || !bot.name.trim() || bot.name.length > 200 || typeof bot.purpose !== 'string' || bot.purpose.length > 2000 || !COLORS.has(bot.color)) throw new Error('Invalid Bot');
+    if(bot.hidden!=null&&typeof bot.hidden!=='boolean'||bot.unread!=null&&typeof bot.unread!=='boolean')throw new Error('Invalid Bot flags');
+    if(bot.voice!=null){const v=bot.voice;if(typeof v!=='object'||Array.isArray(v)||v.speaker!=null&&(typeof v.speaker!=='string'||v.speaker.length>20)||v.speed!=null&&(typeof v.speed!=='number'||!(v.speed>=0.75&&v.speed<=1.5))||v.language!=null&&(typeof v.language!=='string'||v.language.length>12))throw new Error('Invalid Bot voice');}
     if(bot.lastUsedAt!=null&&(typeof bot.lastUsedAt!=='string'||!Number.isFinite(Date.parse(bot.lastUsedAt))))throw new Error('Invalid recent use');
     if(bot.schedules!=null&&(!Array.isArray(bot.schedules)||bot.schedules.length>100||bot.schedules.some(x=>!require('./schedules.cjs').valid(x))))throw new Error('Invalid scheduled tasks');
     if(bot.isPinned!=null&&typeof bot.isPinned!=='boolean'||bot.folder!=null&&(typeof bot.folder!=='string'||bot.folder.length>80)||bot.sortOrder!=null&&(!Number.isInteger(bot.sortOrder)||bot.sortOrder<0||bot.sortOrder>10000))throw new Error('Invalid Bot organization');
     if(bot.appearance!=null){const a=bot.appearance;if(!COLORS.has(a.color)||!['circle','cloud','square','sparkle','flower','heart','clover','droplet','capsule','triangle','pebble','star','hexagon','fruit'].includes(a.shape)||a.imageData!=null&&(typeof a.imageData!=='string'||!/^[A-Za-z0-9+/]*={0,2}$/.test(a.imageData)||a.imageData.length>32768||Buffer.from(a.imageData,'base64').length>24576))throw new Error('Invalid Bot avatar');}
     if(bot.aiConfiguration!==undefined&&bot.aiConfiguration!==null){const config=bot.aiConfiguration;
-      if(!Array.isArray(config.providers)||config.providers.length>5||!['one','all'].includes(config.replyMode)||new Set(config.providers.map(x=>x.provider)).size!==config.providers.length||config.providers.some(x=>!['codex','claude','grok','opencode','gemini'].includes(x.provider)||typeof x.model!=='string'||x.model.length>200||/[\r\n]/.test(x.model))||(config.activeProvider!=null&&!config.providers.some(x=>x.provider===config.activeProvider)))throw new Error('Invalid provider settings');
+      if(!Array.isArray(config.providers)||config.providers.length>7||!['one','all'].includes(config.replyMode)||new Set(config.providers.map(x=>x.provider)).size!==config.providers.length||config.providers.some(x=>!['codex','claude','grok','opencode','gemini','ollama','lmstudio'].includes(x.provider)||typeof x.model!=='string'||x.model.length>200||/[\r\n]/.test(x.model))||(config.activeProvider!=null&&!config.providers.some(x=>x.provider===config.activeProvider)))throw new Error('Invalid provider settings');
     }
     if(!memory(bot.memory)||bot.memberIDs!==undefined&&(!Array.isArray(bot.memberIDs)||bot.memberIDs.length>8||bot.memberIDs.some(x=>typeof x!=='string')))throw new Error('Invalid Bot memory or group');
     ids.add(bot.id.toLowerCase());
@@ -23,6 +25,8 @@ function validateWorkspace(value) {
   const entries = new Set();
   for (const entry of value.entries) {
     if (typeof entry.id !== 'string' || entries.has(entry.id.toLowerCase()) || typeof entry.botID!=='string' || !ids.has(entry.botID.toLowerCase()) || !KINDS.has(entry.kind) || typeof entry.text !== 'string' || entry.text.length > (entry.kind === 'bot' ? 32 * 1024 * 1024 : 100000)) throw new Error('Invalid entry');
+    if(entry.reaction!=null&&(typeof entry.reaction!=='string'||[...entry.reaction].length>8))throw new Error('Invalid reaction');
+    if(entry.pinned!=null&&typeof entry.pinned!=='boolean')throw new Error('Invalid pin');
     if(entry.state!==undefined&&!['streaming','complete','stopped','failed'].includes(entry.state))throw new Error('Invalid message state');
     entries.add(entry.id.toLowerCase());
   }
@@ -53,12 +57,12 @@ function legacyWorkspace() {
     message(4, 'bot', 'What do you need help with for Wednesday’s Spanish test?')
   ] };
 }
-function previewWorkspace(){return {version:2,bots:[{id:randomUUID(),name:'Grok Bot',purpose:'Your AI assistant, powered by a CLI on this device.',color:'white',isMain:true}],entries:[],sessions:{}};}
+function previewWorkspace(){return {version:2,bots:[{id:randomUUID(),name:'Hive',purpose:'Your AI assistant, powered by a CLI on this device.',color:'white',isMain:true}],entries:[],sessions:{}};}
 function migrateWorkspace(value){
-  validateWorkspace(value);if(value.version===2)return value;
+  validateWorkspace(value);if(value.version===2)return renameDefaultMain(value);
   const fixtures=legacyWorkspace(),fixtureTexts=new Set(fixtures.entries.filter(x=>x.kind!=='user').map(x=>x.text));
   const seeded=new Set(value.bots.filter(bot=>fixtures.bots.some(x=>x.name===bot.name&&x.purpose===bot.purpose)).map(x=>x.id));
-  const main=value.bots.find(x=>x.name==='Grok Bot'&&x.purpose===fixtures.bots[0].purpose);
+  const main=value.bots.find(x=>(x.name==='Grok Bot'||x.name==='Hive')&&x.purpose===fixtures.bots[0].purpose);
   const legacyPrefix=main?value.entries.filter(x=>x.botID===main.id).slice(0,7):[];
   const fullFixture=legacyPrefix.length===7&&legacyPrefix.every((entry,index)=>entry.kind===fixtures.entries[index].kind&&entry.text===fixtures.entries[index].text);
   const discarded=new Set();
@@ -69,6 +73,8 @@ function migrateWorkspace(value){
   value.bots=value.bots.filter(x=>!discarded.has(x.id));
   value.entries=value.entries.filter(x=>!discarded.has(x.botID)&&!(seeded.has(x.botID)&&x.kind!=='user'&&fixtureTexts.has(x.text))&&!(fullFixture&&legacyPrefix.indexOf(x)===1&&x.kind==='user'&&x.text==='Sure')&&!(fullFixture&&legacyPrefix.indexOf(x)===5&&x.kind==='user'&&x.text==='Yea'));
   if(main){main.isMain=true;main.purpose=previewWorkspace().bots[0].purpose;}else value.bots.unshift(previewWorkspace().bots[0]);
-  value.version=2;value.sessions={};return value;
+  value.version=2;value.sessions={};return renameDefaultMain(value);
 }
+// 10.0: the main Bot's default name changed from "Grok Bot" to "Hive". A main Bot the user named themselves keeps its name.
+function renameDefaultMain(value){for(const bot of value.bots)if(bot.isMain===true&&bot.name==='Grok Bot')bot.name='Hive';return value;}
 module.exports = { validateWorkspace, previewWorkspace, migrateWorkspace };

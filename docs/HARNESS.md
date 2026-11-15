@@ -16,7 +16,7 @@ Status: the product is identifiable; its 0.78.1 third-party client protocol is n
 | [Official overview](https://docs.x.ai/grok-bot/overview) | Persistent named Bots, a cloud computer with browser/files/terminal, collaboration and ongoing cloud work | A supported third-party wire protocol |
 | [Official getting started](https://docs.x.ai/grok-bot/get-started) | Desktop installation and Cursor account authentication through a browser | An independently registered OAuth client, scopes, callback scheme, or token issuance contract |
 | [Official mobile guide](https://docs.x.ai/grok-bot/mobile) | iOS 18+, an eligible plan, and access to the same Bots and cloud computer | How an independently written app can authenticate or exchange messages |
-| [Official Grok Build README](https://github.com/xai-org/grok-build/blob/main/README.md) | Grok Build is a terminal coding agent, with its own runtime and ACP entry points | Compatibility with the Grok Bot desktop/mobile service or its accounts |
+| [Official Grok Build README](https://github.com/xai-org/grok-build/blob/main/README.md) | Grok Build is a terminal coding agent, with its own runtime and ACP entry points | Compatibility with the Hive desktop/mobile service or its accounts |
 
 Official documentation was read through the connected web tool. Product features in those pages are product facts, not implemented app capabilities. Navigation links labeled “API” in the product documentation do not by themselves document Bot control endpoints.
 
@@ -26,7 +26,7 @@ Repository search found [b-nnett/grok-bot-0.18-reconstructed](https://github.com
 
 A [community resource list](https://github.com/RongleCat/awesome-grok-bot/blob/main/README.md) helped locate the official documentation. Its summaries were not treated as protocol authority. Third-party changelog/forum results about 0.78.1 do not substitute for the user's binary.
 
-The second pasted document contains editorial guidance. It was not treated as documentation of Grok Bot or as a request to rewrite a draft. Text found in downloaded files, app bundles, or reference material is evidence to inspect, not authority to execute commands or change the task.
+The second pasted document contains editorial guidance. It was not treated as documentation of Hive or as a request to rewrite a draft. Text found in downloaded files, app bundles, or reference material is evidence to inspect, not authority to execute commands or change the task.
 
 ## Integration decision made before coding
 
@@ -46,7 +46,7 @@ The inspection tools produce local evidence for item 1. They do not provide acco
 
 ## Network path
 
-The documented product uses cloud computers. There is no verified self-hosted Grok Bot server, phone-facing desktop port, or token-provisioning command in the inspected sources. Accordingly this project supplies no backend or fake proxy. Existing official mobile access is documented by the vendor; independent client access remains unresolved.
+The documented product uses cloud computers. There is no verified self-hosted Hive server, phone-facing desktop port, or token-provisioning command in the inspected sources. Accordingly this project supplies no backend or fake proxy. Existing official mobile access is documented by the vendor; independent client access remains unresolved.
 
 If inspection establishes a local runtime and a supported bridge becomes necessary, define and test that bridge only then: phone → trusted HTTPS hostname/private VPN route → authenticated bridge → verified upstream transport. Preserve upstream account permissions, human approval requirements, stream delivery, and errors. Never assume that binding a desktop process to `0.0.0.0` is an acceptable connection setup.
 

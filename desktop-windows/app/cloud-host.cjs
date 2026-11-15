@@ -42,8 +42,8 @@ function open(local, peer, owner, packet, kind = 'request') {
   return JSON.parse(data.subarray(8).toString('utf8'));
 }
 class CloudHost {
-  constructor({ load, save, snapshot, execute, models, files, vm = async () => ({title:"VM not set up",url:"",imageData:null}), browser = async () => ({title:"Browser not open",url:"",imageData:null}), pins = () => [], applyPins = async () => {}, changed = () => {}, fetchImpl = fetch }) {
-    Object.assign(this, { load, save, snapshot, execute, models, files, browser, vm, pins, applyPins, changed, fetchImpl });
+  constructor({ load, save, snapshot, execute, models, files, vm = async () => ({title:"VM not set up",url:"",imageData:null}), browser = async () => ({title:"Browser not open",url:"",imageData:null}), vms = async () => [], vmResult = async () => { throw new Error('No such command.'); }, botPackage = async () => { throw new Error('This computer cannot copy Bots.'); }, bundle = async () => { throw new Error('This computer cannot share settings.'); }, hostSettings = async () => { throw new Error('This computer cannot report settings.'); }, pins = () => [], applyPins = async () => {}, changed = () => {}, fetchImpl = fetch }) {
+    Object.assign(this, { load, save, snapshot, execute, models, files, browser, botPackage, bundle, hostSettings, vm, vms, vmResult, pins, applyPins, changed, fetchImpl });
     this.data = { identities: {}, approvals: {}, receipts: [], pinPending: {} }; this.devices = []; this.phase = 'signed-out'; this.feedback = 'Sign in with the same account as your iPhone.'; this.generation = 0; this.accountGeneration = 0; this.enabled = false; this.refreshing = null; this.saveQueue = Promise.resolve();
   }
   get active() { return this.enabled && !!this.data.session; }
@@ -59,7 +59,7 @@ class CloudHost {
   transition(phase, feedback) { const different = phase !== this.phase || feedback !== this.feedback; this.phase = phase; this.feedback = feedback; if (different) this.changed(this.status()); }
   async restore() {
     try { const saved = await this.load(); if (saved) this.data = saved; this.data.identities ||= {}; this.data.approvals ||= {}; this.data.receipts ||= []; this.data.pinPending ||= {}; if (this.data.session && this.data.enabled) this.start(); else this.transition(this.data.session ? 'disabled' : 'signed-out', this.data.session ? 'Phone access is off.' : 'Sign in with the same account as your iPhone.'); if(this.data.session)this.startPreferences(); }
-    catch { this.transition('locked', 'Unlock Windows device encryption, then reopen OpenGrokBot to restore phone access.'); }
+    catch { this.transition('locked', 'Unlock Windows device encryption, then reopen Bothive to restore phone access.'); }
   }
   async raw(path, { body, method = 'POST', token, signal } = {}) {
     const response = await this.fetchImpl(BASE + path, { method, redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20000)]) : AbortSignal.timeout(20000), headers: { apikey: API_KEY, 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -91,6 +91,12 @@ class CloudHost {
     const old = this.data.session; this.preferencesAbort?.abort(); this.abort?.abort(); this.generation++; this.accountGeneration++; this.refreshing = null; this.enabled = false; this.devices = []; this.data.session = null; this.data.enabled = false; await this.persist(); this.transition('signed-out', 'Signed out on this computer.');
     if (old) this.raw('/auth/v1/logout?scope=local', { body: {}, token: old.access_token }).catch(() => {}); return this.status();
   }
+  // 10.0: deletes this account and everything the relay holds for it, then signs out here. Chats stay on this PC.
+  async deleteAccount() {
+    if (!this.data.session) throw new Error('Sign in first.');
+    await this.request('/rest/v1/rpc/opengrok_delete_account', {});
+    return this.signOut();
+  }
   async setEnabled(value) {
     if (!this.data.session) throw new Error('Sign in first.');
     if (value) { this.data.enabled = true; await this.persist(); this.start(); }
@@ -117,14 +123,19 @@ class CloudHost {
     const url = new URL(request.target, BASE);
     if (request.method === 'GET') {
       if (url.pathname === '/v1/state') { let snapshot = this.snapshot(); if(url.searchParams.get('overview')==='true'){const latest=new Map();for(const entry of snapshot.workspace.entries)latest.set(entry.botID,entry);snapshot={...snapshot,overview:true,revision:'overview-'+snapshot.revision,workspace:{...snapshot.workspace,sharedMemory:undefined,teamMessages:undefined,bots:snapshot.workspace.bots.map(({memory,schedules,...bot})=>bot),entries:snapshot.workspace.bots.map(bot=>latest.get(bot.id)).filter(Boolean).map(entry=>({...entry,text:entry.text.slice(0,1000)}))}};} return url.searchParams.get('since') === snapshot.revision ? { status: 204, body: '' } : this.response(200, { snapshot, removedEntries: [] }); }
+      if (url.pathname === '/v1/host-settings') return this.response(200, await this.hostSettings());
+      if (url.pathname === '/v1/bundle') return this.response(200, await this.bundle());
+      if (url.pathname === '/v1/bot-package') return this.response(200, await this.botPackage(url.searchParams.get('bot')));
       if (url.pathname === '/v1/vm') return this.response(200, await this.vm(url.searchParams.get('bot')));
+      if (url.pathname === '/v1/vms') return this.response(200, await this.vms());
+      if (url.pathname === '/v1/vm-result') return this.response(200, await this.vmResult(url.searchParams.get('id')));
       if (url.pathname === '/v1/browser') return this.response(200, await this.browser(url.searchParams.get('bot')));
       if (url.pathname === '/v1/models') return this.response(200, await this.models(url.searchParams.get('provider')));
       if (url.pathname === '/v1/files') return this.response(200, await this.files(url.searchParams.get('bot')));
     }
     if (request.method !== 'POST' || url.pathname !== '/v1/command') return this.response(404, { error: 'Unknown endpoint.' });
-    if (typeof request.body !== 'string' || request.body.length > 174764) throw new Error('Invalid command size.');
-    const bytes = Buffer.from(request.body, 'base64'); if (bytes.length > 131072) throw new Error('Command too large.');
+    if (typeof request.body !== 'string' || request.body.length > 4700000) throw new Error('Invalid command size.');
+    const bytes = Buffer.from(request.body, 'base64'); if (bytes.length > 3500000) throw new Error('Command too large.');
     const command = JSON.parse(bytes.toString('utf8')); if (!uuid(command.requestID)) throw new Error('Invalid command.');
     const key = lower(this.data.session.user.id) + '|' + lower(command.requestID);
     if (!this.data.receipts.includes(key)) { await this.execute(command); this.data.receipts = [...this.data.receipts.slice(-255), key]; await this.persist(); }
@@ -150,7 +161,13 @@ class CloudHost {
           if (!this.devices.some(x => lower(x.id) === lower(packet.sender))) await this.sync();
           const peer = this.devices.find(x => lower(x.id) === lower(packet.sender) && x.kind === 'controller');
           if (!peer) { await this.ack(packet); continue; }
-          let request; try { request = open(this.local, peer, this.data.session.user.id, packet); } catch { await this.ack(packet); continue; }
+          const skew = Math.round((Date.now() - Date.parse(packet.created_at)) / 1000);
+          if (Number.isFinite(skew) && Math.abs(skew) >= 90) {
+            // The packet would be rejected as expired or from the future, so the viewer would just see "the hosting computer did not reply".
+            this.clockNote = `This computer’s clock is about ${Math.abs(skew)} seconds ${skew > 0 ? 'ahead of' : 'behind'} the account server, so phone and computer requests are ignored. Turn on Windows Settings → Time & language → Date & time → Set time automatically, then press Sync now.`;
+            this.transition('clock', this.clockNote); await this.ack(packet); continue;
+          }
+          let request; try { request = open(this.local, peer, this.data.session.user.id, packet); this.clockNote = ''; } catch { await this.ack(packet); continue; }
           recent = Date.now(); this.lastRequest = new Date().toISOString();
           let response;
           if (!this.approved(peer)) { this.transition('approval-required', `Approve ${peer.name} after comparing the fingerprint shown on the iPhone.`); response = this.response(403, { error: 'Approve this phone in Windows Settings → Computer. Compare its fingerprint before approving.' }); }
@@ -161,7 +178,7 @@ class CloudHost {
           await this.request('/rest/v1/rpc/opengrok_send', { packet_id: packet.id, from_device: this.local.id, to_device: peer.id, packet_kind: 'response', payload }); await this.ack(packet);
           if (response.status !== 403) this.transition('online', 'Connected. Approved phones can use this computer’s Bots.');
         }
-        if (!packets.length && this.phase !== 'approval-required') this.transition('online', 'Phone access is ready. Keep this computer awake.');
+        if (!packets.length && this.phase !== 'approval-required' && !this.clockNote) this.transition('online', 'Phone access is ready. Keep this computer awake.');
         backoff = 1000;
       } catch (error) { if (generation !== this.generation) return; this.transition('offline', error.message + ' Retrying automatically.'); heartbeat = 0; wait = backoff; backoff = Math.min(15000, backoff * 2); }
       await new Promise(resolve => { const timer = setTimeout(done, wait); const signal = this.abort.signal; function done() { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); } signal.addEventListener('abort', done, { once: true }); if (signal.aborted) done(); });

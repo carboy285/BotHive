@@ -1,6 +1,6 @@
-# Set up Grok Bot
+# Set up Hive
 
-Install the Mac DMG or Windows Setup EXE from [Downloads](DOWNLOADS.md). OpenGrokBot opens a six-step guide on first launch. Open it again from the CLI status in the sidebar or Settings.
+Install the Mac DMG or Windows Setup EXE from [Downloads](DOWNLOADS.md). Bothive opens a six-step guide on first launch. Open it again from the CLI status in the sidebar or Settings.
 
 ## Choose and install an AI CLI
 
@@ -35,7 +35,7 @@ The project key and MCP capability URL are stored securely on the device. The pr
 
 ## Start chatting
 
-The workspace starts with only **Grok Bot** and an empty conversation. Type a message and press **Enter** to send. Use **Shift+Enter** for a new line.
+The workspace starts with only **Hive** and an empty conversation. Type a message and press **Enter** to send. Use **Shift+Enter** for a new line.
 
 Click the Bot’s name at the top to open its side panel. In **Details**, enable the providers you want available and choose **one active provider**. Select its model from the local catalog (Codex/OpenCode), or enter an exact model ID and select **Apply**. A blank model uses the CLI’s default. Model access follows that CLI’s configured account. Only the active provider/model answers, and provider/model changes keep separate saved sessions.
 
@@ -53,4 +53,4 @@ The application is free and open source. AI inference and Composio usage follow 
 
 iOS controls your Mac's existing workspace. In Mac **Settings → Computer**, create and confirm an email account, sign in, and enable **Allow phone access**. Sign into the same account on your phone. Compare its fingerprint on both devices and choose **Approve phone** on your Mac, then select the Mac on the phone. No VPN or pairing link is needed.
 
-Keep the Mac awake with OpenGrokBot running. Work continues if the phone disconnects. See [Remote access](REMOTE_ACCESS.md) for accounts, SMTP requirements, device revocation and encrypted relay details. Use matching Mac/iOS 0.6.0 versions; Windows 0.5.0 does not support this account flow yet.
+Keep the Mac awake with Bothive running. Work continues if the phone disconnects. See [Remote access](REMOTE_ACCESS.md) for accounts, SMTP requirements, device revocation and encrypted relay details. Use matching Mac/iOS 0.6.0 versions; Windows 0.5.0 does not support this account flow yet.

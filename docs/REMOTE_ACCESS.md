@@ -6,7 +6,7 @@ Use the **0.7.0 desktop app and matching iOS sources together**. The iPhone cont
 
 1. Finish the Mac's AI CLI setup. Optional Composio accounts and credentials stay on the Mac.
 2. Open **Mac Settings → Computer → iPhone remote control**. Create an email/password account, confirm the email, and sign in. You can use the same account on your phone; don't create two separate accounts.
-3. Phone access starts on sign-in unless you previously turned **Allow phone access** off. If it is off, turn it on in **Settings → Computer**. Keep the Mac awake with OpenGrokBot running.
+3. Phone access starts on sign-in unless you previously turned **Allow phone access** off. If it is off, turn it on in **Settings → Computer**. Keep the Mac awake with Bothive running.
 4. On the iPhone, open **Connect Desktop**, sign into the same account, and find your Mac.
 5. The Mac prompts when the phone requests access. Compare the fingerprint in that prompt with the one on the iPhone, then click **Approve phone**. You can also approve it in **Mac Settings → Computer**. The iPhone shows an approval message until the Mac grants access and retries automatically.
 6. Its actual Bots and chat history appear automatically when there is one available Mac, even if older offline installations remain registered. A saved Mac is preferred; with multiple available Macs, choose one in **Connect Desktop**. Verify the Mac's fingerprint on the phone too.
@@ -46,3 +46,10 @@ Only the host can run AI, install/sign into CLIs, configure Composio or manage t
 Account sign-in replaces pairing keys on Apple platforms. Sign in again and approve your phone; old pairing links are not imported. The new Mac build does not invoke Tailscale or change your existing Tailscale configuration. If you enabled a Serve/Funnel route with 0.5.0, disable it from that version before upgrading, or remove that specific app route in Tailscale. Other Tailscale services must be preserved.
 
 For physical iPhone installation, see [Device setup](DEVICE_SETUP.md). Physical-device roaming and live email delivery require your accounts and have not been verified by the automated fixtures; see [Verification](VERIFICATION.md).
+
+## Faster replies (0.9.9)
+
+Apply `supabase/migrations/20261114200000_relay_wake.sql` to the account database (Supabase SQL editor, or `supabase db push`). When a phone or computer stores a packet, the database pings the recipient on a private Realtime channel named `opengrok:<device id>`, and the recipient checks its mailbox right away instead of on a 250–700 ms timer. The ping is an empty JSON object: messages still travel only through the encrypted mailbox. Only the account that owns a device can listen on its channel. `supabase/verify-wake.sql` checks all of this in a transaction that is rolled back.
+
+Without the migration, 0.9.9 still answers faster than 0.9.8 (requests no longer queue behind each other, and clearing a handled packet doesn't hold up the reply), and both apps keep polling on their old timers.
+

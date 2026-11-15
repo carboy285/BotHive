@@ -24,6 +24,6 @@ Apple references: [Developer Mode](https://developer.apple.com/documentation/xco
 
 ## Verify the interface on the phone
 
-The roster should match your desktop, starting with only Grok Bot if the host is new. Send a message and verify its reply appears on both screens. Change the active model, create a specialist, stop a response, and confirm both screens update. Disconnect the phone while a desktop task runs, then reconnect and verify work continued. Revoke the phone on the Mac and verify it loses control until approved again. No chat reply is simulated. Check VoiceOver, larger text, dark/light appearance, and reduced motion.
+The roster should match your desktop, starting with only Hive if the host is new. Send a message and verify its reply appears on both screens. Change the active model, create a specialist, stop a response, and confirm both screens update. Disconnect the phone while a desktop task runs, then reconnect and verify work continued. Revoke the phone on the Mac and verify it loses control until approved again. No chat reply is simulated. Check VoiceOver, larger text, dark/light appearance, and reduced motion.
 
 For unit tests select an installed iPhone simulator and choose **Product > Test**. The test target includes persistence, migration, structured CLI events, and Keychain checks. Passing simulator and contract tests is separate from physical-device signing and live email delivery and physical-phone Wi-Fi/cellular roaming checks.

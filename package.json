@@ -1,9 +1,9 @@
 {
   "name": "opengrokbot-windows",
-  "version": "0.7.4",
+  "version": "10.0.0",
   "private": true,
   "description": "Free desktop chat for local AI CLIs with optional Composio tools",
-  "author": "OpenGrokBot contributors",
+  "author": "Bothive contributors",
   "license": "MIT",
   "main": "desktop-windows/app/main.cjs",
   "scripts": {
@@ -12,7 +12,9 @@
     "dist:windows": "electron-builder --win nsis --x64 --config scripts/desktop-build.cjs --publish never",
     "preview:desktop": "python3 -m http.server 4173 --bind 127.0.0.1 --directory desktop-windows/renderer",
     "test:ui": "node scripts/test-desktop-ui.cjs",
-    "test:cloud": "node scripts/test-cloud-db.cjs"
+    "test:cloud": "node scripts/test-cloud-db.cjs",
+    "test:heads-ups": "node scripts/test-heads-ups-main.cjs && node scripts/test-heads-ups-ui.cjs",
+    "test:web": "node scripts/test-web-access.cjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.14",
@@ -22,14 +24,26 @@
   },
   "build": {
     "appId": "org.opengrokbot.windows",
-    "productName": "OpenGrokBot",
+    "productName": "Bothive",
+    "executableName": "OpenGrokBot",
+    "extraResources": [
+      { "from": "THIRD_PARTY_NOTICES.md", "to": "THIRD_PARTY_NOTICES.md" },
+      { "from": "LICENSE", "to": "LICENSE.txt" }
+    ],
     "directories": {
       "output": "artifacts/windows"
     },
     "files": [
       "desktop-windows/app/**/*",
       "desktop-windows/renderer/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/@napi-rs/**",
+      "!node_modules/pdfjs-dist/web/**",
+      "!node_modules/pdfjs-dist/build/**",
+      "!node_modules/pdfjs-dist/types/**",
+      "!node_modules/pdfjs-dist/image_decoders/**",
+      "!node_modules/pdfjs-dist/legacy/web/**",
+      "!node_modules/pdfjs-dist/legacy/image_decoders/**"
     ],
     "win": {
       "target": [
@@ -45,7 +59,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "artifactName": "OpenGrokBot-${version}-Windows-${arch}-Setup.${ext}",
+      "artifactName": "Bothive-${version}-Windows-${arch}-Setup.${ext}",
       "installerIcon": "desktop-windows/app/icon.ico",
       "uninstallerIcon": "desktop-windows/app/icon.ico"
     },
@@ -53,5 +67,8 @@
       "desktop-windows/app/composio-bridge.cjs",
       "desktop-windows/app/composio.cjs"
     ]
+  },
+  "dependencies": {
+    "pdfjs-dist": "4.10.38"
   }
 }

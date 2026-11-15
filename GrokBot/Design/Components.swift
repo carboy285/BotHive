@@ -249,3 +249,40 @@ struct PhoneApprovalCard: View {
         .accessibilityElement(children: .contain)
     }
 }
+
+// MARK: - Press feedback (10.1)
+// Apple's fluid-interface rule: respond on touch-down, not on release, and let go with a critically damped spring.
+
+/// A list row that highlights the instant a finger lands and settles back with a spring.
+struct PressableRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        PressableRowBody(configuration: configuration)
+    }
+    private struct PressableRowBody: View {
+        let configuration: ButtonStyle.Configuration
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+        var body: some View {
+            configuration.label
+                .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.primary.opacity(configuration.isPressed ? 0.06 : 0)).padding(.horizontal, 10))
+                .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
+                .animation(configuration.isPressed ? .easeOut(duration: 0.08) : .spring(response: 0.35, dampingFraction: 1), value: configuration.isPressed)
+        }
+    }
+}
+
+/// A tile (a pinned Bot) that shrinks slightly under the finger and springs back.
+struct PressableTileStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        PressableTileBody(configuration: configuration)
+    }
+    private struct PressableTileBody: View {
+        let configuration: ButtonStyle.Configuration
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+        var body: some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed && !reduceMotion ? 0.95 : 1)
+                .opacity(configuration.isPressed ? 0.85 : 1)
+                .animation(configuration.isPressed ? .easeOut(duration: 0.08) : .spring(response: 0.35, dampingFraction: 0.8), value: configuration.isPressed)
+        }
+    }
+}

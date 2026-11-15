@@ -31,7 +31,7 @@ const {previewWorkspace}=require('../desktop-windows/app/workspace.cjs');
    window.pushWorkspace=next=>{workspace=next;listener({workspace:next,running:[]});};
   },seed);
   await page.goto('http://127.0.0.1:4175');
-  await page.locator('#chat-heading').getByText('Grok Bot',{exact:true}).waitFor();
+  await page.locator('#chat-heading').getByText('Hive',{exact:true}).waitFor();
 
   // Automatic turns show their short label, never the raw prompt with email text.
   await page.getByText('Checked your inbox · 2 new emails',{exact:true}).waitFor();
@@ -75,14 +75,14 @@ const {previewWorkspace}=require('../desktop-windows/app/workspace.cjs');
   await page.waitForTimeout(450);
   await page.screenshot({animations:'disabled',path:'artifacts/visuals-web/heads-ups-banner.png'});
   await page.locator('.heads-up-open').click();
-  await page.locator('#chat-heading').getByText('Grok Bot',{exact:true}).waitFor();
+  await page.locator('#chat-heading').getByText('Hive',{exact:true}).waitFor();
   assert.equal(await page.locator('.primary-card.unread').count(),0);
   assert.equal(await page.locator('.heads-up-banner.visible').count(),0);
 
   // Settings: off by default, sub-options disabled until the master switch is on.
   await page.getByRole('button',{name:'Settings',exact:true}).click();
   await page.getByRole('button',{name:'Heads-ups',exact:true}).click();
-  await page.getByRole('heading',{name:'Let Grok Bot reach out first'}).waitFor();
+  await page.getByRole('heading',{name:'Let Hive reach out first'}).waitFor();
   assert.equal(await page.getByRole('switch',{name:'Heads-ups'}).isChecked(),false);
   assert.equal(await page.getByRole('switch',{name:'Important new email'}).isDisabled(),true);
   await page.getByRole('switch',{name:'Heads-ups'}).click();
@@ -120,7 +120,7 @@ const {previewWorkspace}=require('../desktop-windows/app/workspace.cjs');
   // Two heads-ups at once become one banner; a quick upward flick sends it away without opening the chat.
   await page.locator('#bot-list .bot-row').filter({hasText:'School'}).click();
   await page.evaluate(seed=>{for(const [id,text] of [['f1','Lunch moved to 1 PM.'],['f2','Your package is out for delivery']])seed.entries.push({id,botID:seed.bots[0].id,kind:'bot',text,state:'complete',provider:'Heads-up',headsUp:{kind:id==='f1'?'moved':'delivery',title:text},date:new Date().toISOString()});window.pushWorkspace(seed);},seed);
-  await page.locator('.heads-up-banner.visible').getByText('Grok Bot · 2 heads-ups').waitFor();
+  await page.locator('.heads-up-banner.visible').getByText('Hive · 2 heads-ups').waitFor();
   await page.waitForTimeout(450);
   const box=await page.locator('.heads-up-banner').boundingBox();
   await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();

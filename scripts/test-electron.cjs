@@ -15,7 +15,7 @@ const {_electron:electron}=require('@playwright/test');const fs=require('node:fs
  let answer='Native CLI reply 🌎';const block=value=>String.fromCharCode(96).repeat(3)+'opengrokbot-action\\n'+JSON.stringify(value)+'\\n'+String.fromCharCode(96).repeat(3);
  if(text.startsWith('You are Travel.'))answer='Specialist weekend plan';
  else if(text.endsWith('Create team fixture'))answer='Creating a specialist.\\n'+block({action:'create_bot',name:'Travel',purpose:'Plan trips without booking'})+'\\n'+block({action:'message_bot',to:'Travel',text:'Suggest a trip'});
- else if(text.endsWith('Create group fixture'))answer=block({action:'create_group',name:'Project',members:['Grok Bot','Travel']});
+ else if(text.endsWith('Create group fixture'))answer=block({action:'create_group',name:'Project',members:['Hive','Travel']});
  console.log(JSON.stringify({type:'item.completed',item:{id:'answer',type:'agent_message',text:answer}}));});}
  `);
  await fs.writeFile(path.join(directory,'settings.json'),JSON.stringify({complete:false,selected:'',overrides:{codex:path.join(npmDir,'codex.cmd')},composioUserID:'native-test-unique-user'}));

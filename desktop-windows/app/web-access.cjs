@@ -1,5 +1,5 @@
 'use strict';
-// Web access (0.9.7): use OpenGrokBot from another device's browser, over your Wi-Fi or Tailscale.
+// Web access (0.9.7): use Bothive from another device's browser, over your Wi-Fi or Tailscale.
 // The same interface is served with a small bridge that turns its calls into HTTPS/HTTP requests to this app.
 // Only channels that are safe from another device are reachable; everything else stays on this computer.
 
@@ -53,7 +53,7 @@ function bridgeScript(table) {
   const invoke = Object.fromEntries(Object.entries(table.invoke).filter(([, channel]) => INVOKE.has(channel)));
   const listen = Object.fromEntries(Object.entries(table.listen).filter(([, channel]) => EVENTS.has(channel)));
   return `'use strict';
-// Web access bridge: the desktop app's calls become requests to the computer that runs OpenGrokBot.
+// Web access bridge: the desktop app's calls become requests to the computer that runs Bothive.
 (() => {
   const invokeTable = ${JSON.stringify(invoke)}, listenTable = ${JSON.stringify(listen)};
   const listeners = {};
@@ -62,7 +62,7 @@ function bridgeScript(table) {
       const response = await fetch('/api/invoke', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-OGB-Request': '1' }, body: JSON.stringify({ channel, args }) });
       if (response.status === 401) { location.href = '/login'; return { ok: false, error: 'Signed out. Sign in again.' }; }
       return await response.json();
-    } catch { return { ok: false, error: 'The computer running OpenGrokBot could not be reached.' }; }
+    } catch { return { ok: false, error: 'The computer running Bothive could not be reached.' }; }
   };
   const desktop = { webAccess: true };
   for (const [name, channel] of Object.entries(invokeTable)) desktop[name] = (...args) => call(channel, args);
@@ -71,13 +71,13 @@ function bridgeScript(table) {
   const open = url => { window.open(url, '_blank', 'noopener,noreferrer'); return Promise.resolve({ ok: true }); };
   desktop.openDocs = open; desktop.openLink = open; desktop.openUpdate = open; desktop.headsUpJoin = open;
   desktop.windowAction = () => Promise.resolve({ ok: true });
-  desktop.export = async text => { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); link.download = 'OpenGrokBot-conversation.txt'; link.click(); URL.revokeObjectURL(link.href); return { ok: true, value: true }; };
+  desktop.export = async text => { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); link.download = 'Bothive-conversation.txt'; link.click(); URL.revokeObjectURL(link.href); return { ok: true, value: true }; };
   desktop.botMedia = async (bot, file) => {
     const response = await fetch('/api/media?bot=' + encodeURIComponent(bot) + '&file=' + encodeURIComponent(file), { credentials: 'same-origin', headers: { 'X-OGB-Request': '1' } });
     if (!response.ok) return { ok: true, value: null };
     return { ok: true, value: { type: response.headers.get('content-type') || 'video/mp4', data: await response.arrayBuffer() } };
   };
-  const unavailable = () => Promise.resolve({ ok: false, error: 'Open OpenGrokBot on the computer that runs it to do this.' });
+  const unavailable = () => Promise.resolve({ ok: false, error: 'Open Bothive on the computer that runs it to do this.' });
   window.desktop = new Proxy(desktop, { get: (target, name) => name in target ? target[name] : (typeof name === 'string' && /^[a-z]\\w*$/.test(name) && !name.startsWith('on') ? unavailable : undefined) });
   const connect = () => {
     const events = new EventSource('/api/events');
@@ -99,8 +99,8 @@ button{font:inherit;font-weight:600;border:0;border-radius:99px;padding:12px;bac
 .error{color:#ff453a}`;
 function loginPage(message = '') {
   const escape = value => String(value).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenGrokBot · Sign in</title><link rel="stylesheet" href="/login.css"></head>
-<body><form method="post" action="/login"><h1>OpenGrokBot</h1><p>Sign in with the username and password set in Settings → Web access on the computer that runs it.</p>${message ? `<p class="error" role="alert">${escape(message)}</p>` : ''}
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bothive · Sign in</title><link rel="stylesheet" href="/login.css"></head>
+<body><form method="post" action="/login"><h1>Bothive</h1><p>Sign in with the username and password set in Settings → Web access on the computer that runs it.</p>${message ? `<p class="error" role="alert">${escape(message)}</p>` : ''}
 <label>Username<input name="username" autocomplete="username" required autofocus></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button type="submit">Sign in</button></form></body></html>`;
 }
 
@@ -215,7 +215,7 @@ class WebAccess {
   async invoke(req, res) {
     if (req.method !== 'POST' || req.headers['x-ogb-request'] !== '1' || !this.sameOrigin(req)) return this.send(res, 403, 'application/json', '{"ok":false,"error":"Not allowed."}');
     let request; try { request = JSON.parse(await this.body(req, 32 * 1024 * 1024)); } catch (error) { return this.send(res, error.status || 400, 'application/json', '{"ok":false,"error":"Invalid request."}'); }
-    if (!request || typeof request.channel !== 'string' || !INVOKE.has(request.channel) || !Array.isArray(request.args) || request.args.length > 8) return this.send(res, 403, 'application/json', '{"ok":false,"error":"Open OpenGrokBot on the computer that runs it to do this."}');
+    if (!request || typeof request.channel !== 'string' || !INVOKE.has(request.channel) || !Array.isArray(request.args) || request.args.length > 8) return this.send(res, 403, 'application/json', '{"ok":false,"error":"Open Bothive on the computer that runs it to do this."}');
     const result = await this.deps.invoke(request.channel, request.args);
     return this.send(res, 200, 'application/json', JSON.stringify(result));
   }

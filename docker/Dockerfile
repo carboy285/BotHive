@@ -1,4 +1,4 @@
-# OpenGrokBot in a container, used from a browser through Web access. EXPERIMENTAL: not yet built or run by the maintainers.
+# Bothive in a container, used from a browser through Web access. EXPERIMENTAL: not yet built or run by the maintainers.
 # Build:  docker build -f docker/Dockerfile -t opengrokbot .
 # Run:    see docs/DOCKER.md (a password is required and the port should stay on your own network).
 FROM node:22-bookworm-slim

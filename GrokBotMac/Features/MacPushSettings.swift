@@ -12,7 +12,7 @@ struct MacPushSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Toggle("Send a notification to my phone when a Bot finishes or needs me", isOn: $enabled).toggleStyle(.switch)
-            Text("This uses the free ntfy app, so there is no account to make. Install ntfy on your iPhone, tap +, and subscribe to this topic. Notifications are sent only while OpenGrokBot is in the background.")
+            Text("This uses the free ntfy app, so there is no account to make. Install ntfy on your iPhone, tap +, and subscribe to this topic. Notifications are sent only while Bothive is in the background.")
                 .font(.system(size: 12)).lineSpacing(3).foregroundStyle(MacTheme.secondary)
             HStack {
                 Text(topic).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
@@ -29,7 +29,7 @@ struct MacPushSettings: View {
                 MacPillButton(title: "Send a test") {
                     Task {
                         guard MacPush.validatedServer(server) != nil else { feedback = "Use an https:// server address such as https://ntfy.sh."; return }
-                        feedback = await MacPush.send(title: "OpenGrokBot", body: "Notifications are working.", force: true) ? "Sent. Check your phone." : "The server did not accept it."
+                        feedback = await MacPush.send(title: "Bothive", body: "Notifications are working.", force: true) ? "Sent. Check your phone." : "The server did not accept it."
                     }
                 }
                 if let feedback { Text(feedback).font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }

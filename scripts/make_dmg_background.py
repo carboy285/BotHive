@@ -150,7 +150,7 @@ def draw_caption(draw, scale):
             break
         except OSError:
             continue
-    draw.text((WIDTH / 2 * scale, 300 * scale), 'Drag OpenGrokBot into Applications', fill=(150, 150, 156, 255),
+    draw.text((WIDTH / 2 * scale, 300 * scale), 'Drag Bothive into Applications', fill=(150, 150, 156, 255),
               font=font or ImageFont.load_default(size), anchor='mm')
 
 

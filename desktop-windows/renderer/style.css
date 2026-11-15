@@ -193,7 +193,7 @@
 .handoff-shot{min-height:200px;max-height:300px;border-radius:12px;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden;padding:12px}
 .handoff-shot img{max-width:100%;max-height:280px;border-radius:10px}
 
-/* ===== 0.9.2 · Grok Bot UI pass: deeper palette, roster that shows state, quieter chat, cards for approvals and questions ===== */
+/* ===== 0.9.2 · UI pass: deeper palette, roster that shows state, quieter chat, cards for approvals and questions ===== */
 :root{--bg:#0f0f10;--side:#0a0a0b;--panel:#1c1c1e;--raised:#262628;--text:#ececee;--muted:#8e8e93;--faint:#5c5c61;--line:#ffffff12;--user:#2c2c2e;--working:#a07bff;--attention:#ff9f0a;--unread:#2f7bff;--danger:#ff453a;font-family:'Segoe UI Variable Text','Segoe UI Variable','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif}
 :root[data-theme=light]{--bg:#fcfcfc;--side:#f5f5f6;--panel:#f0f0f2;--raised:#e6e6e9;--text:#111;--muted:#6c6c70;--faint:#a4a4a9;--line:#0000000f;--user:#e5e5ea}
 body{-webkit-font-smoothing:antialiased;letter-spacing:-.003em}
@@ -513,7 +513,7 @@ body.native-titlebar .chat-heading{-webkit-app-region:no-drag;z-index:4}
 .heads-up-menu-item { display:block; width:100%; text-align:left; padding:9px 12px; border-radius:9px; font-size:14px; }
 .heads-up-menu-item:hover, .heads-up-menu-item:focus-visible { background:var(--raised); outline:none; }
 
-/* Today: pinned at the top of Grok Bot's chat, content scrolls under it. */
+/* Today: pinned at the top of Hive's chat, content scrolls under it. */
 .today-card { position:sticky; top:0; z-index:3; display:grid; gap:6px; margin:0 auto 22px; max-width:1000px; padding:12px 16px; border-radius:18px; background:color-mix(in srgb,var(--panel) 80%,transparent); }
 .today-next { display:flex; align-items:center; gap:10px; min-width:0; }
 .today-label { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
@@ -583,7 +583,7 @@ html.web .traffic, html.web .window-actions { display:none; }
   .settings-page { padding:20px 16px; }
 }
 @media (prefers-reduced-motion:reduce) { #workspace > .sidebar, .sidebar-scrim { transition:none; } }
-/* App connections are managed on the computer that runs OpenGrokBot. */
+/* App connections are managed on the computer that runs Bothive. */
 html.web #apps-button { display:none; }
 
 /* Answer modes (Think, Deep Search): small toggles beside the dictation button. */

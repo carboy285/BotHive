@@ -57,12 +57,12 @@ function legacyWorkspace() {
     message(4, 'bot', 'What do you need help with for Wednesday’s Spanish test?')
   ] };
 }
-function previewWorkspace(){return {version:2,bots:[{id:randomUUID(),name:'Grok Bot',purpose:'Your AI assistant, powered by a CLI on this device.',color:'white',isMain:true}],entries:[],sessions:{}};}
+function previewWorkspace(){return {version:2,bots:[{id:randomUUID(),name:'Hive',purpose:'Your AI assistant, powered by a CLI on this device.',color:'white',isMain:true}],entries:[],sessions:{}};}
 function migrateWorkspace(value){
-  validateWorkspace(value);if(value.version===2)return value;
+  validateWorkspace(value);if(value.version===2)return renameDefaultMain(value);
   const fixtures=legacyWorkspace(),fixtureTexts=new Set(fixtures.entries.filter(x=>x.kind!=='user').map(x=>x.text));
   const seeded=new Set(value.bots.filter(bot=>fixtures.bots.some(x=>x.name===bot.name&&x.purpose===bot.purpose)).map(x=>x.id));
-  const main=value.bots.find(x=>x.name==='Grok Bot'&&x.purpose===fixtures.bots[0].purpose);
+  const main=value.bots.find(x=>(x.name==='Grok Bot'||x.name==='Hive')&&x.purpose===fixtures.bots[0].purpose);
   const legacyPrefix=main?value.entries.filter(x=>x.botID===main.id).slice(0,7):[];
   const fullFixture=legacyPrefix.length===7&&legacyPrefix.every((entry,index)=>entry.kind===fixtures.entries[index].kind&&entry.text===fixtures.entries[index].text);
   const discarded=new Set();
@@ -73,6 +73,8 @@ function migrateWorkspace(value){
   value.bots=value.bots.filter(x=>!discarded.has(x.id));
   value.entries=value.entries.filter(x=>!discarded.has(x.botID)&&!(seeded.has(x.botID)&&x.kind!=='user'&&fixtureTexts.has(x.text))&&!(fullFixture&&legacyPrefix.indexOf(x)===1&&x.kind==='user'&&x.text==='Sure')&&!(fullFixture&&legacyPrefix.indexOf(x)===5&&x.kind==='user'&&x.text==='Yea'));
   if(main){main.isMain=true;main.purpose=previewWorkspace().bots[0].purpose;}else value.bots.unshift(previewWorkspace().bots[0]);
-  value.version=2;value.sessions={};return value;
+  value.version=2;value.sessions={};return renameDefaultMain(value);
 }
+// 10.0: the main Bot's default name changed from "Grok Bot" to "Hive". A main Bot the user named themselves keeps its name.
+function renameDefaultMain(value){for(const bot of value.bots)if(bot.isMain===true&&bot.name==='Grok Bot')bot.name='Hive';return value;}
 module.exports = { validateWorkspace, previewWorkspace, migrateWorkspace };

@@ -6,7 +6,7 @@ Use the **0.7.0 desktop app and matching iOS sources together**. The iPhone cont
 
 1. Finish the Mac's AI CLI setup. Optional Composio accounts and credentials stay on the Mac.
 2. Open **Mac Settings → Computer → iPhone remote control**. Create an email/password account, confirm the email, and sign in. You can use the same account on your phone; don't create two separate accounts.
-3. Phone access starts on sign-in unless you previously turned **Allow phone access** off. If it is off, turn it on in **Settings → Computer**. Keep the Mac awake with OpenGrokBot running.
+3. Phone access starts on sign-in unless you previously turned **Allow phone access** off. If it is off, turn it on in **Settings → Computer**. Keep the Mac awake with Bothive running.
 4. On the iPhone, open **Connect Desktop**, sign into the same account, and find your Mac.
 5. The Mac prompts when the phone requests access. Compare the fingerprint in that prompt with the one on the iPhone, then click **Approve phone**. You can also approve it in **Mac Settings → Computer**. The iPhone shows an approval message until the Mac grants access and retries automatically.
 6. Its actual Bots and chat history appear automatically when there is one available Mac, even if older offline installations remain registered. A saved Mac is preferred; with multiple available Macs, choose one in **Connect Desktop**. Verify the Mac's fingerprint on the phone too.

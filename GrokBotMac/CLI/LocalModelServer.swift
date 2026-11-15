@@ -58,7 +58,7 @@ enum LocalModelServer {
         let text: [String: Any] = ["type": "string"]
         return ["type": "function", "function": [
             "name": "app_action",
-            "description": "Ask OpenGrokBot to do something for the human: any operation listed in your instructions, such as searching the web, reading a page, adding a reminder, scheduling a task, making an image, finding or running a connected-app tool, or messaging another Bot. Put the operation name in \"action\" and its fields next to it, exactly as the instructions show. The result comes back in the next turn.",
+            "description": "Ask Bothive to do something for the human: any operation listed in your instructions, such as searching the web, reading a page, adding a reminder, scheduling a task, making an image, finding or running a connected-app tool, or messaging another Bot. Put the operation name in \"action\" and its fields next to it, exactly as the instructions show. The result comes back in the next turn.",
             "parameters": [
                 "type": "object",
                 "properties": ["action": ["type": "string", "description": "The operation, for example search_web, apple_add_reminder, schedule_task, generate_image, composio_find or composio_run."],

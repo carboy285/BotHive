@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 /// Sign-in and install helpers for the provider CLIs. Subscriptions (ChatGPT, Claude, Grok) work through each CLI's own login:
-/// OpenGrokBot opens that login in Terminal for you and never reads or copies the token.
+/// Bothive opens that login in Terminal for you and never reads or copies the token.
 enum CLISignIn {
     enum Credential: Equatable { case apiKey(String), signIn }
 
@@ -27,14 +27,14 @@ enum CLISignIn {
 
     enum Failure: LocalizedError {
         case notAllowed, couldNotOpen
-        var errorDescription: String? { self == .notAllowed ? "That command is not one OpenGrokBot can open." : "Terminal could not be opened." }
+        var errorDescription: String? { self == .notAllowed ? "That command is not one Bothive can open." : "Terminal could not be opened." }
     }
 
     /// Opens a Terminal window running `command` so the sign-in or install happens in a place you can see and control.
     static func openInTerminal(_ command: String, title: String) throws {
         guard isAllowed(command) else { throw Failure.notAllowed }
         let label = String(title.filter { $0.isLetter || $0.isNumber || $0 == " " || $0 == "-" }.prefix(40))
-        let script = "#!/bin/zsh\nclear\nprintf '\\n  OpenGrokBot · %s\\n\\n' '\(label)'\n\(command)\nprintf '\\n  Finished. You can close this window and return to OpenGrokBot.\\n'\n"
+        let script = "#!/bin/zsh\nclear\nprintf '\\n  Bothive · %s\\n\\n' '\(label)'\n\(command)\nprintf '\\n  Finished. You can close this window and return to Bothive.\\n'\n"
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("opengrokbot-" + UUID().uuidString + ".command")
         do {
             try Data(script.utf8).write(to: file, options: .atomic)

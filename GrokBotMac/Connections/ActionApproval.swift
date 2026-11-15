@@ -2,7 +2,7 @@ import AppKit
 import LocalAuthentication
 
 /// Asks the human before a Bot does something consequential. The request shows exactly what will happen and defaults to Deny.
-/// 0.9.2: shown as a card in the chat (like Grok Bot's approval cards) while a window is open; a system alert only when no window is.
+/// 0.9.2: shown as a card in the chat while a window is open; a system alert only when no window is.
 /// `authenticate` additionally requires Touch ID or the Mac password, for actions that use a saved credential.
 /// Requests that need no Touch ID can also be answered from an approved phone, and whichever answer comes first wins.
 @MainActor

@@ -22,6 +22,6 @@ test('rejects wrong passwords, tampering, short passwords and other files', () =
   assert.throws(() => decryptBackup(JSON.stringify({ ...envelope, ciphertext: body.toString('base64') }), 'correct horse'), /Wrong password/);
   assert.throws(() => decryptBackup(JSON.stringify({ ...envelope, iterations: 10 }), 'correct horse'), /unsupported/);
   assert.throws(() => encryptBackup(workspace, 'short'), /8 characters/);
-  assert.throws(() => decryptBackup('{"hello":1}', 'x'), /not an OpenGrokBot backup/);
-  assert.throws(() => decryptBackup('not json', 'x'), /not an OpenGrokBot backup/);
+  assert.throws(() => decryptBackup('{"hello":1}', 'x'), /not a Bothive backup/);
+  assert.throws(() => decryptBackup('not json', 'x'), /not a Bothive backup/);
 });

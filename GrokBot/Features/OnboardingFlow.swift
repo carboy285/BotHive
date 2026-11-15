@@ -38,7 +38,7 @@ struct OnboardingFlow: View {
             ZStack {
                 CharacterCrowd()
                 VStack(spacing: 10) {
-                    Text("Grok Bot").font(.system(size: 34, weight: .semibold)).tracking(-0.6)
+                    Text("Bothive").font(.system(size: 34, weight: .semibold)).tracking(-0.6)
                     Text("Your Bots keep working on your Mac.\nTalk to them from anywhere.")
                         .font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
@@ -161,7 +161,7 @@ struct OnboardingFlow: View {
                     .background(Palette.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
                 if account.hosts.isEmpty {
-                    note("No Mac yet. Open Grok Bot on your Mac, sign in, and turn on phone access in Settings → Computer.", icon: "desktopcomputer")
+                    note("No Mac yet. Open Bothive on your Mac, sign in, and turn on phone access in Settings → Computer.", icon: "desktopcomputer")
                 }
                 ForEach(account.hosts) { host in
                     Button { remote.select(host) } label: {
@@ -169,7 +169,7 @@ struct OnboardingFlow: View {
                             Image(systemName: "desktopcomputer").font(.system(size: 20)).frame(width: 28)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(host.name).font(.body.weight(.medium))
-                                Text(host.online ? "Online" : "Offline · open Grok Bot on it").font(.caption).foregroundStyle(.secondary)
+                                Text(host.online ? "Online" : "Offline · open Bothive on it").font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)

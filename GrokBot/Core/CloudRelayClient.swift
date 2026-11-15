@@ -67,7 +67,7 @@ final class CloudRelayClient {
             let data = try account.decrypt(packet,peer:peer)
             response = try CloudCoding.decoder().decode(CloudResponse.self,from:data)
         } catch {
-            throw CloudError.message("A reply from \(peer.name) could not be verified or decoded. Quit older copies of OpenGrokBot on that computer and reopen the updated app.")
+            throw CloudError.message("A reply from \(peer.name) could not be verified or decoded. Quit older copies of Bothive on that computer and reopen the updated app.")
         }
         guard (200...299).contains(response.status) else {
             if response.status == 403 { throw CloudError.approvalRequired }

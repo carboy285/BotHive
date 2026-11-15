@@ -8,7 +8,7 @@ struct GrokBotLiveActivityBundle: WidgetBundle {
     var body: some Widget { CallLiveActivity() }
 }
 
-/// A Grok Bot call outside the app (0.9.9): Dynamic Island and Lock Screen.
+/// A Bothive call outside the app (0.9.9): Dynamic Island and Lock Screen.
 struct CallLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CallActivityAttributes.self) { context in

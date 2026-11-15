@@ -1,7 +1,7 @@
 import Foundation
 
 /// Optional 1Password source for secure logins, through the official `op` command-line tool (with its desktop-app integration).
-/// 1Password asks for Touch ID itself. OpenGrokBot reads the username and password only at the moment it types them into the page.
+/// 1Password asks for Touch ID itself. Bothive reads the username and password only at the moment it types them into the page.
 enum OnePassword {
     struct Credentials: Equatable { let username: String; let password: String }
 

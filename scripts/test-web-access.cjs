@@ -80,7 +80,7 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
     await tab.goto(base + '/');
     await tab.getByLabel('Username').fill('ben'); await tab.getByLabel('Password').fill('a long test password');
     await tab.getByRole('button', { name: 'Sign in' }).click();
-    await tab.locator('#chat-heading').getByText('Grok Bot', { exact: true }).waitFor({ timeout: 15000 });
+    await tab.locator('#chat-heading').getByText('Hive', { exact: true }).waitFor({ timeout: 15000 });
     await tab.locator('#draft').fill('Hi from my phone'); await tab.locator('#draft').press('Enter');
     await tab.getByText('Hello from the host', { exact: true }).waitFor({ timeout: 15000 });
     assert.ok(calls.some(([channel, args]) => channel === 'chat:send' && args[1] === 'Hi from my phone'));

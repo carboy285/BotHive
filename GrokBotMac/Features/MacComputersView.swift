@@ -41,7 +41,7 @@ struct MacComputersView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         viewSection
                         if chosen == nil {
-                            card { Text("No other computers found yet. Open OpenGrokBot on them, sign in with this account and turn on phone access.").font(.system(size: 14)).foregroundStyle(MacTheme.secondary) }
+                            card { Text("No other computers found yet. Open Bothive on them, sign in with this account and turn on phone access.").font(.system(size: 14)).foregroundStyle(MacTheme.secondary) }
                         } else {
                             destinationSection
                             if let notice = desktop.copyNotice {
@@ -70,7 +70,7 @@ struct MacComputersView: View {
     private var oldEntriesSection: some View {
         card {
             Text("Old entries").font(.system(size: 17, weight: .medium))
-            Text("These computers are listed twice, usually after reinstalling OpenGrokBot. The newest entry is used; remove the old ones.").font(.system(size: 13)).foregroundStyle(MacTheme.secondary)
+            Text("These computers are listed twice, usually after reinstalling Bothive. The newest entry is used; remove the old ones.").font(.system(size: 13)).foregroundStyle(MacTheme.secondary)
             ForEach(duplicates) { device in
                 HStack {
                     Text(device.name + " · last seen " + device.last_seen.formatted(date: .abbreviated, time: .shortened)).font(.system(size: 13))

@@ -101,7 +101,7 @@ struct RootView: View {
             .environmentObject(voiceHub)
             // Voice mode floats above every chat so it keeps going while you open other Bots.
             .overlay { voiceOverlay }
-            // 0.9.2: a Bot asking for your OK shows as a card over whatever you are looking at, like Grok Bot.
+            // 0.9.2: a Bot asking for your OK shows as a card over whatever you are looking at.
             .overlay(alignment: .bottom) {
                 if let request = remote.approval {
                     PhoneApprovalCard(request: request) { allowed in Task { await remote.answerApproval(allowed) } }

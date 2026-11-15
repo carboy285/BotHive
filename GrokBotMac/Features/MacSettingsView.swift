@@ -27,7 +27,7 @@ struct MacSettingsView: View {
                     }.buttonStyle(.plain).accessibilityAddTraits(desktop.settingsTab == tab ? [.isSelected] : [])
                 }
                 Spacer()
-                Text("OpenGrokBot \(desktop.updates.current)").font(.system(size: 11)).foregroundStyle(MacTheme.secondary)
+                Text("Bothive \(desktop.updates.current)").font(.system(size: 11)).foregroundStyle(MacTheme.secondary)
             }
             .padding(16).padding(.top, 6).frame(width: 238).background(MacTheme.sidebar)
             Rectangle().fill(MacTheme.line).frame(width: 1)
@@ -66,7 +66,7 @@ struct MacSettingsView: View {
             HStack(spacing: 20) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Free and open source").font(.system(size: 18, weight: .medium))
-                    Text("Use AI CLIs installed on your Mac. There is no OpenGrokBot subscription; model access and usage follow your chosen CLI account or local provider.")
+                    Text("Use AI CLIs installed on your Mac. There is no Bothive subscription; model access and usage follow your chosen CLI account or local provider.")
                         .font(.system(size: 15)).lineSpacing(5).foregroundStyle(MacTheme.secondary)
                     MacPillButton(title: "Set up AI CLI", prominent: true) { desktop.panel = .setup }
                         .padding(.top, 8)
@@ -308,7 +308,7 @@ private struct MacUsageView: View {
 }
 
 
-/// Settings → Heads-ups (0.9.6): what Grok Bot may tell you about without being asked.
+/// Settings → Heads-ups (0.9.6): what Hive may tell you about without being asked.
 struct MacHeadsUpsSettings: View {
     @EnvironmentObject private var desktop: MacAppModel
     @ObservedObject private var apple = AppleConnections.shared
@@ -329,12 +329,12 @@ struct MacHeadsUpsSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Let Grok Bot reach out first").font(.system(size: 18, weight: .medium))
-                Text("Grok Bot keeps an eye on your Gmail and Google Calendar through Composio and messages you when something needs you, so you don’t have to keep checking. The Mail and Calendar apps on this Mac are never opened.")
+                Text("Let Hive reach out first").font(.system(size: 18, weight: .medium))
+                Text("Hive keeps an eye on your Gmail and Google Calendar through Composio and messages you when something needs you, so you don’t have to keep checking. The Mail and Calendar apps on this Mac are never opened.")
                     .font(.system(size: 15)).lineSpacing(5).foregroundStyle(MacTheme.secondary).fixedSize(horizontal: false, vertical: true)
             }
             card {
-                row("Heads-ups", detail: enabled ? "On · checks about every three minutes while OpenGrokBot is open" : "Off") {
+                row("Heads-ups", detail: enabled ? "On · checks about every three minutes while Bothive is open" : "Off") {
                     Toggle("Heads-ups", isOn: $enabled).labelsHidden().toggleStyle(.switch)
                 }
                 if enabled {
@@ -387,7 +387,7 @@ struct MacHeadsUpsSettings: View {
                     }.disabled(!enabled)
                 }
             }
-            Text("Heads-ups read Gmail and Google Calendar through your Composio project and only post messages. They never reply, send, accept or change anything. Ask Grok Bot directly when you want it to act. Phone alerts follow Settings → Computer → Phone notifications.")
+            Text("Heads-ups read Gmail and Google Calendar through your Composio project and only post messages. They never reply, send, accept or change anything. Ask Hive directly when you want it to act. Phone alerts follow Settings → Computer → Phone notifications.")
                 .font(.system(size: 12)).lineSpacing(3).foregroundStyle(MacTheme.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .animation(.spring(response: 0.35, dampingFraction: 1), value: enabled)
@@ -547,7 +547,7 @@ struct MacHeadsUpActions: View {
     }
 }
 
-/// Today (0.9.7): the next meeting with a countdown and Join, and what else is waiting, over the top of Grok Bot's chat.
+/// Today (0.9.7): the next meeting with a countdown and Join, and what else is waiting, over the top of Hive's chat.
 struct MacTodayCard: View {
     @ObservedObject var headsUps: MacHeadsUps
 

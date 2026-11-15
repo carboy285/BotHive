@@ -59,7 +59,7 @@ enum AppleError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .message(let text): text
-        case .needsFullDiskAccess: "Full Disk Access is not granted to OpenGrokBot. Allow it in System Settings → Privacy & Security → Full Disk Access, then quit and reopen the app."
+        case .needsFullDiskAccess: "Full Disk Access is not granted to Bothive. Allow it in System Settings → Privacy & Security → Full Disk Access, then quit and reopen the app."
         case .timedOut: "The request took too long. Try a more specific search."
         }
     }
@@ -340,7 +340,7 @@ enum AppleReaders {
     private static func script(_ source: String, query: String, empty: String) async throws -> String {
         let argument = "q:" + String(query.filter { !$0.isNewline }.prefix(100)) // The prefix keeps a leading "-" from being read as an option.
         let result = await Task.detached { CLIInstallationScanner.capture(path: "/usr/bin/osascript", arguments: ["-e", source, argument], timeout: 25, limit: 64_000) }.value
-        guard result.exit == 0 else { throw AppleError.message("The app did not answer. Make sure OpenGrokBot is allowed to control it in System Settings → Privacy & Security → Automation, and that the app is set up.") }
+        guard result.exit == 0 else { throw AppleError.message("The app did not answer. Make sure Bothive is allowed to control it in System Settings → Privacy & Security → Automation, and that the app is set up.") }
         let text = AppleText.collapse(result.text)
         return text.isEmpty ? empty : text
     }

@@ -129,7 +129,7 @@ struct DesktopUpdatesView: View {
     @AppStorage("checkAppUpdates") private var automatic = true
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Label("OpenGrokBot \(updates.current)", systemImage: "arrow.down.circle").font(.title2)
+            Label("Bothive \(updates.current)", systemImage: "arrow.down.circle").font(.title2)
             Text(updates.message).foregroundStyle(.secondary)
             Toggle("Notify me about updates once a day when the app is open", isOn: $automatic)
             HStack {
@@ -176,7 +176,7 @@ enum BackupCrypto {
 
     static func open(_ data: Data, password: String) throws -> (platform: String, payload: Data) {
         guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data), envelope.format == "opengrokbot-backup",
-              envelope.version == 1, envelope.kdf == "pbkdf2-sha256" else { throw Failure("This is not an OpenGrokBot backup.") }
+              envelope.version == 1, envelope.kdf == "pbkdf2-sha256" else { throw Failure("This is not a Bothive backup.") }
         guard (100_000...5_000_000).contains(envelope.iterations) else { throw Failure("This backup uses unsupported settings.") }
         guard let salt = Data(base64Encoded: envelope.salt), let iv = Data(base64Encoded: envelope.iv), let body = Data(base64Encoded: envelope.ciphertext),
               salt.count >= 16, iv.count == 12, body.count > 16 else { throw Failure("This backup is damaged.") }
@@ -243,7 +243,7 @@ struct MacBackupView: View {
     private func exportBackup() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [fileType]
-        panel.nameFieldStringValue = "OpenGrokBot-backup-\(Date().formatted(.iso8601.year().month().day())).ogbackup"
+        panel.nameFieldStringValue = "Bothive-backup-\(Date().formatted(.iso8601.year().month().day())).ogbackup"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         working = true; defer { working = false }
         do {
@@ -259,10 +259,10 @@ struct MacBackupView: View {
         working = true; defer { working = false }
         do {
             let data = try Data(contentsOf: url)
-            guard data.count < 200_000_000 else { status = "Choose an OpenGrokBot backup file."; return }
+            guard data.count < 200_000_000 else { status = "Choose a Bothive backup file."; return }
             let opened = try BackupCrypto.open(data, password: restorePassword)
             guard opened.platform == "mac" else { status = "This backup was made on Windows. Restore it in the Windows app."; return }
-            guard let restored = try? JSONDecoder().decode(Workspace.self, from: opened.payload) else { status = "This backup could not be read by this version of OpenGrokBot."; return }
+            guard let restored = try? JSONDecoder().decode(Workspace.self, from: opened.payload) else { status = "This backup could not be read by this version of Bothive."; return }
             let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
                 .appendingPathComponent("OpenGrokBot", isDirectory: true)
             try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
@@ -320,7 +320,7 @@ enum UpdateStaging {
 
     private static let script = """
     #!/bin/sh
-    # Waits for OpenGrokBot to quit, swaps in the staged app, and reopens it.
+    # Waits for Bothive to quit, swaps in the staged app, and reopens it.
     PID="$1"; NEW="$2"; TARGET="$3"; BACKUP="$TARGET.previous"
     i=0
     while kill -0 "$PID" 2>/dev/null && [ "$i" -lt 150 ]; do sleep 0.2; i=$((i+1)); done

@@ -10,7 +10,7 @@ struct SettingsView: View {
             Form {
                 Section("Account") { CloudSignInView(account:remote.account) }
                 Section {
-                    HStack(spacing:16) { BotAvatar(size:42); VStack(alignment:.leading,spacing:4) { Text("OpenGrokBot").font(.headline);Text("Your desktop controller").font(.caption).foregroundStyle(.secondary) } }.padding(.vertical,8)
+                    HStack(spacing:16) { BotAvatar(size:42); VStack(alignment:.leading,spacing:4) { Text("Bothive").font(.headline);Text("Your desktop controller").font(.caption).foregroundStyle(.secondary) } }.padding(.vertical,8)
                     LabeledContent("Host",value:remote.hostName)
                     Text(remote.status).font(.footnote).foregroundStyle(.secondary)
                     Button("Connect / change desktop") { dismiss(); Task { try? await Task.sleep(for:.milliseconds(500)); remote.showConnection = true } }

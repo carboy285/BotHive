@@ -93,7 +93,7 @@ struct GrokBotMacApp: App {
             }
         }
 
-        MenuBarExtra("OpenGrokBot", systemImage: "sparkles") {
+        MenuBarExtra("Bothive", systemImage: "sparkles") {
             MacQuickAskView().environmentObject(app).environmentObject(desktop)
         }
         .menuBarExtraStyle(.window)
@@ -105,7 +105,7 @@ private struct WindowConfigurator: NSViewRepresentable {
         let view = NSView()
         Task { @MainActor [weak view] in
             guard let window = view?.window else { return }
-            window.title = "OpenGrokBot"
+            window.title = "Bothive"
             window.titlebarAppearsTransparent = true
             window.backgroundColor = NSColor(calibratedWhite: 0.065, alpha: 1)
             window.isMovableByWindowBackground = true

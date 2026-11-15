@@ -534,7 +534,7 @@ struct MacVoiceSettingsPage: View {
             }
             Toggle("Option-Space starts voice from anywhere", isOn: $hotKey)
                 .onChange(of: hotKey) { _, on in if on { MacGlobalHotKey.shared.register() } else { MacGlobalHotKey.shared.unregister() } }
-            Text("Press Option-Space in any app to talk to the Bot you have open (or Grok Bot). Press it again to stop.")
+            Text("Press Option-Space in any app to talk to the Bot you have open (or Hive). Press it again to stop.")
                 .font(.caption).foregroundStyle(MacTheme.secondary)
         }
         .sheet(isPresented: $open) { VoiceSettingsView() }

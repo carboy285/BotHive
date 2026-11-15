@@ -9,7 +9,7 @@ extension Color {
 }
 
 enum MacTheme {
-    // 0.9.2: deeper, quieter Grok Bot palette. One accent per state, everything else greyscale.
+    // 0.9.2: deeper, quieter palette. One accent per state, everything else greyscale.
     static let canvas = adaptive(dark: 0x0F0F10, light: 0xFCFCFC)
     static let sidebar = adaptive(dark: 0x0A0A0B, light: 0xF5F5F6)
     static let panel = adaptive(dark: 0x1C1C1E, light: 0xF0F0F2)

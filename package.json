@@ -3,7 +3,7 @@
   "version": "0.9.9",
   "private": true,
   "description": "Free desktop chat for local AI CLIs with optional Composio tools",
-  "author": "OpenGrokBot contributors",
+  "author": "Bothive contributors",
   "license": "MIT",
   "main": "desktop-windows/app/main.cjs",
   "scripts": {
@@ -24,7 +24,8 @@
   },
   "build": {
     "appId": "org.opengrokbot.windows",
-    "productName": "OpenGrokBot",
+    "productName": "Bothive",
+    "executableName": "OpenGrokBot",
     "directories": {
       "output": "artifacts/windows"
     },
@@ -54,7 +55,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "artifactName": "OpenGrokBot-${version}-Windows-${arch}-Setup.${ext}",
+      "artifactName": "Bothive-${version}-Windows-${arch}-Setup.${ext}",
       "installerIcon": "desktop-windows/app/icon.ico",
       "uninstallerIcon": "desktop-windows/app/icon.ico"
     },

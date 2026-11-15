@@ -1,12 +1,14 @@
-# OpenGrokBot
+# Bothive
 
 A free, open-source chat app for **AI CLIs installed on your own computer**, with optional **Composio** tool connections. macOS is the priority: native SwiftUI/AppKit, Liquid Glass on macOS 26, and a universal Apple Silicon/Intel DMG. Windows has an Electron app and Setup EXE. The iOS app signs into the same Supabase account as your Mac or Windows desktop and controls its existing workspace through an encrypted device relay.
 
-Start with **one empty assistant named Grok Bot**. There are no seeded conversations or extra Bots. Ask Grok Bot to create specialists, or add your own Bots when you want separate conversations.
+Start with **one empty assistant named Hive**. There are no seeded conversations or extra Bots. Ask Hive to create specialists, or add your own Bots when you want separate conversations.
 
-[Downloads](docs/DOWNLOADS.md) · [Setup guide](docs/SETUP.md) · [Verification](docs/VERIFICATION.md) · [Source review](https://github.com/carboy285/opengrokbot/pull/1)
+Bothive was called OpenGrokBot before version 10.0. It is an independent project and is not affiliated with xAI or any AI provider (see [License and trademarks](#license)).
 
-![Native Mac workspace with only Grok Bot](docs/screenshots/macos-workspace.png)
+[Website and downloads](https://carboy285.github.io/opengrokbot/) · [Setup guide](docs/SETUP.md) · [Privacy](PRIVACY.md) · [Terms](TERMS.md) · [Verification](docs/VERIFICATION.md)
+
+![Native Mac workspace with only Hive](docs/screenshots/macos-workspace.png)
 
 ## First launch
 
@@ -84,11 +86,11 @@ Composio setup uses the documented v3.1 Tool Router API with a stable, randomly 
 
 The app does not add approval-bypass flags. Codex runs with a read-only local workspace; other providers retain their configured permissions. Remote MCP tool actions can change connected accounts’ data according to the CLI’s tool permissions and your Composio authorization. Review those settings before asking the assistant to act.
 
-This independent app does not sign in to the proprietary Grok Bot service, sync its cloud Bots, or control its cloud computer. Historical binary investigation is documented separately in [HARNESS.md](docs/HARNESS.md). It is not needed for local CLI chat.
+This independent app does not sign in to the proprietary Hive service, sync its cloud Bots, or control its cloud computer. Historical binary investigation is documented separately in [HARNESS.md](docs/HARNESS.md). It is not needed for local CLI chat.
 
 ## Heads-ups
 
-Grok Bot can reach out first instead of waiting for you to ask. Turn it on in **Settings → Heads-ups** after connecting Gmail and/or Google Calendar in **Connect apps**. The app then checks every few minutes in the background and posts into Grok Bot's chat, with a Windows notification:
+Hive can reach out first instead of waiting for you to ask. Turn it on in **Settings → Heads-ups** after connecting Gmail and/or Google Calendar in **Connect apps**. The app then checks every few minutes in the background and posts into Hive's chat, with a Windows notification:
 
 - **Important new email.** New unread mail (promotions, social and forum tabs are skipped) goes to your selected AI CLI, which decides what actually needs you. If nothing does, you get one quiet "nothing needs you" line and no notification.
 - **Upcoming meetings.** A reminder 5–30 minutes before each event, with the join link.
@@ -97,9 +99,9 @@ Grok Bot can reach out first instead of waiting for you to ask. Turn it on in **
 
 The first check only records what is already in your inbox, so turning heads-ups on doesn't flood the chat. Quiet hours keep heads-ups in the chat but silence notifications. While heads-ups are on, closing the window keeps the app running in the tray; **Open at sign-in** starts it there when you sign in.
 
-Heads-up turns are read-only. They run without Composio tools, and any app operation they ask for is ignored. Email text is passed to the model marked as untrusted data. To act on a heads-up, reply to Grok Bot normally. That reply runs with your usual tools and permissions, in the same CLI session that saw the email. Heads-ups use Composio's tool execution API with your project key; that endpoint and Composio's Gmail/Calendar response shapes are covered by fixtures, not yet by a live account.
+Heads-up turns are read-only. They run without Composio tools, and any app operation they ask for is ignored. Email text is passed to the model marked as untrusted data. To act on a heads-up, reply to Hive normally. That reply runs with your usual tools and permissions, in the same CLI session that saw the email. Heads-ups use Composio's tool execution API with your project key; that endpoint and Composio's Gmail/Calendar response shapes are covered by fixtures, not yet by a live account.
 
-**On the Mac,** heads-ups use Mail and Calendar on the Mac itself; switch them on under **Connect apps → This Mac**, then turn on **Settings → Heads-ups**. You get meeting reminders, double-bookings, a morning brief and new mail from people (newsletters and automated senders stay quiet), as a card in Grok Bot's chat, a Mac notification when the app is in the background, and a phone alert if phone notifications are on. Mac heads-ups don't use an AI model yet; they never reply, send or change anything.
+**On the Mac,** heads-ups use Mail and Calendar on the Mac itself; switch them on under **Connect apps → This Mac**, then turn on **Settings → Heads-ups**. You get meeting reminders, double-bookings, a morning brief and new mail from people (newsletters and automated senders stay quiet), as a card in Hive's chat, a Mac notification when the app is in the background, and a phone alert if phone notifications are on. Mac heads-ups don't use an AI model yet; they never reply, send or change anything.
 
 ## Image and video
 
@@ -111,7 +113,7 @@ Ollama and LM Studio models get the same app tools as the CLIs through native to
 
 ## Web access
 
-On Windows, **Settings → Web access** lets you use OpenGrokBot from a browser on your phone, tablet or another computer. Choose a username and a password of at least 10 characters, then pick **Wi-Fi** (devices on your home network, at `http://<this PC>:8765`) or **Tailscale** (your devices anywhere on your tailnet, over HTTPS at `https://<this PC>.<tailnet>.ts.net:8443`; needs Tailscale on both devices). Bots still run on the PC, so it has to stay on with OpenGrokBot open; closing the window keeps it in the tray.
+On Windows, **Settings → Web access** lets you use Bothive from a browser on your phone, tablet or another computer. Choose a username and a password of at least 10 characters, then pick **Wi-Fi** (devices on your home network, at `http://<this PC>:8765`) or **Tailscale** (your devices anywhere on your tailnet, over HTTPS at `https://<this PC>.<tailnet>.ts.net:8443`; needs Tailscale on both devices). Bots still run on the PC, so it has to stay on with Bothive open; closing the window keeps it in the tray.
 
 Over the web you can chat, use Bots, heads-ups and approvals. The vault, API keys, saved logins, app connections, VMs and the web access settings stay on the PC. The password is stored only as a hash; five wrong tries lock that device out for a while; **Sign out all devices** ends every session. Web access for the Mac app is not built yet; the iPhone app already controls a Mac.
 

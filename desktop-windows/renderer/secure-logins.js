@@ -4,7 +4,7 @@ const el = (tag, className = '', text = '') => { const node = document.createEle
 export async function renderSecureLogins({ bridge, result, toast, page }) {
   if (!bridge.loginsList) { page.append(el('p', 'muted', 'Secure logins are available in the installed app.')); return; }
   const wrap = el('div', 'voice-settings');
-  wrap.append(el('p', 'muted', 'Save a login here, then ask a Bot to sign in. Each time, a dialog shows the site and account and you approve it. OpenGrokBot types the password into the page itself: the Bot and its AI provider never see it, and it never appears in the chat. A login only works on the website you save it for and its subdomains. Verification codes and passkeys are not handled. Passwords are encrypted on this PC.'));
+  wrap.append(el('p', 'muted', 'Save a login here, then ask a Bot to sign in. Each time, a dialog shows the site and account and you approve it. Bothive types the password into the page itself: the Bot and its AI provider never see it, and it never appears in the chat. A login only works on the website you save it for and its subdomains. Verification codes and passkeys are not handled. Passwords are encrypted on this PC.'));
   const fields = {};
   const row = (label, control) => { const wrapRow = el('label', 'voice-row'); wrapRow.append(el('span', '', label), control); return wrapRow; };
   for (const [key, label, type, placeholder] of [['label', 'Name', 'text', 'For example ESPN'], ['url', 'Website', 'text', 'https://www.espn.com/login'], ['username', 'Username or email', 'text', ''], ['password', 'Password', 'password', '']]) {

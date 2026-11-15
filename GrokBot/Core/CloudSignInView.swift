@@ -23,7 +23,7 @@ struct CloudSignInView: View {
                 Button("Sign out of this device",role:.destructive) { Task { await account.signOut() } }
             } else {
                 if showsHeading {
-                    Text(create ? "Create your account":"Sign in to OpenGrokBot").font(.title3.weight(.medium))
+                    Text(create ? "Create your account":"Sign in to Bothive").font(.title3.weight(.medium))
                     Text("Use the same account on your computer and iPhone.").foregroundStyle(.secondary)
                 }
                 TextField("Email",text:$email).textContentType(.emailAddress).autocorrectionDisabled()

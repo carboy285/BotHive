@@ -27,7 +27,7 @@ class CloudMirror{
 /** Connects to one computer without starting the live Bot-list worker. Used for sending commands (such as running something in a shared VM). */
  async attach(id){
   this.stop();const account=this.cloud.accountGeneration;await this.discover();
-  const peer=this.devices.find(x=>x.kind==='host'&&x.id===id&&x.id!==this.cloud.local?.id);if(!peer)throw new Error('That computer is not available right now. Make sure it is awake with OpenGrokBot open and remote access on.');
+  const peer=this.devices.find(x=>x.kind==='host'&&x.id===id&&x.id!==this.cloud.local?.id);if(!peer)throw new Error('That computer is not available right now. Make sure it is awake with Bothive open and remote access on.');
   const key=this.owner.toLowerCase()+'|'+peer.id.toLowerCase();this.cloud.data.mirrorPins||={};const pin=this.cloud.data.mirrorPins[key];
   if(pin&&pin!==peer.public_key)throw new Error('This computer’s encryption identity changed. Re-register it on the server before connecting.');
   this.cloud.data.mirrorPins[key]=peer.public_key;await this.cloud.persist();

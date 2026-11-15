@@ -78,7 +78,7 @@ struct Entry: Identifiable, Codable, Equatable, Sendable {
     var reaction: String? = nil
     /// Pinned by the human so it is easy to find again (0.9.5).
     var pinned: Bool? = nil
-    /// Set when Grok Bot reached out on its own: a heads-up about mail, a meeting or the day (0.9.6).
+    /// Set when the main Bot reached out on its own: a heads-up about mail, a meeting or the day (0.9.6).
     var headsUp: HeadsUpTag? = nil
     /// Short text shown instead of an automatic turn's full prompt (0.9.6).
     var label: String? = nil
@@ -104,7 +104,7 @@ struct Workspace: Codable, Equatable, Sendable {
     var teamMessages: [TeamMessage]? = nil
 
     static var fresh: Workspace {
-        Workspace(bots: [Bot(id: UUID(), name: "Grok Bot", purpose: "Your AI assistant, powered by a CLI on this device.", color: "white", symbol: "sparkles", isMain: true)])
+        Workspace(bots: [Bot(id: UUID(), name: "Hive", purpose: "Your AI assistant, powered by a CLI on this device.", color: "white", symbol: "sparkles", isMain: true)])
     }
 
     /// Reject inconsistent identities before SwiftUI lists or dictionary construction
@@ -128,7 +128,7 @@ struct Workspace: Codable, Equatable, Sendable {
 
     mutating func migrateLegacyDemo() {
         guard schemaVersion != 2 else { return }
-        let signatures = ["Grok Bot": "A place to bring it all together", "Soccer & Percussion": "Practice plans, one day at a time", "AI Brief": "Research worth your time", "STEMBound": "Make room for your next idea", "School": "Make a plan for the week ahead"]
+        let signatures = ["Hive": "A place to bring it all together", "Soccer & Percussion": "Practice plans, one day at a time", "AI Brief": "Research worth your time", "STEMBound": "Make room for your next idea", "School": "Make a plan for the week ahead"]
         let seeded = Set(bots.filter { signatures[$0.name] == $0.purpose }.map(\.id))
         let fixtures: Set<String> = [
             "Your week is coming together. You’ve got percussion practice, a STEMBound meeting, and a Spanish test on Wednesday.\n\nWant me to have the School bot help you study for Wednesday’s Spanish test?",
@@ -138,7 +138,7 @@ struct Workspace: Codable, Equatable, Sendable {
             "Want me to set up those snare drum routines for the week?",
             "Which workflow do you want? A quick daily brief, a deeper research note, or a running list of ideas?",
             "What’s on your plate right now?", "What do you need help with for Wednesday’s Spanish test?",
-            "This is an offline interface preview. Nothing here is sent to Grok Bot. You can explore conversations, write local notes, and create preview Bots.",
+            "This is an offline interface preview. Nothing here is sent to Hive. You can explore conversations, write local notes, and create preview Bots.",
             "Example handoff · School",
             "A study guide, a few practice questions, and time to review. This is where a Bot’s progress and finished work would appear.",
             "What would you like to work on? Add a local note below to try the conversation layout."
@@ -162,6 +162,13 @@ struct Workspace: Codable, Equatable, Sendable {
             let value = bots.remove(at: main); bots.insert(value, at: 0)
         } else { bots.insert(Self.fresh.bots[0], at: 0) }
         schemaVersion = 2
+        renameDefaultMainBot()
+    }
+
+    /// 10.0: the main Bot's default name changed from "Grok Bot" to "Hive". Only an untouched default is renamed;
+    /// a main Bot the user named themselves keeps its name.
+    mutating func renameDefaultMainBot() {
+        for index in bots.indices where bots[index].isMain == true && bots[index].name == "Grok Bot" { bots[index].name = "Hive" }
     }
 
     private enum CodingKeys: String, CodingKey { case bots, entries, schemaVersion, sessions, sharedMemory, teamMessages }
@@ -176,6 +183,8 @@ struct Workspace: Codable, Equatable, Sendable {
         sessions = try values.decodeIfPresent([String:String].self, forKey: .sessions) ?? [:]
         sharedMemory = try values.decodeIfPresent([String].self, forKey: .sharedMemory)
         teamMessages = try values.decodeIfPresent([TeamMessage].self, forKey: .teamMessages)
+        // Older workspaces are renamed by migrateLegacyDemo, which still looks for the old name.
+        if schemaVersion == 2 { renameDefaultMainBot() }
     }
 }
 
@@ -187,7 +196,7 @@ enum IntegrationError: Error, LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .protocolUnverified: "The Grok Bot 0.78.1 client protocol has not been verified. No connection was attempted."
+        case .protocolUnverified: "The 0.78.1 client protocol has not been verified. No connection was attempted."
         case .insecureAddress: "Use an HTTPS address with a valid trusted certificate."
         case .invalidAddress: "Enter an HTTPS server address without credentials, a path, query, or fragment."
         case .loopbackAddress: "Localhost points to the device running this app. Use a reachable server hostname."

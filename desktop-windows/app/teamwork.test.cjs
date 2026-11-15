@@ -29,7 +29,7 @@ test('no bot deletion or approval operation exists; bounded hops prevent loops a
 });
 test('group chat queues requests for each member without inventing user messages or changing member models',()=>{
  const state=previewWorkspace(),main=state.bots[0],config={providers:[],replyMode:'one'},reply={id:'reply',text:''};
- team.apply(state,main,reply,[{action:'create_bot',name:'School',purpose:'Study'},{action:'create_group',name:'Project',members:['Grok Bot','School']}].map(block).join('\n'),config);
+ team.apply(state,main,reply,[{action:'create_bot',name:'School',purpose:'Study'},{action:'create_group',name:'Project',members:['Hive','School']}].map(block).join('\n'),config);
  const group=state.bots.find(x=>x.name==='Project');team.group(state,group,'Plan the project');
  assert.equal(state.teamMessages.length,2);assert.ok(state.teamMessages.every(x=>group.memberIDs.includes(x.to)&&x.from===group.id));assert.equal(state.entries.filter(x=>x.kind==='user').length,1);
  validateWorkspace(state);

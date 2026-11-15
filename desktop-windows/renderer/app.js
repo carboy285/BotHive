@@ -34,7 +34,7 @@ const result = async operation => { const response = await operation; if (!respo
 const webPreview = {
   load: async () => { try { return { ok: true, value: JSON.parse(localStorage.getItem('workspace') || 'null') || structuredClone(preview) }; } catch { return { ok: false, error: 'Saved workspace could not be read. Existing storage was kept.' }; } },
   save: async value => { try { localStorage.setItem('workspace', JSON.stringify(value)); return { ok: true }; } catch { return { ok: false, error: 'Local storage is full. Your draft was kept.' }; } },
-  export: async text => { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); link.download = 'OpenGrokBot-conversation.txt'; link.click(); URL.revokeObjectURL(link.href); return { ok: true, value: true }; },
+  export: async text => { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); link.download = 'Bothive-conversation.txt'; link.click(); URL.revokeObjectURL(link.href); return { ok: true, value: true }; },
   openDocs: async url => { window.open(url, '_blank', 'noopener,noreferrer'); return { ok: true }; },
   setupStatus:async()=>({ok:true,value:{providers:[],installed:[],selected:'',complete:false}}),
   scanCLIs:async()=>({ok:true,value:{providers:[],installed:[],selected:'',complete:false}}),
@@ -214,16 +214,16 @@ function showHeadsUpBadge(value){
  badge.textContent=trouble?'Heads-ups need attention':'✦ Heads-ups on';badge.dataset.state=trouble?'offline':'ready';
  badge.title=value.error||(value.lastCheck?`Last checked ${ago(value.lastCheck)}`:'Waiting for the first check');
 }
-// Settings → Web access (0.9.7): use OpenGrokBot from a phone, tablet or another computer's browser.
+// Settings → Web access (0.9.7): use Bothive from a phone, tablet or another computer's browser.
 async function renderWebAccess(page){
  const body=node('div','heads-up-settings web-access');page.append(body);
- if(window.desktop?.webAccess){append(body,node('h2','','Web access'),node('p','muted intro','You’re using OpenGrokBot from another device. Change web access on the computer that runs it.'));return;}
- if(!bridge.webStatus){append(body,node('h2','','Use OpenGrokBot from any device'),node('p','muted intro','Open the installed desktop app to turn on web access.'));return;}
+ if(window.desktop?.webAccess){append(body,node('h2','','Web access'),node('p','muted intro','You’re using Bothive from another device. Change web access on the computer that runs it.'));return;}
+ if(!bridge.webStatus){append(body,node('h2','','Use Bothive from any device'),node('p','muted intro','Open the installed desktop app to turn on web access.'));return;}
  let status;
  async function draw(){
   try{status=await result(bridge.webStatus());}catch(error){body.replaceChildren(node('p','',error.message));return;}
   body.replaceChildren();
-  append(body,node('h2','','Use OpenGrokBot from any device'),node('p','muted intro','Open the address below in a browser on your phone, tablet or another computer and sign in. Bots still run on this PC, so it needs to stay on with OpenGrokBot open (closing the window keeps it running in the tray).'));
+  append(body,node('h2','','Use Bothive from any device'),node('p','muted intro','Open the address below in a browser on your phone, tablet or another computer and sign in. Bots still run on this PC, so it needs to stay on with Bothive open (closing the window keeps it running in the tray).'));
   const save=async changes=>{try{status=await result(bridge.webConfigure(changes));draw();}catch(error){toast(error.message);draw();}};
   const user=node('input','field');user.value=status.username;user.placeholder='Username';user.autocomplete='off';user.setAttribute('aria-label','Web access username');
   const pass=node('input','field');pass.type='password';pass.autocomplete='new-password';pass.placeholder=status.configured?'Password saved — type a new one to change it':'Password (10+ characters)';pass.setAttribute('aria-label','Web access password');
@@ -250,7 +250,7 @@ async function renderWebAccess(page){
 }
 async function renderHeadsUps(page){
  const body=node('div','heads-up-settings');page.append(body);
- if(!bridge.proactiveStatus){append(body,node('h2','','Let Grok Bot reach out first'),node('p','muted','Open the installed desktop app to turn on heads-ups. They run in the background on this computer.'));return;}
+ if(!bridge.proactiveStatus){append(body,node('h2','','Let Hive reach out first'),node('p','muted','Open the installed desktop app to turn on heads-ups. They run in the background on this computer.'));return;}
  const save=async changes=>{try{proactiveStatus=await result(bridge.proactiveConfigure({...proactiveStatus.config,...changes}));showHeadsUpBadge(proactiveStatus);if(currentBot()?.isMain)renderMessages(currentBot());draw();}catch(error){toast(error.message);draw();}};
  const toggle=(label,key,detail,extra)=>{
   const row=node('div','setting-row toggle-row');const check=node('input','switch');check.type='checkbox';check.setAttribute('role','switch');check.checked=!!proactiveStatus.config[key];check.disabled=key!=='enabled'&&!proactiveStatus.config.enabled;check.setAttribute('aria-label',label);
@@ -263,7 +263,7 @@ async function renderHeadsUps(page){
  async function draw(){
   try{proactiveStatus=await result(bridge.proactiveStatus());}catch(error){body.replaceChildren(node('p','',error.message));return;}
   const config=proactiveStatus.config;body.replaceChildren();
-  append(body,node('h2','','Let Grok Bot reach out first'),node('p','muted intro','Grok Bot watches your Gmail and Google Calendar in the background and messages you when something needs you, so you don’t have to keep checking.'));
+  append(body,node('h2','','Let Hive reach out first'),node('p','muted intro','Hive watches your Gmail and Google Calendar in the background and messages you when something needs you, so you don’t have to keep checking.'));
   const master=append(node('div','settings-card master-card'),toggle('Heads-ups','enabled',config.enabled?(proactiveStatus.checking?'Checking now…':`On · last checked ${ago(proactiveStatus.lastCheck)}`):'Off'));
   body.append(master);
   if(config.enabled){const status=node('div','account-list');status.append(account('Gmail',proactiveStatus.gmail),account('Google Calendar',proactiveStatus.calendar));status.children[0].dataset.state=proactiveStatus.gmail;status.children[1].dataset.state=proactiveStatus.calendar;master.append(status);
@@ -282,7 +282,7 @@ async function renderHeadsUps(page){
   append(body,node('p','settings-label','When'),append(node('div','settings-card'),
    toggle('Quiet hours','quietHours','Heads-ups still land in the chat, without a sound or banner.',append(node('span','time-range'),time('quietStart','Quiet hours start'),node('span','muted','to'),time('quietEnd','Quiet hours end'))),
    toggle('Open at sign-in','openAtLogin','Starts in the tray when you sign in to Windows. Closing the window keeps heads-ups running; quit from the tray icon.')));
-  body.append(node('p','muted footnote','New email previews go to your selected AI CLI so it can decide what matters. Heads-up turns can’t use tools, send email or change anything. Ask Grok Bot directly when you want it to act.'));
+  body.append(node('p','muted footnote','New email previews go to your selected AI CLI so it can decide what matters. Heads-up turns can’t use tools, send email or change anything. Ask Hive directly when you want it to act.'));
  }
  headsUpRefresh=()=>{if(body.isConnected&&!body.contains(document.activeElement))draw();else if(!body.isConnected)headsUpRefresh=null;};
  await draw();
@@ -389,7 +389,7 @@ function renderMessages(bot){
  renderApprovalCard();
  if(chatScroll.follow)scheduleChatBottom();else chatViewport.scrollTop=previousScroll;
 }
-// ---- 0.9.2: Grok Bot chat parts: tool pills, typing dots, Bot-to-Bot messages, question and approval cards ----
+// ---- 0.9.2: chat parts: tool pills, typing dots, Bot-to-Bot messages, question and approval cards ----
 function entryKind(entry){if(entry.kind==='activity'&&entry.senderBotID&&String(entry.text||'').startsWith('Message from '))return 'botnote';return entry.kind==='activity'||entry.delivery==='scheduled'||entry.delivery==='proactive'?'activity':'message';}
 function splitChoices(text){
  const value=String(text||''),match=/```choices[ \t]*\n([\s\S]*?)```/.exec(value);if(!match)return {text:value,prompt:null};
@@ -563,11 +563,11 @@ dialog.addEventListener('close', () => { if (!dialog.open) dialog.replaceChildre
 async function showConnection(detail='') {
   let step=0,provider='codex',verified=false;
   async function draw(){
-    const content=panel('Set up Grok Bot');
+    const content=panel('Set up Bothive');
     const body=node('div','connection-details');content.append(body);
     if(detail)body.append(node('p','muted',detail));
     body.append(node('p','muted',`${step+1} of 6`));
-    if(step===0){append(body,avatar('white',true),node('h1','','A free app for your AI CLIs'),node('p','','Start with one Grok Bot. Choose a CLI installed on this computer, sign in through that CLI, then optionally connect your tools with Composio.'),node('p','muted','OpenGrokBot is free and open source. AI providers and Composio apply their own pricing, quotas, and model requirements.'));}
+    if(step===0){append(body,avatar('white',true),node('h1','','A free app for your AI CLIs'),node('p','','Start with Hive, your main Bot. Choose a CLI installed on this computer, sign in through that CLI, then optionally connect your tools with Composio.'),node('p','muted','Bothive is free and open source. AI providers and Composio apply their own pricing, quotas, and model requirements.'));}
     else if(step===1){
       body.append(node('h2','','Choose an AI CLI'));
       if(!window.desktop)body.append(node('p','','Install the desktop app to use AI CLIs. A browser cannot launch local processes.'));
@@ -617,7 +617,7 @@ async function renderComposio(content){
         const row=append(node('div','setting-row'),node('strong','',toolkit.name),node('small','muted',toolkit.connected?'Connected':toolkit.noAuth?'No sign-in required':toolkit.status||'Not connected'));
         if(!toolkit.connected&&!toolkit.noAuth)row.append(button('Connect',async()=>{try{await result(bridge.composioLink(toolkit.slug));toast('Finish authorizing in your browser, then refresh connections.');}catch(error){toast(error.message);}}));body.append(row);
       }
-      if(status.toolkits.some(x=>['gmail','googlecalendar'].includes(x.slug)&&x.connected)&&bridge.proactiveStatus)body.append(append(node('div','heads-up-nudge'),append(node('div'),node('strong','','Want Grok Bot to keep an eye on these?'),node('p','muted','Turn on heads-ups and it will message you about important email and upcoming meetings.')),button('Set up heads-ups',()=>showSettings('Heads-ups'),'pill primary')));
+      if(status.toolkits.some(x=>['gmail','googlecalendar'].includes(x.slug)&&x.connected)&&bridge.proactiveStatus)body.append(append(node('div','heads-up-nudge'),append(node('div'),node('strong','','Want Hive to keep an eye on these?'),node('p','muted','Turn on heads-ups and it will message you about important email and upcoming meetings.')),button('Set up heads-ups',()=>showSettings('Heads-ups'),'pill primary')));
       append(body,node('p','muted','Selected tools reach your CLI through MCP. Tool actions follow the CLI’s permission settings.'),button('Remove project from this device',async()=>{try{await result(bridge.composioRemove());draw();}catch(error){toast(error.message);}}),button('Manage or revoke accounts in Composio ↗',()=>bridge.openDocs('https://platform.composio.dev')));
     }
   };await draw();
@@ -663,7 +663,7 @@ async function renderRemoteAccess(page){
    for(const phone of status.phones){const row=append(node('div','settings-card'),node('strong','',phone.name),node('p','fingerprint',phone.fingerprint),node('small','muted',phone.approved?'Approved':'Compare this fingerprint with your iPhone before approving.'));row.append(button(phone.approved?'Revoke':'Approve phone',()=>run(bridge.cloudApprove(phone.id,!phone.approved))));body.append(row);}
    if(!status.phones.length)body.append(node('p','muted','Sign in on your iPhone to make it appear here.'));body.append(button('Sign out on this computer',()=>run(bridge.cloudSignOut())));
   }
-  const diagnostics={state:status.phase,enabled:status.enabled,lastHeartbeat:status.lastHeartbeat||null,lastPhoneRequest:status.lastRequest||null,approvedPhones:status.phones.filter(x=>x.approved).length};append(body,node('p','muted','Keep this computer awake with OpenGrokBot running. Closing the window keeps phone access running in the system tray.'),button('Copy connection diagnostics',()=>navigator.clipboard.writeText(JSON.stringify(diagnostics,null,2))));
+  const diagnostics={state:status.phase,enabled:status.enabled,lastHeartbeat:status.lastHeartbeat||null,lastPhoneRequest:status.lastRequest||null,approvedPhones:status.phones.filter(x=>x.approved).length};append(body,node('p','muted','Keep this computer awake with Bothive running. Closing the window keeps phone access running in the system tray.'),button('Copy connection diagnostics',()=>navigator.clipboard.writeText(JSON.stringify(diagnostics,null,2))));
  };if(!bridge.cloudStatus){body.append(node('p','','Open the installed Windows app to connect your iPhone.'));return;}await draw();const timer=setInterval(()=>{if(!body.isConnected){clearInterval(timer);return;}if(!body.querySelector('input'))draw();},4000);
 }
 /** Keys and connectors can be copied to and from this computer only while this switch is on (off until you turn it on). */
@@ -692,7 +692,7 @@ function renderBackup(page){
  append(restore,key,load);page.append(out,restore);
 }
 async function renderVault(page) {
-  append(page,node('h2','','Device vault'),node('p','muted','Encrypted with Windows data protection. This local vault is not synced or accessible to Grok Bot.'));
+  append(page,node('h2','','Device vault'),node('p','muted','Encrypted with Windows data protection. This local vault is not synced or accessible to anyone else.'));
   let items;
   try { items = await result(bridge.vaultList()); } catch(error) { page.append(node('div','unavailable',error.message)); return; }
   for (const item of items) {
@@ -730,7 +730,7 @@ function jumpTo(botID,entryID){
  requestAnimationFrame(()=>requestAnimationFrame(()=>{const row=document.querySelector(`[data-entry="${CSS.escape(entryID)}"]`);if(!row)return;chatScroll.follow=false;row.scrollIntoView({block:'center',behavior:'smooth'});row.classList.add('jump-flash');setTimeout(()=>row.classList.remove('jump-flash'),1800);}));
 }
 async function pinEntry(entry,on){try{if(bridge.pinEntry)workspace=await result(bridge.pinEntry(entry.id,on));else{const next=structuredClone(workspace);const item=next.entries.find(x=>x.id===entry.id);if(!item)return;if(on)item.pinned=true;else delete item.pinned;if(!await persist(next))return;}render();}catch(error){toast(error.message);}}
-async function copyDiagnostics(){try{const text=bridge.diagnostics?await result(bridge.diagnostics()):`OpenGrokBot web preview · ${navigator.userAgent}`;await navigator.clipboard.writeText(text);toast('Diagnostics copied. Paste them into your bug report.');}catch(error){toast(error.message||'Diagnostics could not be copied.');}}
+async function copyDiagnostics(){try{const text=bridge.diagnostics?await result(bridge.diagnostics()):`Bothive web preview · ${navigator.userAgent}`;await navigator.clipboard.writeText(text);toast('Diagnostics copied. Paste them into your bug report.');}catch(error){toast(error.message||'Diagnostics could not be copied.');}}
 function renderChips(){
  const box=$('#attachment-chips'),bot=currentBot(),files=bot?pendingFiles.get(bot.id)||[]:[];box.replaceChildren();box.hidden=!files.length;
  for(const name of files){const chip=node('span','attachment-chip');chip.append(node('span','',/\.(png|jpe?g|gif|webp)$/i.test(name)?'🖼':'📄'),node('span','chip-name',name.replace(/^[0-9a-f-]{37}/i,'')));const remove=button('×',()=>{pendingFiles.set(bot.id,(pendingFiles.get(bot.id)||[]).filter(x=>x!==name));renderChips();},'chip-remove');remove.setAttribute('aria-label','Remove attachment '+name.replace(/^[0-9a-f-]{37}/i,''));chip.append(remove);box.append(chip);}
@@ -815,7 +815,7 @@ async function showBotVM(bot){
   clearTimeout(timer);if(state.assigned&&['installing','verifying'].includes(state.state))timer=setTimeout(()=>draw().catch(()=>{}),5000);
   const option=(text,checked,disabled,handler)=>{const box=node('input');box.type='checkbox';box.checked=checked;box.disabled=disabled;box.addEventListener('change',async()=>{try{await result(handler(box.checked));await draw();}catch(error){info.textContent=error.message;box.checked=!box.checked;}});controls.append(append(node('label','vm-option'),box,node('span','',' '+text)));};
   if(!state.assigned||state.missing){
-   if(state.missing)info.textContent='The VM was deleted outside OpenGrokBot. Press Set up again to make a new one.';
+   if(state.missing)info.textContent='The VM was deleted outside Bothive. Press Set up again to make a new one.';
    const setup=button(state.missing?'Set up again':'Set up shared Linux VM',async()=>{setup.disabled=true;try{await result(bridge.vmSetupAll());}catch(error){info.textContent=error.message;}setup.disabled=false;await draw().catch(()=>{});});controls.append(setup);
    controls.append(node('p','muted','These apply to the new VM. They make it easy to use, but anyone who can open this Windows account can then use the VM.'));
    option('Sign in to Ubuntu automatically',state.autoLogin!==false,false,value=>bridge.vmOptions({autoLogin:value}));
@@ -847,7 +847,7 @@ async function showRemoteVM(bot,content){
   let link=null;try{link=await result(bridge.vmRemoteGet(bot.id));}catch(error){status.textContent=error.message;return;}
   if(link){status.textContent=`Every Bot uses “${link.vmName}” on ${link.hostName}.`;box.append(button('Stop using it',async()=>{try{await result(bridge.vmRemoteSet(bot.id,null));await draw();}catch(error){status.textContent=error.message;}}));return;}
   status.textContent='The VM keeps running on the other computer. Commands travel over your encrypted account connection, and that computer must have turned sharing on for the VM. The first time, approve this PC there if it asks.';
-  const pick=button('Choose a computer…',async()=>{pick.disabled=true;status.textContent='Looking for your other computers…';try{const hosts=await result(bridge.vmRemoteHosts());if(!hosts.length){status.textContent='No other computer is signed in to your account with OpenGrokBot open.';pick.disabled=false;return;}status.textContent='Choose a computer:';for(const host of hosts){box.append(button(host.name+(host.online?'':' (offline)'),async()=>{status.textContent='Asking '+host.name+' for its shared VMs…';try{const list=await result(bridge.vmRemoteList(host.id));if(!list.length){status.textContent=host.name+' is not sharing any VM. On that computer, open a Bot’s Linux VM settings, turn on guest commands, then “Let my other computers use this VM”.';return;}status.textContent='Choose a VM on '+host.name+':';for(const vm of list)box.append(button('Use “'+vm.botName+'”',async()=>{try{await result(bridge.vmRemoteSet(bot.id,{hostID:host.id,hostName:host.name,vmBotID:vm.botID,vmName:vm.botName}));await draw();}catch(error){status.textContent=error.message;}}));}catch(error){status.textContent=error.message;}}));}}catch(error){status.textContent=error.message;pick.disabled=false;}});
+  const pick=button('Choose a computer…',async()=>{pick.disabled=true;status.textContent='Looking for your other computers…';try{const hosts=await result(bridge.vmRemoteHosts());if(!hosts.length){status.textContent='No other computer is signed in to your account with Bothive open.';pick.disabled=false;return;}status.textContent='Choose a computer:';for(const host of hosts){box.append(button(host.name+(host.online?'':' (offline)'),async()=>{status.textContent='Asking '+host.name+' for its shared VMs…';try{const list=await result(bridge.vmRemoteList(host.id));if(!list.length){status.textContent=host.name+' is not sharing any VM. On that computer, open a Bot’s Linux VM settings, turn on guest commands, then “Let my other computers use this VM”.';return;}status.textContent='Choose a VM on '+host.name+':';for(const vm of list)box.append(button('Use “'+vm.botName+'”',async()=>{try{await result(bridge.vmRemoteSet(bot.id,{hostID:host.id,hostName:host.name,vmBotID:vm.botID,vmName:vm.botName}));await draw();}catch(error){status.textContent=error.message;}}));}catch(error){status.textContent=error.message;}}));}}catch(error){status.textContent=error.message;pick.disabled=false;}});
   box.append(pick);
  };
  await draw();
@@ -1071,7 +1071,7 @@ async function toggleDictation() {
     source.connect(processor); processor.connect(context.destination);
     dictating = { stream, context, source, processor, chunks, timer: setTimeout(() => stopDictation(), 60000) };
     $('#mic-button').classList.add('recording'); $('#mic-button').setAttribute('aria-label', 'Stop dictation'); toast('Listening… tap the mic again to stop. The audio goes to your speech-to-text provider.');
-  } catch { toast('The microphone could not be opened. Allow microphone access for OpenGrokBot in Windows Settings → Privacy → Microphone.'); }
+  } catch { toast('The microphone could not be opened. Allow microphone access for Bothive in Windows Settings → Privacy → Microphone.'); }
 }
 async function stopDictation() {
   const session = dictating; if (!session) return; dictating = null; clearTimeout(session.timer);
@@ -1165,7 +1165,7 @@ async function renderCatalog(content) {
   search.addEventListener('input', () => { query = search.value; draw(); });
   if (!status.configured && window.desktop) append(setup, node('p', 'muted', 'Use your own Composio project to connect apps to your CLI. This is optional. Add the apps you want, paste your project key, then connect.'), key, append(node('div', 'panel-bottom'), button('Get a project key ↗', () => bridge.openDocs('https://platform.composio.dev')), link), node('p', 'muted', 'The project key and tool session are encrypted with Windows device storage. Composio has its own pricing and usage limits.')), link.disabled = true;
   else if (!window.desktop) append(setup, node('p', 'muted', 'Open the installed desktop app to store your project key securely.'));
-  else { if ((connected.has('gmail') || connected.has('googlecalendar')) && bridge.proactiveStatus) setup.append(append(node('div', 'heads-up-nudge'), append(node('div'), node('strong', '', 'Want Grok Bot to keep an eye on these?'), node('p', 'muted', 'Turn on heads-ups and it will message you about important email and upcoming meetings.')), button('Set up heads-ups', () => showSettings('Heads-ups'), 'pill primary')));
+  else { if ((connected.has('gmail') || connected.has('googlecalendar')) && bridge.proactiveStatus) setup.append(append(node('div', 'heads-up-nudge'), append(node('div'), node('strong', '', 'Want Hive to keep an eye on these?'), node('p', 'muted', 'Turn on heads-ups and it will message you about important email and upcoming meetings.')), button('Set up heads-ups', () => showSettings('Heads-ups'), 'pill primary')));
     append(setup, node('p', 'muted', 'Apps are chosen when the project is connected. To change them, remove the project below and connect again.'), button('Remove project from this device', async () => { try { await result(bridge.composioRemove()); await showApps(); } catch (error) { toast(error.message); } }), button('Manage or revoke accounts in Composio ↗', () => bridge.openDocs('https://platform.composio.dev'))); addAllowToggle(setup); }
   append(content, header, search, chips, setup, body); draw();
 }

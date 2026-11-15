@@ -182,7 +182,7 @@ extension AppleReaders {
         let source = stripHandler + "\n" + body
         let prefixed = args.map { "q:" + $0 } // The prefix keeps a leading "-" from being read as an option.
         let result = await Task.detached { CLIInstallationScanner.capture(path: "/usr/bin/osascript", arguments: ["-e", source] + prefixed, timeout: 40, limit: 16_000) }.value
-        guard result.exit == 0 else { throw AppleError.message("The app did not answer. Make sure OpenGrokBot is allowed to control it in System Settings → Privacy & Security → Automation, and that the app is set up.") }
+        guard result.exit == 0 else { throw AppleError.message("The app did not answer. Make sure Bothive is allowed to control it in System Settings → Privacy & Security → Automation, and that the app is set up.") }
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

@@ -511,7 +511,7 @@ final class VoiceSession: ObservableObject {
             message = "Add your \(transcriber.title) key in voice settings, or switch listening back to Apple."; return false
         }
         guard await Self.requestAccess(needsSpeech: transcriber == .apple) else {
-            message = "Allow microphone and speech recognition for OpenGrokBot in system settings."; return false
+            message = "Allow microphone and speech recognition for Bothive in system settings."; return false
         }
         if transcriber == .apple {
             recognizer = SFSpeechRecognizer(locale: VoiceSettings.locale) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))

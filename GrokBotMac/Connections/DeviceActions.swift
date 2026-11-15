@@ -368,7 +368,7 @@ final class MacDeviceActions {
         }
         guard !unattended else { return "Signing in needs the human to approve with Touch ID or their password, so it was skipped in this unattended run." }
         let account = login.onePassword.map { "1Password item “\($0)”" } ?? login.username
-        let detail = "Site: \(login.host)\nAccount: \(account)\n\nOpenGrokBot will type the \(login.onePassword == nil ? "saved" : "1Password") password into the page. \(bot.name) and its AI provider never see the password."
+        let detail = "Site: \(login.host)\nAccount: \(account)\n\nBothive will type the \(login.onePassword == nil ? "saved" : "1Password") password into the page. \(bot.name) and its AI provider never see the password."
         guard await approval.approve(title: "Let \(bot.name) sign in to \(login.label)?", detail: detail, authenticate: true) else { return "The human declined the sign-in." }
         var username = login.username, password = ""
         if let item = login.onePassword {

@@ -34,7 +34,7 @@ struct MacSetupView: View {
         ZStack {
             CharacterCrowd(sizeFactor: 0.13)
             VStack(spacing: 12) {
-                Text("Grok Bot").font(.system(size: 44, weight: .semibold)).tracking(-1)
+                Text("Bothive").font(.system(size: 44, weight: .semibold)).tracking(-1)
                 Text("Bots that keep working on your Mac,\nwith the AI CLI you already use.")
                     .font(.system(size: 17)).foregroundStyle(MacTheme.secondary).multilineTextAlignment(.center).lineSpacing(3)
                 MacPillButton(title: "Get started", prominent: true) { greeting = false }
@@ -59,7 +59,7 @@ struct MacSetupView: View {
             HStack(spacing: 10) {
                 BotGlyphFace(shape: "circle", color: "white", size: 24)
                     .overlay(Circle().stroke(Color.primary.opacity(0.15), lineWidth: 1).padding(1))
-                Text("Set up Grok Bot").font(.system(size: 15, weight: .semibold))
+                Text("Set up Bothive").font(.system(size: 15, weight: .semibold))
                 Spacer()
                 HStack(spacing: 6) {
                     ForEach(0..<6) { index in
@@ -105,7 +105,7 @@ struct MacSetupView: View {
     private var welcome: some View {
         Group {
             title("A free app for your AI CLIs")
-            lead("Grok Bot talks to an AI CLI already on this Mac. Pick one, sign in through it, and send your first message.")
+            lead("Bothive talks to an AI CLI already on this Mac. Pick one, sign in through it, and send your first message.")
             info("Free and open source", "Your CLI's account or your local model pays for the AI. This app adds no subscription, and free AI access isn't guaranteed.", icon: "heart")
             info("Your setup stays yours", "The CLI keeps its own login and model settings. You never paste secrets into this app.", icon: "terminal")
         }
@@ -149,7 +149,7 @@ struct MacSetupView: View {
                 Text(installation.path).font(.system(size: 13, design: .monospaced)).lineLimit(2).truncationMode(.middle).help(installation.path).textSelection(.enabled)
                 Text("You can continue to sign in. If this is not the installation you want, choose another executable.").foregroundStyle(MacTheme.secondary)
             } else {
-                lead("Install the CLI, then come back and scan again. Grok Bot never installs anything in the background.")
+                lead("Install the CLI, then come back and scan again. Bothive never installs anything in the background.")
                 if provider != .grok {
                     Text("If you use npm, install Node.js first, then run:").foregroundStyle(MacTheme.secondary)
                     command(provider.installCommand)
@@ -182,14 +182,14 @@ struct MacSetupView: View {
                 }.disabled(desktop.checkingLogin || installation == nil)
             }
             if let feedback = desktop.setupFeedback { Text(feedback).foregroundStyle(MacTheme.secondary).lineSpacing(5) }
-            info("Your login stays with the CLI", "Grok Bot never copies your token. Codex sign-in is checked here; other CLIs are checked when you send your first message.", icon: "lock")
+            info("Your login stays with the CLI", "Bothive never copies your token. Codex sign-in is checked here; other CLIs are checked when you send your first message.", icon: "lock")
         }
     }
 
     private var ready: some View {
         Group {
             title("Ready for your first message")
-            lead("Grok Bot starts with an empty chat. Add more Bots whenever you like; each keeps its own session with the CLI.")
+            lead("Hive starts with an empty chat. Add more Bots whenever you like; each keeps its own session with the CLI.")
             if let installation { Label("\(installation.provider.name) on this Mac", systemImage: "terminal").font(.headline) }
             info("Use your iPhone", "In Settings → Computer, sign in and turn on phone access. Sign in on your iPhone with the same account, check the fingerprint, and approve it here.", icon: "iphone")
             info("You stay in control", "No approval-bypass flags. Codex gets read-only workspace access, other CLIs keep their own permissions, and you can stop any reply.", icon: "hand.raised")

@@ -17,8 +17,8 @@ function encryptBackup(value, password, platform = 'windows') {
 
 function decryptBackup(text, password) {
   let envelope;
-  try { envelope = JSON.parse(text); } catch { throw new Error('This is not an OpenGrokBot backup.'); }
-  if (envelope?.format !== 'opengrokbot-backup' || envelope.version !== 1 || envelope.kdf !== 'pbkdf2-sha256') throw new Error('This is not an OpenGrokBot backup.');
+  try { envelope = JSON.parse(text); } catch { throw new Error('This is not a Bothive backup.'); }
+  if (envelope?.format !== 'opengrokbot-backup' || envelope.version !== 1 || envelope.kdf !== 'pbkdf2-sha256') throw new Error('This is not a Bothive backup.');
   if (!Number.isInteger(envelope.iterations) || envelope.iterations < 100000 || envelope.iterations > 5000000) throw new Error('This backup uses unsupported settings.');
   const salt = Buffer.from(envelope.salt || '', 'base64'), iv = Buffer.from(envelope.iv || '', 'base64'), body = Buffer.from(envelope.ciphertext || '', 'base64');
   if (salt.length < 16 || iv.length !== 12 || body.length < 17) throw new Error('This backup is damaged.');

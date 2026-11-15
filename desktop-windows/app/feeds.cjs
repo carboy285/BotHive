@@ -76,7 +76,7 @@ function parseBluesky(json, actor) {
 async function download(url, fetcher) {
   let current = url;
   for (let hop = 0; hop < 4; hop++) {
-    const response = await fetcher(current.href, { redirect: 'manual', signal: AbortSignal.timeout(20000), headers: { 'User-Agent': 'OpenGrokBot-feed-reader', Accept: 'application/rss+xml, application/atom+xml, application/xml, application/json, text/xml;q=0.9' } });
+    const response = await fetcher(current.href, { redirect: 'manual', signal: AbortSignal.timeout(20000), headers: { 'User-Agent': 'Bothive-feed-reader', Accept: 'application/rss+xml, application/atom+xml, application/xml, application/json, text/xml;q=0.9' } });
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const next = publicURL(new URL(response.headers.get('location') || '', current).href);
       if (!next) throw new Error('The feed redirected somewhere that is not a public https address.');

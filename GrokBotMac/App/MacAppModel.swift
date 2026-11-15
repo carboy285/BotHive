@@ -86,7 +86,7 @@ final class MacAppModel: ObservableObject {
     /// Keeps the Mac from idle-sleeping while a Bot is replying, and (if you chose) while routines are scheduled.
     func refreshAwake() {
         let want = !runningBots.isEmpty || routinesWantAwake
-        if want, awakeActivity == nil { awakeActivity = ProcessInfo.processInfo.beginActivity(options: [.idleSystemSleepDisabled, .userInitiated], reason: "OpenGrokBot is running a Bot") }
+        if want, awakeActivity == nil { awakeActivity = ProcessInfo.processInfo.beginActivity(options: [.idleSystemSleepDisabled, .userInitiated], reason: "Bothive is running a Bot") }
         else if !want, let activity = awakeActivity { ProcessInfo.processInfo.endActivity(activity); awakeActivity = nil }
     }
     @Published var modelCatalogs: [CLIProvider:[AvailableCLIModel]] = [:]
@@ -129,11 +129,11 @@ final class MacAppModel: ObservableObject {
         }
         // A Bot that uses a VM on another computer sends its guest commands there over the encrypted relay.
         MacBotVMs.shared.remoteRunner = { [weak self] link, argv in
-            guard let self, self.remote.account.signedIn else { throw CloudError.message("Sign in to your OpenGrokBot account to use a VM on another computer.") }
+            guard let self, self.remote.account.signedIn else { throw CloudError.message("Sign in to your Bothive account to use a VM on another computer.") }
             let gateway = self.ensureCopyGateway()
             var host = gateway.hosts.first { $0.id == link.hostID }
             for _ in 0..<12 where host == nil { try await Task.sleep(for: .milliseconds(500)); host = gateway.hosts.first { $0.id == link.hostID } }
-            guard let host else { throw CloudError.message("\(link.hostName) is not showing up right now. Make sure it is awake with OpenGrokBot open and phone access on.") }
+            guard let host else { throw CloudError.message("\(link.hostName) is not showing up right now. Make sure it is awake with Bothive open and phone access on.") }
             return try await gateway.runVM(argv, vm: link.vmBotID, on: host)
         }
         if FileManager.default.fileExists(atPath: Self.draftURL.path) {
@@ -438,7 +438,7 @@ final class MacAppModel: ObservableObject {
         let info = Bundle.main.infoDictionary
         let defaults = UserDefaults.standard
         var lines = [
-            "OpenGrokBot \(info?["CFBundleShortVersionString"] as? String ?? "?") (build \(info?["CFBundleVersion"] as? String ?? "?"))",
+            "Bothive \(info?["CFBundleShortVersionString"] as? String ?? "?") (build \(info?["CFBundleVersion"] as? String ?? "?"))",
             "macOS \(ProcessInfo.processInfo.operatingSystemVersionString) · \(ProcessInfo.processInfo.activeProcessorCount) cores · \(Int((Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824).rounded())) GB",
             "Providers: " + (installedCLIs.isEmpty ? "none found" : installedCLIs.map { "\($0.provider.name) \($0.version)" }.joined(separator: "; ")),
             "Bots: \(app.workspace.bots.count) · messages: \(app.workspace.entries.count)",
@@ -451,7 +451,7 @@ final class MacAppModel: ObservableObject {
         return lines.joined(separator: "\n")
     }
     func conversationText(for bot: Bot, app: AppModel) -> String {
-        "OpenGrokBot — \(bot.name)\n\n" + app.entries(for: bot).map { entry in
+        "Bothive — \(bot.name)\n\n" + app.entries(for: bot).map { entry in
             let label = entry.kind == .user ? "You" : entry.kind == .activity ? "Activity" : (entry.senderName ?? bot.name)
             return "[\(entry.date.formatted(date: .numeric, time: .standard))] \(label): \(entry.text)"
         }.joined(separator: "\n\n")
@@ -716,7 +716,7 @@ extension MacAppModel {
         runningBots.insert(bot.id)
         let run = LocalCLIRun(); runs[replyID] = run; runOwners[replyID] = bot.id
         let directory = workingDirectory(for: bot), cli = provider.cli, model = provider.choice.model
-        let fullPrompt = "You are \(bot.name), the human's assistant in OpenGrokBot.\n" + prompt
+        let fullPrompt = "You are \(bot.name), the human's assistant in Bothive.\n" + prompt
         tasks[replyID] = Task {
             var finalText = ""
             do {
@@ -960,13 +960,13 @@ extension MacAppModel {
 }
 
 
-/// Posts a macOS notification when a Bot finishes while OpenGrokBot is in the background.
+/// Posts a macOS notification when a Bot finishes while Bothive is in the background.
 enum MacNotifier {
     @MainActor static func replyFinished(botName: String, text: String, failed: Bool) {
         guard !NSApp.isActive else { return }
         if MacPush.enabled {
             let title = failed ? "\(botName) couldn’t finish" : "\(botName) replied"
-            let body = MacPush.includeText ? text : (failed ? "Open OpenGrokBot to see what happened." : "Open OpenGrokBot to read it.")
+            let body = MacPush.includeText ? text : (failed ? "Open Bothive to see what happened." : "Open Bothive to read it.")
             Task { await MacPush.send(title: title, body: body, urgent: failed) }
         }
         let content = UNMutableNotificationContent()

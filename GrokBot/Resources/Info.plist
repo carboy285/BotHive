@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>OpenGrokBot uses the microphone for hands-free voice conversations with your Bots.</string>
+	<string>Bothive uses the microphone for hands-free voice conversations with your Bots.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>OpenGrokBot uses speech recognition to turn what you say into messages for your Bots.</string>
+	<string>Bothive uses speech recognition to turn what you say into messages for your Bots.</string>
 	<key>CFBundleDisplayName</key>
-	<string>OpenGrokBot</string>
+	<string>Bothive</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -62,6 +62,6 @@
 		<string>audio</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>OpenGrokBot can speak Bot replies using a NVIDIA NIM speech server you run on your network, only if you choose it in voice settings.</string>
+	<string>Bothive can speak Bot replies using a NVIDIA NIM speech server you run on your network, only if you choose it in voice settings.</string>
 </dict>
 </plist>

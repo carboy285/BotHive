@@ -132,7 +132,7 @@ final class RemoteController: ObservableObject {
                         }
                     } else {
                         status = account.hosts.isEmpty
-                            ? "Open OpenGrokBot on your computer and sign in with this account. In Settings → Computer, make sure Allow phone access is on."
+                            ? "Open Bothive on your computer and sign in with this account. In Settings → Computer, make sure Allow phone access is on."
                             : "Choose your computer in Connect Desktop to load its Bots."
                     }
                 } catch {
@@ -297,7 +297,7 @@ final class RemoteController: ObservableObject {
         } catch {
             let text = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             vmDiagnostics["lastStatus"] = "failed"; vmDiagnostics["error"] = text
-            throw CloudError.message("Could not read \(peer.name)’s VM list: \(text) (this app \(Self.appVersion)). If it keeps happening, update OpenGrokBot on both computers.")
+            throw CloudError.message("Could not read \(peer.name)’s VM list: \(text) (this app \(Self.appVersion)). If it keeps happening, update Bothive on both computers.")
         }
     }
     /// What the last attempt to list a shared VM did, for Copy diagnostics.
@@ -399,7 +399,7 @@ enum ReplyNotifier {
 }
 
 #if os(iOS)
-/// Shows reply banners even while OpenGrokBot is open.
+/// Shows reply banners even while Bothive is open.
 final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate, Sendable {
     static let shared = NotificationPresenter()
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {

@@ -280,7 +280,7 @@ struct MacConversationView: View {
                     Button("Copy diagnostics") {
                         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
                         let provider = desktop.providersToRun(for: bot).first?.cli.provider.name ?? "not configured"
-                        let info = "OpenGrokBot \(version)\nProvider: \(provider)\nStatus: last response failed\nBot ID: \(bot.id.uuidString)"
+                        let info = "Bothive \(version)\nProvider: \(provider)\nStatus: last response failed\nBot ID: \(bot.id.uuidString)"
                         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(info, forType: .string)
                     }.help("Copy version, provider and run status without chat text or credentials")
                     Button("AI CLI setup") { desktop.panel = .setup }
@@ -535,7 +535,7 @@ struct MacMessageView: View {
         }
     }
 
-    /// Dots in a bubble while the Bot has not written anything yet, with Grok Bot's status phrase beside it.
+    /// Dots in a bubble while the Bot has not written anything yet, with a status phrase beside it.
     private var thinkingBubble: some View {
         HStack(spacing: 10) {
             MacTypingDots()
@@ -836,7 +836,7 @@ enum CodeHighlight {
     }
 }
 
-/// An image line in a reply: a web image, or a picture the Bot saved in OpenGrokBot's own folders.
+/// An image line in a reply: a web image, or a picture the Bot saved in Bothive's own folders.
 struct MacInlineImage: View {
     let alt: String
     let source: String

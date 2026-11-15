@@ -26,19 +26,20 @@ app_path="$derived_dir/Build/Products/Release/OpenGrokBot.app"
 if [[ ! -d "$app_path" ]]; then echo "Build did not produce OpenGrokBot.app" >&2; exit 1; fi
 codesign --verify --deep --strict "$app_path"
 version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app_path/Contents/Info.plist")"
-image_path="$output_dir/OpenGrokBot-${version}-mac-universal.dmg"
+image_path="$output_dir/Bothive-${version}-mac-universal.dmg"
 if [[ -e "$image_path" ]]; then echo "Refusing to overwrite $image_path" >&2; exit 1; fi
 stage_dir="$(mktemp -d -t opengrokbot-dmg)"
 trap 'rm -rf -- "$stage_dir"' EXIT
 # ditto preserves the bundle's resources, code signature, and executable modes.
-ditto "$app_path" "$stage_dir/OpenGrokBot.app"
+# The build keeps its internal product name (OpenGrokBot) so updates replace existing installs; people see Bothive.
+ditto "$app_path" "$stage_dir/Bothive.app"
 ln -s /Applications "$stage_dir/Applications"
 # 0.9.9: a window with the Bots around the edges and an arrow to Applications (scripts/make_dmg_background.py).
 mkdir "$stage_dir/.background"
 tiffutil -cathidpicheck "$script_dir/dmg/background.png" "$script_dir/dmg/background@2x.png" -out "$stage_dir/.background/background.tiff"
 rw_image="$stage_dir.rw.dmg"
 trap 'rm -rf -- "$stage_dir" "$rw_image"' EXIT
-hdiutil create -volname 'OpenGrokBot' -srcfolder "$stage_dir" -format UDRW -ov "$rw_image"
+hdiutil create -volname 'Bothive' -srcfolder "$stage_dir" -format UDRW -ov "$rw_image"
 attach_output="$(hdiutil attach -readwrite -noverify -noautoopen "$rw_image")"
 device="$(printf '%s\n' "$attach_output" | awk '/\/Volumes\// {print $1; exit}')"
 mount_point="$(printf '%s\n' "$attach_output" | grep -o '/Volumes/.*$' | head -n 1)"
@@ -58,7 +59,7 @@ tell application "Finder"
     set icon size of viewOptions to 128
     set text size of viewOptions to 13
     set background picture of viewOptions to file ".background:background.tiff"
-    set position of item "OpenGrokBot.app" of container window to {180, 190}
+    set position of item "Bothive.app" of container window to {180, 190}
     set position of item "Applications" of container window to {460, 190}
     update without registering applications
     delay 1

@@ -1,6 +1,6 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
 const {validateWorkspace,previewWorkspace,migrateWorkspace}=require('./workspace.cjs');
-test('new workspace contains only the main Grok Bot and no example conversation',()=>{const value=previewWorkspace();assert.equal(validateWorkspace(value),value);assert.equal(value.bots.length,1);assert.equal(value.bots[0].name,'Grok Bot');assert.equal(value.bots[0].isMain,true);assert.deepEqual(value.entries,[]);});
+test('new workspace contains only the main Bot (Hive) and no example conversation',()=>{const value=previewWorkspace();assert.equal(validateWorkspace(value),value);assert.equal(value.bots.length,1);assert.equal(value.bots[0].name,'Hive');assert.equal(value.bots[0].isMain,true);assert.deepEqual(value.entries,[]);});
 test('rejects path traversal, duplicate IDs, orphan messages, unknown kinds and oversized notes',()=>{
   for(const mutate of [x=>x.bots.push(x.bots[0]),x=>x.bots[0].id='../../outside',x=>x.entries[0].botID='missing',x=>x.entries[0].kind='executed',x=>x.entries[0].text='x'.repeat(100001),x=>x.bots[0].name='',x=>x.bots[0].color='invalid']){
     const value=previewWorkspace();value.entries.push({id:'test',botID:value.bots[0].id,kind:'user',text:'Hello'});mutate(value);assert.throws(()=>validateWorkspace(value));

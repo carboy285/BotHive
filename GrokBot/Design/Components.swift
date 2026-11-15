@@ -91,7 +91,7 @@ struct StatusCard: View {
     }
 }
 
-// MARK: 0.9.2 Grok Bot chat parts
+// MARK: 0.9.2 chat parts
 
 extension Palette {
     static let working = Color(red: 0.63, green: 0.48, blue: 1)

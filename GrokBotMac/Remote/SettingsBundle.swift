@@ -36,7 +36,7 @@ struct SettingsBundle: Codable, Sendable {
 
     static func decode(_ data: Data) throws -> SettingsBundle {
         guard data.count <= 200_000, let bundle = try? JSONDecoder().decode(SettingsBundle.self, from: data), bundle.format == Self.format, bundle.version == 1 else {
-            throw CloudError.message("That is not a settings bundle this version understands. Update OpenGrokBot on both computers.")
+            throw CloudError.message("That is not a settings bundle this version understands. Update Bothive on both computers.")
         }
         return bundle.sanitized()
     }

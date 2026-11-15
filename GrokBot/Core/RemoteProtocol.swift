@@ -6,7 +6,7 @@ enum RemoteError: Error, LocalizedError, Sendable {
         switch self {
         case .incompatible: "Update the Mac and iPhone apps to compatible versions."
         case .unauthorized: "Sign in again and approve this phone on your computer."
-        case .unavailable: "Keep the Mac awake with OpenGrokBot running and phone access enabled."
+        case .unavailable: "Keep the Mac awake with Bothive running and phone access enabled."
         }
     }
 }
@@ -89,7 +89,7 @@ struct RemoteVM: Codable, Sendable, Identifiable, Hashable {
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: Keys.self)
         guard let id = try values.decodeIfPresent(UUID.self, forKey: .botID) else {
-            throw CloudError.message("The other computer’s VM list is missing “botID”. Update OpenGrokBot on both computers.")
+            throw CloudError.message("The other computer’s VM list is missing “botID”. Update Bothive on both computers.")
         }
         botID = id
         botName = try values.decodeIfPresent(String.self, forKey: .botName) ?? values.decodeIfPresent(String.self, forKey: .name) ?? "Shared VM"

@@ -275,7 +275,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// A message Grok Bot sends on its own (heads-ups, 0.9.6): finished, with a small tag saying what it is about.
+    /// A message the main Bot sends on its own (heads-ups, 0.9.6): finished, with a small tag saying what it is about.
     @discardableResult
     func postHeadsUp(_ text: String, tag: HeadsUpTag, to botID: UUID) -> Bool {
         guard workspace.bots.contains(where: { $0.id == botID }) else { return false }

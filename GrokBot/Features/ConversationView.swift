@@ -496,7 +496,7 @@ final class PhoneDictation: ObservableObject {
 
     private func begin(current: String, set: @escaping (String) -> Void) async {
         guard await VoiceSession.requestAccess(needsSpeech: true) else {
-            note = "Allow Microphone and Speech Recognition for OpenGrokBot in Settings → OpenGrokBot, then try again."
+            note = "Allow Microphone and Speech Recognition for Bothive in Settings → Bothive, then try again."
             return
         }
         guard let recognizer = SFSpeechRecognizer(locale: VoiceSettings.locale) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US")), recognizer.isAvailable else {

@@ -30,11 +30,11 @@ struct GrokBotApp: App {
     }
 }
 
-/// "Talk to OpenGrokBot": opens the app in hands-free voice mode with your main Bot.
+/// "Talk to Bothive": opens the app in hands-free voice mode with your main Bot.
 /// Add it to the Action Button, Lock Screen or Control Center from the Shortcuts app.
 struct StartVoiceIntent: AppIntent {
     static var title: LocalizedStringResource { "Talk to my Bot" }
-    static var description: IntentDescription { IntentDescription("Opens OpenGrokBot in hands-free voice mode with your main Bot.") }
+    static var description: IntentDescription { IntentDescription("Opens Bothive in hands-free voice mode with your main Bot.") }
     static var openAppWhenRun: Bool { true }
 
     @MainActor
@@ -48,7 +48,7 @@ struct StartVoiceIntent: AppIntent {
 /// Works from Siri, the Shortcuts app, the Action Button, and the share sheet in Shortcuts.
 struct AskBotIntent: AppIntent {
     static var title: LocalizedStringResource { "Ask a Bot" }
-    static var description: IntentDescription { IntentDescription("Sends a request to one of your OpenGrokBot Bots and opens the chat.") }
+    static var description: IntentDescription { IntentDescription("Sends a request to one of your Bothive Bots and opens the chat.") }
     static var openAppWhenRun: Bool { true }
 
     @Parameter(title: "Request") var request: String
@@ -66,7 +66,7 @@ struct AskBotIntent: AppIntent {
     }
 }
 
-struct OpenGrokBotShortcuts: AppShortcutsProvider {
+struct BothiveShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: AskBotIntent(),
                     phrases: ["Ask \(.applicationName)", "Ask my Bot in \(.applicationName)"],

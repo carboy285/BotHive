@@ -62,7 +62,7 @@ final class AppModelTests: XCTestCase {
         let model = AppModel(store: store); model.enterPreview()
         XCTAssertTrue(model.addBot(name: "Research", purpose: "Help", color: "purple"))
         let bot = try XCTUnwrap(model.workspace.bots.last)
-        XCTAssertFalse(model.updateDetails(bot, name: "Grok Bot", purpose: "Help", memory: []))
+        XCTAssertFalse(model.updateDetails(bot, name: "Hive", purpose: "Help", memory: []))
         XCTAssertTrue(model.updateDetails(bot, name: "Research", purpose: "Find sources", memory: ["Remember my preferences"]))
         let reopened = AppModel(store: store); reopened.enterPreview()
         XCTAssertEqual(reopened.workspace.bots.last?.memory, ["Remember my preferences"])

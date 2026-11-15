@@ -61,7 +61,7 @@ enum WakeCommand {
 
 
 // MARK: Heads-ups (0.9.6, 0.9.7)
-// Grok Bot reaches out first: mail that needs you, a meeting about to start or moved, two events that overlap, a
+// Hive reaches out first: mail that needs you, a meeting about to start or moved, two events that overlap, a
 // reminder due today, a package out for delivery, and a short morning brief. It reads Mail, Calendar and Reminders on
 // this Mac through the connections switched on in Connect apps → This Mac.
 
@@ -327,7 +327,7 @@ enum HeadsUpNotifier {
     @MainActor static func send(title: String, body: String, silent: Bool, urgent: Bool) {
         let flat = String(body.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).prefix(200))
         if MacPush.enabled, !silent {
-            let text = MacPush.includeText ? flat : "Open OpenGrokBot to read it."
+            let text = MacPush.includeText ? flat : "Open Bothive to read it."
             Task { _ = await MacPush.send(title: title, body: text, urgent: urgent) }
         }
         guard !NSApp.isActive else { return }
@@ -493,6 +493,6 @@ final class MacHeadsUps: ObservableObject {
 
     private func post(_ text: String, tag: HeadsUpTag, bot: Bot, app: AppModel, quiet: Bool, urgent: Bool = false) {
         guard app.postHeadsUp(text, tag: tag, to: bot.id) else { return }
-        HeadsUpNotifier.send(title: tag.kind == "brief" ? "Morning brief" : (tag.title ?? "Grok Bot"), body: text, silent: quiet, urgent: urgent)
+        HeadsUpNotifier.send(title: tag.kind == "brief" ? "Morning brief" : (tag.title ?? "Bothive"), body: text, silent: quiet, urgent: urgent)
     }
 }

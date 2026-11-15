@@ -39,7 +39,7 @@ struct BotPackage: Codable, Sendable {
 
     static func decode(_ data: Data) throws -> BotPackage {
         guard data.count <= maxBytes + 400_000, let package = try? CloudCoding.decoder().decode(BotPackage.self, from: data), package.format == Self.format, package.version == 1 else {
-            throw CloudError.message("That is not a Bot package this version understands. Update OpenGrokBot on both computers.")
+            throw CloudError.message("That is not a Bot package this version understands. Update Bothive on both computers.")
         }
         return package
     }

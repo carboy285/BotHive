@@ -48,7 +48,7 @@ struct MacRemoteSettingsView: View {
             Text("Computer").font(.system(size: 16, weight: .medium))
             row("Name", s.hostName)
             row("System", s.platform == "windows" ? "Windows" : "Mac")
-            row("OpenGrokBot version", s.appVersion)
+            row("Bothive version", s.appVersion)
             row("Share keys and connectors", s.sharing ? "On" : "Off")
             if !s.sharing { Text("Turn it on at \(s.hostName) (Settings → Computer on Windows, the Computers screen on Mac) before keys can be changed from here.").font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
         }
@@ -98,7 +98,7 @@ struct MacRemoteSettingsView: View {
         guard let gateway = desktop.gateway else { problem = "Switch to another computer first."; return }
         for _ in 0..<10 where !gateway.hasSnapshot { try? await Task.sleep(for: .seconds(1)) }
         do { settings = try await gateway.hostSettings() }
-        catch { problem = "\(name) didn’t answer: " + ((error as? LocalizedError)?.errorDescription ?? error.localizedDescription) + " Update OpenGrokBot there to 0.8.5 if it is older." }
+        catch { problem = "\(name) didn’t answer: " + ((error as? LocalizedError)?.errorDescription ?? error.localizedDescription) + " Update Bothive there to 0.8.5 if it is older." }
     }
 
     private func save(_ provider: CLIProvider, key: String) async {

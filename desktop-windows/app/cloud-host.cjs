@@ -59,7 +59,7 @@ class CloudHost {
   transition(phase, feedback) { const different = phase !== this.phase || feedback !== this.feedback; this.phase = phase; this.feedback = feedback; if (different) this.changed(this.status()); }
   async restore() {
     try { const saved = await this.load(); if (saved) this.data = saved; this.data.identities ||= {}; this.data.approvals ||= {}; this.data.receipts ||= []; this.data.pinPending ||= {}; if (this.data.session && this.data.enabled) this.start(); else this.transition(this.data.session ? 'disabled' : 'signed-out', this.data.session ? 'Phone access is off.' : 'Sign in with the same account as your iPhone.'); if(this.data.session)this.startPreferences(); }
-    catch { this.transition('locked', 'Unlock Windows device encryption, then reopen OpenGrokBot to restore phone access.'); }
+    catch { this.transition('locked', 'Unlock Windows device encryption, then reopen Bothive to restore phone access.'); }
   }
   async raw(path, { body, method = 'POST', token, signal } = {}) {
     const response = await this.fetchImpl(BASE + path, { method, redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20000)]) : AbortSignal.timeout(20000), headers: { apikey: API_KEY, 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });

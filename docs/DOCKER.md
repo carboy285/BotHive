@@ -1,4 +1,4 @@
-# Run OpenGrokBot in Docker (experimental)
+# Run Bothive in Docker (experimental)
 
 This runs the Windows/Electron app headless in a container and serves it through **Web access**, so you open it in a browser. It exists for people who want it on a home server. It has **not been built or run in Docker by the maintainers**; the same start-up sequence (settings written, Electron under a virtual screen, browser login) was checked outside Docker.
 
@@ -15,7 +15,7 @@ The compose file publishes the port only to this computer. To use it from anothe
 
 ## AI CLIs
 
-OpenGrokBot drives AI CLIs that are installed where it runs, so a container needs its own. The compose file installs Claude Code; change `CLIS` (a space-separated list of npm packages) to add more. Then sign each in once:
+Bothive drives AI CLIs that are installed where it runs, so a container needs its own. The compose file installs Claude Code; change `CLIS` (a space-separated list of npm packages) to add more. Then sign each in once:
 
 ```bash
 docker compose -f docker/compose.yml exec opengrokbot claude login

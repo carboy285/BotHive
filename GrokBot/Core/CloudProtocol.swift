@@ -131,7 +131,7 @@ enum CloudError: LocalizedError {
         case .message(let text): text
         case .invalidPacket: "The device message could not be verified."
         case .resync: "Refreshing the desktop workspace…"
-        case .signedOut: "Sign in to your OpenGrokBot account."
+        case .signedOut: "Sign in to your Bothive account."
         case .timeout: "The hosting computer did not reply. Keep it awake, enable remote/phone access, and approve this viewing device after comparing its fingerprint."
         case .approvalRequired: "Your computer is connected, but this iPhone needs approval. On the computer, open Settings → Computer, compare this phone’s fingerprint, and choose Approve phone. Your Bots will load automatically."
         }

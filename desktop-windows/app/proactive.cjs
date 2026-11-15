@@ -1,4 +1,4 @@
-// Heads-ups: Grok Bot watches Gmail and Google Calendar through the user's Composio
+// Heads-ups: Hive watches Gmail and Google Calendar through the user's Composio
 // project and reaches out first when something needs them. Everything here is pure or
 // takes its I/O as arguments so it can be tested without Electron or a live account.
 const QUIET_TOKEN = 'NOTHING_URGENT';
@@ -258,7 +258,7 @@ function nudgeText(items, timeZone) {
   return `Still waiting on you:\n${lines.join('\n')}`;
 }
 
-// What the Today card at the top of Grok Bot's chat shows.
+// What the Today card at the top of Hive's chat shows.
 function todaySummary(events, waiting, now, timeZone) {
   const today = localParts(new Date(now), timeZone).day;
   const timed = events.filter(x => !x.allDay && !x.declined && localParts(new Date(x.start), timeZone).day === today);

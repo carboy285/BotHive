@@ -10,7 +10,7 @@ const cliKey = value => { const t = String(value ?? '').trim(); return t.length 
 const voiceKey = value => { const t = String(value ?? '').trim(); return t.length >= 8 && t.length <= 600 && /^[\x21-\x7e]+$/.test(t) ? t : null; };
 
 function sanitize(value) {
-  if (!value || value.format !== FORMAT || value.version !== 1) throw new Error('That is not a settings bundle this version understands. Update OpenGrokBot on both computers.');
+  if (!value || value.format !== FORMAT || value.version !== 1) throw new Error('That is not a settings bundle this version understands. Update Bothive on both computers.');
   const clean = { format: FORMAT, version: 1, sourceName: String(value.sourceName || 'another computer').replace(/[\r\n]/g, ' ').slice(0, 80), cliKeys: {}, voiceKeys: {} };
   for (const [name, key] of Object.entries(value.cliKeys && typeof value.cliKeys === 'object' ? value.cliKeys : {})) { const k = cliKey(key); if (CLI_PROVIDERS.has(name) && k) clean.cliKeys[name] = k; }
   for (const [name, key] of Object.entries(value.voiceKeys && typeof value.voiceKeys === 'object' ? value.voiceKeys : {})) { const k = voiceKey(key); if (VOICE_PROVIDERS.has(name) && k) clean.voiceKeys[name] = k; }

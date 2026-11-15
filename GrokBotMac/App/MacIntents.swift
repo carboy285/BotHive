@@ -1,7 +1,7 @@
 import AppIntents
 import Foundation
 
-/// Lets Siri and the Shortcuts app on this Mac send a request to a Bot ("Ask OpenGrokBot …").
+/// Lets Siri and the Shortcuts app on this Mac send a request to a Bot ("Ask Bothive …").
 @MainActor
 final class MacIntentHub {
     static let shared = MacIntentHub()
@@ -23,7 +23,7 @@ final class MacIntentHub {
     func ask(bot name: String, text: String) -> String {
         pending.append((name, text))
         flush()
-        return pending.isEmpty ? "Sent." : "OpenGrokBot is still starting. It will send that as soon as it is ready."
+        return pending.isEmpty ? "Sent." : "Bothive is still starting. It will send that as soon as it is ready."
     }
 
     private func flush() {
@@ -39,7 +39,7 @@ final class MacIntentHub {
 
 struct MacAskBotIntent: AppIntent {
     static var title: LocalizedStringResource { "Ask a Bot" }
-    static var description: IntentDescription { IntentDescription("Sends a request to one of your OpenGrokBot Bots.") }
+    static var description: IntentDescription { IntentDescription("Sends a request to one of your Bothive Bots.") }
     static var openAppWhenRun: Bool { true }
 
     @Parameter(title: "Request") var request: String

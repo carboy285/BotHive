@@ -14,7 +14,7 @@ struct MacWorkspaceView: View {
     private func touch(_ bot: Bot) { if let gateway = desktop.gateway { gateway.touch(bot.id) } else { _ = app.touchBot(bot.id); _ = app.setUnread(false, for: bot.id) } }
     @FocusState private var searchFocused: Bool
     @ObservedObject private var approval = MacApproval.shared
-    /// The avatar carries what a Bot is doing, as in Grok Bot's roster.
+    /// The avatar carries what a Bot is doing.
     private func status(_ bot: Bot) -> MacBotStatus {
         if approval.isWaiting(on: bot.name) { return .attention }
         return desktop.runningBots.contains(bot.id) ? .working : .idle
@@ -258,7 +258,7 @@ struct MacWorkspaceView: View {
             return AnyView(VStack(spacing: 16) {
                 ProgressView()
                 Text("Connecting to \(gateway.hostName)…").font(.system(size: 22, weight: .medium))
-                Text("Its Bots will appear here as soon as it answers. Make sure it is awake with OpenGrokBot open and phone access on.").foregroundStyle(MacTheme.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
+                Text("Its Bots will appear here as soon as it answers. Make sure it is awake with Bothive open and phone access on.").foregroundStyle(MacTheme.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
             })
         }
         return AnyView(VStack(spacing: 22) {

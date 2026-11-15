@@ -218,7 +218,7 @@ function create({ browsers, approve, logins, directory, pdfPages, onePassword, r
       return `No saved secure login matches ${host}. ${known} The human can add one in Settings → Secure Logins.`;
     }
     if (unattended) return 'Signing in needs the human to approve, so it was skipped in this unattended run.';
-    if (!await approve(`Let ${botName} sign in to ${login.label}?`, `Site: ${login.host}\nAccount: ${login.onePassword ? `1Password item “${login.onePassword}”` : login.username}\n\nOpenGrokBot will type the ${login.onePassword ? '1Password' : 'saved'} password into the page. ${botName} and its AI provider never see the password.`)) return 'The human declined the sign-in.';
+    if (!await approve(`Let ${botName} sign in to ${login.label}?`, `Site: ${login.host}\nAccount: ${login.onePassword ? `1Password item “${login.onePassword}”` : login.username}\n\nBothive will type the ${login.onePassword ? '1Password' : 'saved'} password into the page. ${botName} and its AI provider never see the password.`)) return 'The human declined the sign-in.';
     let username = login.username, password;
     if (login.onePassword) {
       try { if (!onePassword) throw new Error('1Password is not available.'); ({ username, password } = await onePassword(login.onePassword)); }

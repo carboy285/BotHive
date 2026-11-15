@@ -52,7 +52,7 @@ const APP_TOOL = {
   type: 'function',
   function: {
     name: 'app_action',
-    description: 'Ask OpenGrokBot to do something for the human: any operation listed in your instructions, such as searching the web, reading a page, adding a reminder, scheduling a task, making an image, finding or running a connected-app tool, or messaging another Bot. Put the operation name in "action" and its fields next to it, exactly as the instructions show. The result comes back in the next turn.',
+    description: 'Ask Bothive to do something for the human: any operation listed in your instructions, such as searching the web, reading a page, adding a reminder, scheduling a task, making an image, finding or running a connected-app tool, or messaging another Bot. Put the operation name in "action" and its fields next to it, exactly as the instructions show. The result comes back in the next turn.',
     parameters: {
       type: 'object',
       properties: {

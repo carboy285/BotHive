@@ -10,6 +10,8 @@ const ruleSet = require('./approval-rules.cjs');
 
 if (process.env.OPENGROKBOT_DATA_DIR) app.setPath('userData', process.env.OPENGROKBOT_DATA_DIR); // where to keep chats and settings, e.g. a Docker volume
 else if (!app.isPackaged && process.env.OPENGROKBOT_TEST_DATA_DIR) app.setPath('userData', process.env.OPENGROKBOT_TEST_DATA_DIR);
+// 10.0: the app is called Bothive now, but chats and settings stay in the folder earlier versions used.
+else if (app.isPackaged) app.setPath('userData', path.join(app.getPath('appData'), 'OpenGrokBot'));
 
 const cli=require('./local-cli.cjs');
 const composio=require('./composio.cjs');
@@ -281,7 +283,7 @@ async function tickSchedules(){
 }
 setInterval(()=>tickSchedules().catch(()=>{}),5000).unref();
 
-// ---------- Heads-ups: Grok Bot reaches out first ----------
+// ---------- Heads-ups: Hive reaches out first ----------
 let proactiveState=null,toolsCheckedAt=0;
 const headsUpConfig=()=>proactive.sanitizeConfig(settings?.proactive);
 const keepRunning=()=>cloud.active||headsUpConfig().enabled||webAccess.active;
@@ -361,8 +363,8 @@ function remoteTrayUpdate(){
  if(keepRunning()&&!remoteTray){remoteTray=new Tray(path.join(__dirname,'icon.ico'));remoteTray.on('double-click',showHost);}
  else if(!keepRunning()&&remoteTray){remoteTray.destroy();remoteTray=null;showHost();}
  if(!remoteTray)return;
- remoteTray.setToolTip('OpenGrokBot · '+[cloud.active&&'phone access on',headsUpConfig().enabled&&'watching email and calendar'].filter(Boolean).join(' · '));
- remoteTray.setContextMenu(Menu.buildFromTemplate([{label:'Open OpenGrokBot',click:showHost},...(headsUpConfig().enabled?[{label:'Check email and calendar now',click:()=>checkHeadsUps(true).catch(()=>{})}]:[]),{label:cloud.active?'Quit and stop host':'Quit',click:()=>{quitting=true;app.quit();}}]));
+ remoteTray.setToolTip('Bothive · '+[cloud.active&&'phone access on',headsUpConfig().enabled&&'watching email and calendar'].filter(Boolean).join(' · '));
+ remoteTray.setContextMenu(Menu.buildFromTemplate([{label:'Open Bothive',click:showHost},...(headsUpConfig().enabled?[{label:'Check email and calendar now',click:()=>checkHeadsUps(true).catch(()=>{})}]:[]),{label:cloud.active?'Quit and stop host':'Quit',click:()=>{quitting=true;app.quit();}}]));
 }
 const cloud = new CloudHost({
  load: async()=>{const value=await loadJSON('cloud-account.encrypted.json',null);if(!value)return null;requireVault();const decrypted=await safeStorage.decryptStringAsync(Buffer.from(value.encrypted,'base64'));return JSON.parse(decrypted.result);},
@@ -414,7 +416,7 @@ async function remoteVMExec(link,argv){
 const mirror = new (require('./cloud-mirror.cjs').CloudMirror)(cloud,status=>{if(mirrorWindow&&!mirrorWindow.isDestroyed())mirrorWindow.webContents.send('mirror:changed',status);});
 function openMirror(){
  if(mirrorWindow&&!mirrorWindow.isDestroyed()){mirrorWindow.show();mirrorWindow.focus();return;}
- mirrorWindow=new BrowserWindow({width:1150,height:800,minWidth:850,minHeight:600,title:'OpenGrokBot · Remote computer',webPreferences:{preload:path.join(__dirname,'mirror-preload.cjs'),contextIsolation:true,sandbox:true,nodeIntegration:false}});
+ mirrorWindow=new BrowserWindow({width:1150,height:800,minWidth:850,minHeight:600,title:'Bothive · Remote computer',webPreferences:{preload:path.join(__dirname,'mirror-preload.cjs'),contextIsolation:true,sandbox:true,nodeIntegration:false}});
  mirrorWindow.webContents.setWindowOpenHandler(()=>({action:'deny'}));mirrorWindow.webContents.on('will-navigate',event=>event.preventDefault());mirrorWindow.webContents.session.setPermissionRequestHandler((_webContents,_permission,callback)=>callback(false));
  mirrorWindow.on('closed',()=>{mirror.stop();mirrorWindow=null;showHost();});mirrorWindow.loadFile(mirrorFile);
 }
@@ -533,7 +535,7 @@ async function removeEntry(id){
 async function vmStatusNote(){try{await ensureState();const link=(await vmLinks()).shared;if(link)return `Shared Linux VM status: READY on ${link.hostName} (${link.vmName}). You can use vm_exec now; do not ask the human to set it up.`;const status=await localVMs.status(homeBotID());if(status.assigned&&status.state==='ready'&&status.commandsEnabled)return 'Shared Linux VM status: READY on this PC. You can use vm_exec now; do not ask the human to set it up.';if(status.assigned&&['installing','verifying'].includes(status.state))return 'Shared Linux VM status: still installing. Do not send vm_exec yet.';}catch{}return 'Shared Linux VM status: NOT set up or commands are off. Do not send vm_exec; if Linux is needed, tell the human to set it up in Settings → Shared Linux VM.';}
 const homeBotID=fallback=>state?.bots.find(bot=>bot.isMain===true)?.id||fallback;
 /** A Bot asking the human to use the shared VM. One request is shown at a time; the Bot waits for the answer. */
-// 0.9.2: a Bot asking for the human's OK shows as a card in the chat (Grok Bot style), not a system dialog.
+// 0.9.2: a Bot asking for the human's OK shows as a card in the chat, not a system dialog.
 // The card defaults to Deny; a reload or crash of the window denies whatever was waiting. Without a window, the dialog is used.
 const approvalWaiters=new Map();
 async function dialogApproval(title,detail){const response=await dialog.showMessageBox(window,{type:'warning',message:title,detail,buttons:['Deny','Approve'],defaultId:0,cancelId:0,noLink:true});return response.response===1;}
@@ -558,7 +560,7 @@ let voiceStore=null;
 function voiceModelsRoot(){return path.join(app.getPath('userData'),'local-voice');}
 async function engineWindow(){
  if(voiceEngine&&!voiceEngine.isDestroyed())return voiceEngine;
- voiceEngine=new BrowserWindow({show:false,width:320,height:240,title:'OpenGrokBot voice engine',webPreferences:{preload:path.join(__dirname,'voice-engine-preload.cjs'),contextIsolation:true,sandbox:true,nodeIntegration:false,backgroundThrottling:false}});
+ voiceEngine=new BrowserWindow({show:false,width:320,height:240,title:'Bothive voice engine',webPreferences:{preload:path.join(__dirname,'voice-engine-preload.cjs'),contextIsolation:true,sandbox:true,nodeIntegration:false,backgroundThrottling:false}});
  voiceEngine.webContents.setWindowOpenHandler(()=>({action:'deny'}));voiceEngine.webContents.on('will-navigate',event=>event.preventDefault());
  voiceEngine.on('closed',()=>{voiceEngine=null;});
  await voiceEngine.loadURL('ogb-models://local/engine.html');
@@ -603,7 +605,7 @@ function configureIPC() {
  // Settings → Copy diagnostics (0.9.5): versions, providers, voice settings and recent errors. No chats, keys or names of people.
  handle('diagnostics:get',async()=>{await ensureState();const os=require('node:os'),voiceSettings=await loadJSON('voice-settings.json',{});
   const errors=Object.entries(settings.providerHealth||{}).filter(([,v])=>v?.state&&v.state!=='ready'&&v.state!=='configured').map(([k,v])=>`${k}: ${String(v.detail||'').slice(0,160)}`);
-  return [`OpenGrokBot ${app.getVersion()} (Windows ${os.release()}, Electron ${process.versions.electron})`,`${os.cpus()[0]?.model||'CPU'} · ${os.cpus().length} cores · ${Math.round(os.totalmem()/2**30)} GB`,
+  return [`Bothive ${app.getVersion()} (Windows ${os.release()}, Electron ${process.versions.electron})`,`${os.cpus()[0]?.model||'CPU'} · ${os.cpus().length} cores · ${Math.round(os.totalmem()/2**30)} GB`,
    `Providers: ${installed.map(x=>`${x.name} ${x.version||''}`.trim()).join('; ')||'none found'}`,`Bots: ${state.bots.length} · messages: ${state.entries.length}`,
    `Voice: listening ${voiceSettings.transcriber||'default'}, speaking ${voiceSettings.speaker||'default'}, patience ${voiceSettings.patience||'normal'}, quick model ${voiceSettings.fastModel!==false}, layout ${voiceSettings.layout||'card'}, Kokoro ${voiceSettings.kokoroVoice||'af_heart'}`,
    `Local voice models: ${JSON.stringify(voiceSettings.localModels||'recommended')}; voice models: ${JSON.stringify(voiceSettings.voiceModels||{})}; last speed test: ${voiceSettings.lastSpeed||'none'}`,
@@ -765,7 +767,7 @@ function configureIPC() {
  handle('cloud:reconnect',()=>cloudAction(async()=>{if(!cloud.data.session)throw new Error('Sign in first.');await cloud.setEnabled(true);return cloud.status();}));
  handle('updates:check',async()=>{try{updateState=await updates.check(app.getVersion());return updateState;}catch(error){throw new PublicError(error.message);}});
  let downloadedUpdate=null;
- handle('updates:download',async()=>{if(!updateState?.available||!updateState.installer)throw new PublicError('Check for updates first. This release has no Windows installer.');const target=path.join(app.getPath('temp'),`OpenGrokBot-${updateState.version.replace(/[^0-9A-Za-z.-]/g,'')}-Setup.exe`);try{await updates.download(updateState.installer,target);}catch(error){throw new PublicError(error.message);}downloadedUpdate={path:target,version:updateState.version};return downloadedUpdate.version;});
+ handle('updates:download',async()=>{if(!updateState?.available||!updateState.installer)throw new PublicError('Check for updates first. This release has no Windows installer.');const target=path.join(app.getPath('temp'),`Bothive-${updateState.version.replace(/[^0-9A-Za-z.-]/g,'')}-Setup.exe`);try{await updates.download(updateState.installer,target);}catch(error){throw new PublicError(error.message);}downloadedUpdate={path:target,version:updateState.version};return downloadedUpdate.version;});
  handle('updates:install',async()=>{if(!downloadedUpdate)throw new PublicError('Download the update first.');if(active.size||pendingBots.size)throw new PublicError('A Bot is still replying. Restart when it finishes.');const command=updates.installCommand(downloadedUpdate.path,process.execPath);if(command&&app.isPackaged){const {spawn}=require('node:child_process');spawn(command.file,command.args,{detached:true,stdio:'ignore',windowsHide:true,windowsVerbatimArguments:true}).unref();}else{const failure=await shell.openPath(downloadedUpdate.path);if(failure)throw new PublicError('The installer could not be started. Open it from your temp folder.');}setTimeout(()=>app.quit(),800);return true;});
  handle('updates:open',async url=>{if(!updates.trusted(url))throw new PublicError('Use the official project release page.');await shell.openExternal(url);});
  handle('bot:organize',async(id,changes)=>{
@@ -782,18 +784,18 @@ function configureIPC() {
   handle('backup:export',async password=>{
     await ensureState();if(typeof password!=='string'||password.length<8||password.length>200)throw new PublicError('Use a password of at least 8 characters.');
     const {sessions,...portable}=state;const text=backup.encryptBackup(portable,password);
-    const choice=await dialog.showSaveDialog(window,{defaultPath:`OpenGrokBot-backup-${new Date().toISOString().slice(0,10)}.ogbackup`,filters:[{name:'OpenGrokBot backup',extensions:['ogbackup']}]});
+    const choice=await dialog.showSaveDialog(window,{defaultPath:`Bothive-backup-${new Date().toISOString().slice(0,10)}.ogbackup`,filters:[{name:'Bothive backup',extensions:['ogbackup']}]});
     if(choice.canceled||!choice.filePath)return false;await writeFile(choice.filePath,text,{mode:0o600});return true;
   });
   handle('backup:import',async password=>{
     await ensureState();if(active.size||pendingBots.size)throw new PublicError('Stop the current response before restoring a backup.');
     if(typeof password!=='string'||!password||password.length>200)throw new PublicError('Enter the backup password.');
-    const choice=await dialog.showOpenDialog(window,{title:'Choose an OpenGrokBot backup',properties:['openFile'],filters:[{name:'OpenGrokBot backup',extensions:['ogbackup']}]});
+    const choice=await dialog.showOpenDialog(window,{title:'Choose a Bothive backup',properties:['openFile'],filters:[{name:'Bothive backup',extensions:['ogbackup']}]});
     if(choice.canceled||!choice.filePaths.length)return false;
-    const info=await lstat(choice.filePaths[0]);if(!info.isFile()||info.size>200_000_000)throw new PublicError('Choose an OpenGrokBot backup file.');
+    const info=await lstat(choice.filePaths[0]);if(!info.isFile()||info.size>200_000_000)throw new PublicError('Choose a Bothive backup file.');
     let restored;try{restored=backup.decryptBackup(await readFile(choice.filePaths[0],'utf8'),password);}catch(error){throw new PublicError(error.message);}
     if(restored.platform!=='windows')throw new PublicError('This backup was made on a Mac. Restore it in the Mac app.');
-    let migrated;try{validateWorkspace(restored.workspace);migrated=migrateWorkspace(restored.workspace);}catch{throw new PublicError('This backup could not be read by this version of OpenGrokBot.');}
+    let migrated;try{validateWorkspace(restored.workspace);migrated=migrateWorkspace(restored.workspace);}catch{throw new PublicError('This backup could not be read by this version of Bothive.');}
     if(migrated.bots.filter(x=>x.isMain===true).length!==1)throw new PublicError('This backup is missing its main Bot.');
     for(const entry of migrated.entries)if(entry.state==='streaming')entry.state='stopped';
     await atomicJSON('pre-restore-workspace.json',state);migrated.sessions={};state=migrated;await atomicJSON('preview-workspace.json',state);notify();return true;
@@ -873,9 +875,9 @@ function configureIPC() {
   handle('composio:link',async slug=>{if(!composioConfiguration||!connectedTools.some(x=>x.slug===slug&&x.enabled))throw new PublicError('Choose a tool in your configured project.');try{await shell.openExternal(await composio.link(composioConfiguration.key,composioConfiguration.session.session_id,slug));}catch(error){throw new PublicError(error.message.startsWith('Composio')?error.message:'The authorization page could not be opened.');}});
   handle('composio:remove',async()=>{if(composioBusy)throw new PublicError('Wait for Composio setup to finish.');if(active.size||pendingBots.size)throw new PublicError('Stop responses before changing tool access.');requireVault();await atomicJSON('composio.encrypted.json',null);composioConfiguration=null;connectedTools=[];return composioStatus();});
   // 0.9.5: Markdown, or PDF made from the rendered chat (scripts off, no network) in a hidden window.
-  handle('workspace:export', async (text, format = 'md', name = 'OpenGrokBot conversation') => {
+  handle('workspace:export', async (text, format = 'md', name = 'Bothive conversation') => {
     if (typeof text !== 'string' || text.length > 32 * 1024 * 1024) throw new Error('Invalid export');
-    const safeName = String(name).replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 80) || 'OpenGrokBot conversation';
+    const safeName = String(name).replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 80) || 'Bothive conversation';
     const pdf = format === 'pdf';
     const result = await dialog.showSaveDialog(window, { defaultPath: `${safeName}.${pdf ? 'pdf' : format === 'txt' ? 'txt' : 'md'}`, filters: [pdf ? { name: 'PDF', extensions: ['pdf'] } : format === 'txt' ? { name: 'Text file', extensions: ['txt'] } : { name: 'Markdown', extensions: ['md'] }] });
     if (result.canceled) return false;
@@ -1043,9 +1045,9 @@ app.whenReady().then(() => {
   // 0.9.5: the native Windows caption buttons (minimize, maximize, close) over our own dark title area.
   const nativeTitleBar = process.platform === 'win32' ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#0a0a0b', symbolColor: '#ececee', height: 40 } } : { frame: false };
   const background = process.argv.includes('--background');
-  window = new BrowserWindow({ show: !background, width: 1370, height: 940, minWidth: 860, minHeight: 620, ...nativeTitleBar, backgroundColor: '#0f0f10', title: 'OpenGrokBot', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  window = new BrowserWindow({ show: !background, width: 1370, height: 940, minWidth: 860, minHeight: 620, ...nativeTitleBar, backgroundColor: '#0f0f10', title: 'Bothive', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
   {const send=window.webContents.send.bind(window.webContents);window.webContents.send=(channel,...args)=>{send(channel,...args);webAccess.broadcast(channel,args[0]);};}
-  window.on('close',event=>{if(keepRunning()&&!quitting){event.preventDefault();window.hide();if(!cloud.active&&settings&&!settings.trayHintShown){settings.trayHintShown=true;saveSettings().catch(()=>{});headsUpBanner(mainBot()?.id,'Still watching for you','OpenGrokBot keeps running in the tray so heads-ups keep coming. Quit from the tray icon.',true);}}});
+  window.on('close',event=>{if(keepRunning()&&!quitting){event.preventDefault();window.hide();if(!cloud.active&&settings&&!settings.trayHintShown){settings.trayHintShown=true;saveSettings().catch(()=>{});headsUpBanner(mainBot()?.id,'Still watching for you','Bothive keeps running in the tray so heads-ups keep coming. Quit from the tray icon.',true);}}});
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('render-process-gone',()=>denyAllApprovals());window.on('closed',()=>{denyAllApprovals();voiceEngine?.destroy();voiceEngine=null;});
   window.webContents.on('will-navigate', event => event.preventDefault());

@@ -59,7 +59,7 @@ final class MacBotVMs: ObservableObject {
     func execute(_ bot: Bot, argv: [String]) async throws -> String {
         guard let link = remoteLink(bot.id) else { return try await executeLocal(botID: homeBotID?() ?? bot.id, argv: argv) }
         try Self.checkCommand(argv)
-        guard let remoteRunner else { throw CloudError.message("Sign in to your OpenGrokBot account to use a VM on another computer.") }
+        guard let remoteRunner else { throw CloudError.message("Sign in to your Bothive account to use a VM on another computer.") }
         return "Linux guest on \(link.hostName) (\(link.vmName)):\n" + (try await remoteRunner(link, argv))
     }
 
@@ -80,7 +80,7 @@ final class MacBotVMs: ObservableObject {
     }
     func preview(_ bot: Bot) async throws -> RemoteBrowserPreview {
         guard assigned(bot.id) != nil else { return RemoteBrowserPreview(title: "VM not set up", url: "Set up this Bot’s Linux VM on the host desktop.", imageData: nil) }
-        guard preferences.bool(forKey: "bot-vm-viewing-" + bot.id.uuidString), CGPreflightScreenCaptureAccess() else { throw CloudError.message("On the hosting Mac, open this Bot’s VM settings, enable remote VM viewing, and allow macOS Screen Recording for OpenGrokBot.") }
+        guard preferences.bool(forKey: "bot-vm-viewing-" + bot.id.uuidString), CGPreflightScreenCaptureAccess() else { throw CloudError.message("On the hosting Mac, open this Bot’s VM settings, enable remote VM viewing, and allow macOS Screen Recording for Bothive.") }
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
         let expected = "OpenGrokBot-" + bot.id.uuidString
         guard let window = content.windows.first(where: { window in
@@ -103,7 +103,7 @@ final class MacBotVMs: ObservableObject {
         guard installed else { feedback[bot.id] = "Install UTM in Applications first, then download a Linux .utm template matching this Mac’s architecture."; return }
         guard assigned(bot.id) == nil else { await open(bot); return }
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = true; panel.allowsMultipleSelection = false; panel.treatsFilePackagesAsDirectories = false
-        panel.title = "Choose a downloaded Linux .utm template"; panel.message = "OpenGrokBot creates an independent VM for this Bot with 2 CPU cores and 4 GB RAM. The template’s disk and Linux desktop are copied."
+        panel.title = "Choose a downloaded Linux .utm template"; panel.message = "Bothive creates an independent VM for this Bot with 2 CPU cores and 4 GB RAM. The template’s disk and Linux desktop are copied."
         guard panel.runModal() == .OK, let template = panel.url, template.pathExtension.lowercased() == "utm" else { return }
         busy.insert(bot.id); feedback[bot.id] = "Importing and cloning Linux template…"; defer { busy.remove(bot.id) }
         let vmName = "OpenGrokBot-" + bot.id.uuidString
@@ -121,7 +121,7 @@ final class MacBotVMs: ObservableObject {
             CLIInstallationScanner.capture(path: "/usr/bin/osascript", arguments: ["-e",script,template.path,vmName], timeout: 600, limit: 4096)
         }.value
         guard result.exit == 0, let id = UUID(uuidString: result.text.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            feedback[bot.id] = "UTM could not finish setup. Allow OpenGrokBot to control UTM in macOS Privacy & Security → Automation, and use a stopped Linux template for this Mac’s architecture. Check UTM for a partially imported VM before retrying."; return
+            feedback[bot.id] = "UTM could not finish setup. Allow Bothive to control UTM in macOS Privacy & Security → Automation, and use a stopped Linux template for this Mac’s architecture. Check UTM for a partially imported VM before retrying."; return
         }
         preferences.set(id.uuidString, forKey: "bot-vm-" + bot.id.uuidString)
         await open(bot)
@@ -195,7 +195,7 @@ struct MacRemoteVMCard: View {
             } else {
                 let computers = desktop.computers()
                 if computers.isEmpty {
-                    Text("Sign in to your account on another computer that has OpenGrokBot open to use its VM here.").font(.system(size: 13)).foregroundStyle(MacTheme.secondary)
+                    Text("Sign in to your account on another computer that has Bothive open to use its VM here.").font(.system(size: 13)).foregroundStyle(MacTheme.secondary)
                 } else {
                     Menu(host?.name ?? "Choose a computer…") {
                         ForEach(computers, id: \.id) { computer in Button(computer.name) { host = computer; Task { await load(computer) } } }
@@ -219,7 +219,7 @@ struct MacRemoteVMCard: View {
         do {
             let list = try await desktop.ensureCopyGateway().vms(on: computer)
             available = list
-            if list.isEmpty { note = "\(computer.name) is not sharing any VM. On that computer, open Settings → Shared Linux VM and press Set up. Only the main Bot’s VM is shared, so set it up under the main Bot (usually “Grok Bot”)." }
+            if list.isEmpty { note = "\(computer.name) is not sharing any VM. On that computer, open Settings → Shared Linux VM and press Set up. Only the main Bot’s VM is shared, so set it up under the main Bot (usually “Hive”)." }
         } catch CloudError.approvalRequired {
             note = "\(computer.name) has not approved this Mac yet. A prompt is waiting on that computer: approve it there, then choose it again."
         } catch { note = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }

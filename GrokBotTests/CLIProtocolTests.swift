@@ -18,9 +18,20 @@ final class CLIProtocolTests: XCTestCase {
     func testFreshWorkspaceHasOnlyMainBotAndNoMessages() {
         let value = Workspace.fresh
         XCTAssertEqual(value.bots.count, 1)
-        XCTAssertEqual(value.bots.first?.name, "Grok Bot")
+        XCTAssertEqual(value.bots.first?.name, "Hive")
         XCTAssertEqual(value.bots.first?.isMain, true)
         XCTAssertTrue(value.entries.isEmpty)
+    }
+
+    func testDefaultMainBotIsRenamedToHiveButCustomNamesStay() throws {
+        func load(_ bots: [Bot]) throws -> Workspace {
+            try JSONDecoder().decode(Workspace.self, from: JSONEncoder().encode(Workspace(bots: bots, entries: [], schemaVersion: 2)))
+        }
+        var main = Bot(id: UUID(), name: "Grok Bot", purpose: "Help", color: "white", symbol: "sparkles"); main.isMain = true
+        let other = Bot(id: UUID(), name: "Grok Bot", purpose: "Not the main one", color: "pink", symbol: "sparkles")
+        XCTAssertEqual(try load([main, other]).bots.map(\.name), ["Hive", "Grok Bot"])
+        var renamed = main; renamed.name = "Ada"
+        XCTAssertEqual(try load([renamed]).bots.map(\.name), ["Ada"])
     }
 
     func testLegacyDemoMigrationKeepsUserNotesAndCustomBots() throws {
@@ -32,7 +43,7 @@ final class CLIProtocolTests: XCTestCase {
             Entry(botID: main.id, kind: .user, text: "Keep my actual note")
         ], schemaVersion: nil)
         value.migrateLegacyDemo()
-        XCTAssertEqual(value.bots.map(\.name), ["Grok Bot", "My work"])
+        XCTAssertEqual(value.bots.map(\.name), ["Hive", "My work"])
         XCTAssertEqual(value.entries.map(\.text), ["Keep my actual note"])
         XCTAssertTrue(value.bots[0].isMain == true)
     }

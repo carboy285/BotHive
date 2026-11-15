@@ -34,7 +34,7 @@ function build({ state, botID, sourceName, files = [] }) {
  * @param {{pkg:any, existingNames:string[], installed:string[], defaultProvider?:string}} input
  */
 function sanitize({ pkg, existingNames, installed, defaultProvider }) {
-  if (!pkg || pkg.format !== FORMAT || pkg.version !== 1 || !pkg.bot || typeof pkg.bot !== 'object' || !Array.isArray(pkg.entries)) throw new Error('That is not a Bot package this version understands. Update OpenGrokBot on both computers.');
+  if (!pkg || pkg.format !== FORMAT || pkg.version !== 1 || !pkg.bot || typeof pkg.bot !== 'object' || !Array.isArray(pkg.entries)) throw new Error('That is not a Bot package this version understands. Update Bothive on both computers.');
   if (pkg.bot.memberIDs) throw new Error('Groups cannot be copied. Copy its members one at a time.');
   const source = String(pkg.sourceName || 'another computer').replace(/[\r\n]/g, ' ').slice(0, 80);
   let name = String(pkg.bot.name || '').replace(/[\r\n]/g, ' ').trim().slice(0, 60);

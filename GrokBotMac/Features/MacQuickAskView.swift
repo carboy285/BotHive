@@ -16,7 +16,7 @@ struct MacQuickAskView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Ask a Bot").font(.system(size: 13, weight: .semibold))
             if bots.isEmpty {
-                Text("Create a Bot in OpenGrokBot first.").font(.system(size: 12)).foregroundStyle(.secondary)
+                Text("Create a Bot in Bothive first.").font(.system(size: 12)).foregroundStyle(.secondary)
             } else {
                 Picker("Bot", selection: Binding(get: { selected?.id ?? bots[0].id }, set: { botID = $0 })) {
                     ForEach(bots) { Text($0.name).tag($0.id) }
@@ -30,7 +30,7 @@ struct MacQuickAskView: View {
                 }
             }
             Divider()
-            Button("Open OpenGrokBot") { openMain() }.buttonStyle(.plain).font(.system(size: 12))
+            Button("Open Bothive") { openMain() }.buttonStyle(.plain).font(.system(size: 12))
         }.padding(14).frame(width: 320)
     }
 

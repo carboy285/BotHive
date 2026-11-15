@@ -12,7 +12,7 @@ final class MacGateway: ObservableObject {
     private var subscriptions: Set<AnyCancellable> = []
 
     init(source: CloudAccount) {
-        let cache = FileManager.default.temporaryDirectory.appendingPathComponent("OpenGrokBot-gateway-cache-" + UUID().uuidString + ".json")
+        let cache = FileManager.default.temporaryDirectory.appendingPathComponent("Bothive-gateway-cache-" + UUID().uuidString + ".json")
         model = AppModel(store: WorkspaceStore(url: cache), deferSaves: true)
         remote = RemoteController(
             account: CloudAccount(kind: "controller", secrets: KeychainSecretStore(service: "org.opengrokbot.mac.mirror-identity")),

@@ -1,5 +1,5 @@
 'use strict';
-// Prepares a headless OpenGrokBot container: turns on web access from environment variables, then exits.
+// Prepares a headless Bothive container: turns on web access from environment variables, then exits.
 // Needs OPENGROKBOT_WEB_PASSWORD (10+ characters). OPENGROKBOT_WEB_USER defaults to "admin".
 // OPENGROKBOT_PLUGINS is an optional comma-separated list of plugin names to allow (see docs/PLUGINS.md).
 const fs = require('node:fs');

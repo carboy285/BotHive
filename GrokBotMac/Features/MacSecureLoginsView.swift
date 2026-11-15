@@ -16,7 +16,7 @@ struct MacSecureLoginsView: View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Let a Bot sign in without seeing your password").font(.system(size: 18, weight: .medium))
-                Text("Save a login here, then ask a Bot to sign in. Each time, a dialog shows the site and account, and you approve with Touch ID or your Mac password. OpenGrokBot types the password into the page itself: the Bot and its AI provider never see it, and it never appears in the chat.")
+                Text("Save a login here, then ask a Bot to sign in. Each time, a dialog shows the site and account, and you approve with Touch ID or your Mac password. Bothive types the password into the page itself: the Bot and its AI provider never see it, and it never appears in the chat.")
                     .font(.system(size: 14)).lineSpacing(4).foregroundStyle(MacTheme.secondary)
                 Text("A login only works on the website you save it for, and its subdomains. Verification codes and passkeys are not handled: you finish those yourself in the Bot’s browser. Passwords are stored in this Mac’s Keychain.")
                     .font(.system(size: 13)).lineSpacing(4).foregroundStyle(MacTheme.secondary)

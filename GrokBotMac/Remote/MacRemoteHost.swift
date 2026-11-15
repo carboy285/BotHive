@@ -374,7 +374,7 @@ final class MacRemoteHost: ObservableObject {
                 guard let id = command.taskID, (command.text ?? "").count <= 8, app.setReaction((command.text ?? "").isEmpty ? nil : command.text, for: id) else { return .error(409,"That message could not be updated") }
             case "delete_entry":
                 guard let id = command.taskID, app.deleteEntry(id) else { return .error(409,"That message could not be deleted") }
-            case "delete_bot": guard let bot, bot.isMain != true else { return .error(409,"The main Grok Bot must be kept") }; desktop.stop(botID: bot.id); app.removeBot(bot)
+            case "delete_bot": guard let bot, bot.isMain != true else { return .error(409,"The main Bot must be kept") }; desktop.stop(botID: bot.id); app.removeBot(bot)
             case "configure_bot":
                 guard let bot, let config = command.configuration, !desktop.runningBots.contains(bot.id), app.setAIConfiguration(config, for: bot) else { return .error(409,"Stop the Bot before changing its provider or model") }
             default: return .error(400,"Unsupported command")

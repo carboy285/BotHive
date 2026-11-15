@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Diagnoses OpenGrokBot's open-source voice (Kokoro speaking, Whisper listening) on a real computer.
+// Diagnoses Bothive's open-source voice (Kokoro speaking, Whisper listening) on a real computer.
 // It runs the exact engine the apps ship (desktop-windows/renderer/local-voice-engine.js) in Chromium and in WebKit
 // (WebKit is what the Mac app's hidden web view uses), against the models the app already downloaded.
 // It never changes the app's files. It writes a report (JSON + Markdown) and the spoken samples to --out.
@@ -32,7 +32,7 @@ const args = Object.fromEntries(process.argv.slice(2).reduce((list, value, index
 }, []));
 const defaultCache = process.platform === 'win32'
   ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'OpenGrokBot', 'local-voice')
-  : path.join(os.homedir(), 'Library', 'Application Support', 'OpenGrokBot', 'LocalVoice');
+  : path.join(os.homedir(), 'Library', 'Application Support', 'Bothive', 'LocalVoice');
 const cache = path.resolve(args.cache || defaultCache);
 const out = path.resolve(args.out || path.join(os.tmpdir(), 'opengrokbot-voice-diagnosis-' + Date.now()));
 const browsers = String(args.browsers || 'chromium,webkit').split(',').filter(Boolean);
@@ -217,7 +217,7 @@ server.close();
 report.requests = { total: requests.length, missing: requests.filter(r => r.status !== 200).slice(0, 80), downloadedMB: Math.round(requests.filter(r => r.from === 'downloaded now').reduce((n, r) => n + (r.bytes || 0), 0) / 1e6) };
 
 await fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
-const lines = [`# OpenGrokBot local voice diagnosis`, '', `${report.platform.os} · ${report.platform.arch} · ${report.platform.cpu} · ${report.platform.cores} cores · ${report.platform.memoryGB} GB`, '',
+const lines = [`# Bothive local voice diagnosis`, '', `${report.platform.os} · ${report.platform.arch} · ${report.platform.cpu} · ${report.platform.cores} cores · ${report.platform.memoryGB} GB`, '',
   `App cache: ${cache} — ${report.cache.files} files, ${report.cache.totalMB} MB · runtime ${JSON.stringify(runtimeChecks)} · Kokoro ${report.cache.kokoro ? 'present' : 'missing'} · Whisper ${cachedSTT.join(', ') || 'none'}`, ''];
 for (const run of report.runs) {
   lines.push(`## ${run.browser}${run.browser === 'webkit' ? ' (closest to the Mac app)' : ''}`, `Capabilities: ${JSON.stringify(run.capabilities)}`);

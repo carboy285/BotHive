@@ -33,7 +33,7 @@ return async function handle(line){
     }
     const text=await response.text();if(text.length>16000000||!reply(text))throw new Error();
   }catch{
-    if(value.id!==undefined)send({jsonrpc:'2.0',id:value.id,error:{code:-32000,message:'Composio tool request failed. Refresh connections in OpenGrokBot and try again.'}});
+    if(value.id!==undefined)send({jsonrpc:'2.0',id:value.id,error:{code:-32000,message:'Composio tool request failed. Refresh connections in Bothive and try again.'}});
   }
 };
 }

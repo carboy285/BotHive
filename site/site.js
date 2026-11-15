@@ -11,11 +11,16 @@
 
   const size = bytes => bytes > 1e6 ? `${Math.round(bytes / 1e6)} MB` : `${Math.round(bytes / 1e3)} KB`;
   try {
-    const response = await fetch('https://api.github.com/repos/carboy285/opengrokbot/releases/latest', { headers: { Accept: 'application/vnd.github+json' } });
+    // The repository was renamed from opengrokbot to bothive; ask the new name first.
+    let response;
+    for (const repo of ['carboy285/bothive', 'carboy285/opengrokbot']) {
+      response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } });
+      if (response.status !== 404) break;
+    }
     if (!response.ok) return;
     const release = await response.json();
     const assets = release.assets || [];
-    const trusted = url => typeof url === 'string' && url.startsWith('https://github.com/carboy285/opengrokbot/releases/download/');
+    const trusted = url => typeof url === 'string' && ['bothive', 'opengrokbot'].some(name => url.startsWith(`https://github.com/carboy285/${name}/releases/download/`));
     const pick = (suffix, button, label) => {
       const asset = assets.find(item => item.name.endsWith(suffix) && trusted(item.browser_download_url));
       if (!asset) return;

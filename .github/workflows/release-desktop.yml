@@ -157,10 +157,10 @@ jobs:
           release_files=(downloads/*.zip downloads/macos/*.dmg downloads/macos/*.sha256 downloads/*.exe)
           test "${#release_files[@]}" -ge 3 || { echo 'Expected Mac, Windows and source downloads.' >&2; exit 1; }
           # A failed asset upload can leave an unpublished draft.
-          draft_id=$(gh api 'repos/carboy285/opengrokbot/releases?per_page=100' --jq '[.[] | select(.tag_name == "v10.0.0" and .draft == true)] | .[0].id // empty')
-          if [ -n "$draft_id" ]; then gh api --method DELETE "repos/carboy285/opengrokbot/releases/$draft_id"; fi
+          draft_id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '[.[] | select(.tag_name == "v10.0.0" and .draft == true)] | .[0].id // empty')
+          if [ -n "$draft_id" ]; then gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$draft_id"; fi
           # Re-releasing the same version replaces it: the old release and its tag go, so the tag points at this build.
-          if gh release view v10.0.0 --repo carboy285/opengrokbot >/dev/null 2>&1; then
-            gh release delete v10.0.0 --repo carboy285/opengrokbot --cleanup-tag --yes
+          if gh release view v10.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete v10.0.0 --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
           fi
           gh release create v10.0.0 --target "$GITHUB_SHA" --title 'Bothive 10.0 · The first public release' --latest --notes-file /tmp/desktop-release.md "${release_files[@]}"

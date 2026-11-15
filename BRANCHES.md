@@ -1,11 +1,32 @@
-# Source branches
+# Branches
 
-All three branches descend from release tag `v0.7.4`. Existing file contents are unchanged; the only added file is this guide.
+Bothive's source is public. Each branch below is a complete, buildable copy of what it says.
 
-- `main-source`: complete original project plus this guide. Use for shared work, combined-platform workflows, and releases.
-- `app/apple`: iPhone and Mac sources together, including `GrokBot.xcodeproj/`, `GrokBot/`, `GrokBotMac/`, `GrokBotTests/`, `GrokBotMacUITests/`, and `ComposioBridge/`. Excludes `desktop-windows/`, the Windows-only build/UI/smoke-test scripts, and `docs/WINDOWS.md`.
-- `app/windows`: Windows/Electron app and its package manifests, all `scripts/`, `supabase/`, `docs/`, and `.github/workflows/`. Excludes the Apple source/project/test folders, `ComposioBridge/`, and the root iOS installation guide.
+| Branch | What's in it | Build |
+|---|---|---|
+| **`main`** | Everything: the iPhone, Mac and Windows apps, the account service, the website source, docs and release workflows. Releases are built from here. | All of the below |
+| **`app/apple`** | The iPhone and Mac apps. They share one Xcode project and about half their code (account, encrypted relay, Bots, voice), so they live together. | Open `GrokBot.xcodeproj`; scheme **GrokBot** for iPhone, **GrokBotMac** for Mac, or `scripts/build-macos.sh` for the DMG |
+| **`app/windows`** | The Windows app (Electron). | `npm ci`, then `npm run dist:windows` |
+| **`gh-pages`** | The built website, served at <https://carboy285.github.io/bothive/>. Generated from `site/` on `main` by `scripts/build_site.py`. | Nothing to build |
 
-Shared infrastructure stays in both app branches: package metadata (needed for the shared cloud tests), database files, documentation, workflows, and the icon generator. Because existing contents must remain unchanged, cross-platform workflows, opposite-platform npm commands, and the icon generator may require missing platform folders; run combined-platform operations from `main-source`. The Windows branch deliberately retains Apple utility scripts and workflow definitions as requested; those Apple-specific tasks need `main-source` or `app/apple`.
+## Where each app lives on `main`
 
-`main` and all release tags are unchanged. These are source branches, not new releases.
+| Folder | App |
+|---|---|
+| `GrokBot/` | iPhone app, plus code the Mac app shares (`GrokBot/Core`, `GrokBot/Design`, `GrokBot/Voice`) |
+| `GrokBotLiveActivity/` | iPhone calls in the Dynamic Island and on the Lock Screen |
+| `GrokBotMac/` | Mac app |
+| `ComposioBridge/` | Small helper the Mac app ships for connected apps |
+| `GrokBotTests/`, `GrokBotMacUITests/` | Apple tests |
+| `desktop-windows/` | Windows app |
+| `local-voice/` | Source of the open-source voice engine both desktop apps bundle (GPL-3.0-or-later because it includes eSpeak NG; see THIRD_PARTY_NOTICES.md) |
+| `supabase/` | The account service: database migrations and their tests |
+| `site/` | Website source |
+
+The folders and the Xcode project keep the project's original names (`GrokBot…`) so existing installs keep updating; the apps themselves are called Bothive.
+
+## Shared files
+
+Both app branches carry the account service (`supabase/`), docs, `LICENSE`, `PRIVACY.md`, `TERMS.md`, `THIRD_PARTY_NOTICES.md` and the voice engine source. Rebuilding the voice engine (`scripts/build-local-voice.cjs`) writes into both apps, so do that on `main`.
+
+Work happens on `main` (or a branch off it); `app/apple` and `app/windows` are refreshed from `main` when a release is made. Branches from before 10.0 (`claude/…`, `codex/…`, `feature/…` and others) are kept as history.

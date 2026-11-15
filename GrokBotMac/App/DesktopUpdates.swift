@@ -32,10 +32,17 @@ final class DesktopUpdates: ObservableObject {
         }
         checking = true; defer { checking = false }
         do {
-            var request = URLRequest(url: URL(string: "https://api.github.com/repos/carboy285/opengrokbot/releases?per_page=20")!)
-            request.timeoutInterval = 15; request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200, data.count < 2_000_000 else { throw URLError(.badServerResponse) }
+            // 10.0: the repository is moving to carboy285/bothive. Ask the new name first; until the rename it isn't
+            // found, so the old name answers.
+            var data = Data(), status = 0
+            for repo in Self.repositories {
+                var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repo)/releases?per_page=20")!)
+                request.timeoutInterval = 15; request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+                let (body, response) = try await URLSession.shared.data(for: request)
+                data = body; status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if status != 404 { break }
+            }
+            guard status == 200, data.count < 2_000_000 else { throw URLError(.badServerResponse) }
             let releases = try JSONDecoder().decode([Release].self, from: data)
                 .filter { !$0.draft && Self.numbers($0.tag_name) != nil && Self.trusted($0.html_url) }
                 .sorted { Self.newer($0.tag_name, than: $1.tag_name) }
@@ -103,11 +110,13 @@ final class DesktopUpdates: ObservableObject {
     }
     private static func trusted(_ value: String) -> Bool {
         guard let url = URL(string: value) else { return false }
-        return url.scheme == "https" && url.host == "github.com" && url.user == nil && url.password == nil && url.path.hasPrefix("/carboy285/opengrokbot/releases/")
+        return url.scheme == "https" && url.host == "github.com" && url.user == nil && url.password == nil && repositories.contains { url.path.hasPrefix("/\($0)/releases/") }
     }
     private static func trustedDownload(_ url: URL) -> Bool {
-        url.scheme == "https" && url.host == "github.com" && url.user == nil && url.password == nil && url.path.hasPrefix("/carboy285/opengrokbot/releases/download/")
+        url.scheme == "https" && url.host == "github.com" && url.user == nil && url.password == nil && repositories.contains { url.path.hasPrefix("/\($0)/releases/download/") }
     }
+    /// The project's repository, new name first. Both stay trusted so updates work before and after the rename.
+    static let repositories = ["carboy285/bothive", "carboy285/opengrokbot"]
     /// Release numbers such as 0.8.0 or 0.7.9.1 (three or four parts), padded to four so they compare correctly.
     static func numbers(_ value: String) -> [Int]? {
         let clean = value.hasPrefix("v") ? String(value.dropFirst()) : value

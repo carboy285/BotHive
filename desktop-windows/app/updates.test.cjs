@@ -72,3 +72,20 @@ test('four-part versions such as 0.7.9.1 compare correctly with three-part ones'
   assert.equal(result.available, true);
   assert.equal(result.version, 'v0.8.0');
 });
+
+test('10.0: updates work before and after the repository is renamed to bothive', async () => {
+  const oldBase = 'https://github.com/carboy285/opengrokbot/releases/', newBase = 'https://github.com/carboy285/bothive/releases/';
+  const asked = [];
+  const exe = base => ({ name: 'Bothive-10.0.0-Windows-x64-Setup.exe', browser_download_url: base + 'download/v10.0.0/Bothive-10.0.0-Windows-x64-Setup.exe', size: 3, digest: 'sha256:abc' });
+  const rel = base => ({ tag_name: 'v10.0.0', draft: false, prerelease: false, html_url: base + 'tag/v10.0.0', assets: [exe(base)] });
+  // Before the rename: the new name isn't found, so the old one answers.
+  const before = await check('0.9.9', async url => { asked.push(url); return url.includes('/bothive/') ? new Response('[]', { status: 404 }) : new Response(JSON.stringify([rel(oldBase)])); });
+  assert.deepEqual(asked.map(url => url.includes('/bothive/') ? 'new' : 'old'), ['new', 'old']);
+  assert.equal(before.available, true); assert.equal(before.installer.url, exe(oldBase).browser_download_url);
+  // After the rename: the new name answers straight away, and its downloads are trusted.
+  const after = await check('0.9.9', async url => url.includes('/bothive/') ? new Response(JSON.stringify([rel(newBase)])) : new Response('[]', { status: 404 }));
+  assert.equal(after.available, true); assert.equal(after.installer.url, exe(newBase).browser_download_url);
+  assert.equal(trustedDownload(newBase + 'download/v10.0.0/a.exe'), true);
+  assert.equal(trustedDownload('https://github.com/carboy285/bothive-fake/releases/download/v1/a.exe'), false);
+  assert.equal(trustedDownload('https://github.com/someone/bothive/releases/download/v1/a.exe'), false);
+});

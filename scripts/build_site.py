@@ -77,7 +77,7 @@ PAGE = '''<!doctype html>
 </head>
 <body class="doc">
 <header class="bar"><a class="brand" href="./"><svg class="brand-bot" aria-hidden="true"><use href="bots.svg#bot-circle-white"/></svg>Bothive</a>
-<nav><a href="./#download">Download</a><a href="iphone.html">iPhone</a><a href="https://github.com/carboy285/opengrokbot">GitHub</a></nav></header>
+<nav><a href="./#download">Download</a><a href="iphone.html">iPhone</a><a href="https://github.com/carboy285/bothive">GitHub</a></nav></header>
 <main class="prose">
 {content}
 </main>
@@ -87,14 +87,14 @@ PAGE = '''<!doctype html>
 '''
 
 FOOTER = '''<footer class="foot">
-<nav><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="licenses.html">Licenses</a><a href="https://github.com/carboy285/opengrokbot">Source code</a><a href="https://github.com/carboy285/opengrokbot/issues">Report a problem</a></nav>
+<nav><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="licenses.html">Licenses</a><a href="https://github.com/carboy285/bothive">Source code</a><a href="https://github.com/carboy285/bothive/issues">Report a problem</a></nav>
 <p>Bots are AI. They can be wrong, and they act through the AI accounts you connect.</p>
 <p>Bothive is free, open-source software under the MIT License. It is an independent project, not affiliated with or endorsed by xAI, Anthropic, OpenAI, Google, Microsoft or Composio. Their names are used only to say which tools Bothive works with.</p>
 </footer>'''
 
 # Links between the Markdown files become links between pages.
 LINKS = {'PRIVACY.md': 'privacy.html', 'TERMS.md': 'terms.html', 'THIRD_PARTY_NOTICES.md': 'licenses.html',
-         'LICENSE': 'https://github.com/carboy285/opengrokbot/blob/main/LICENSE'}
+         'LICENSE': 'https://github.com/carboy285/bothive/blob/main/LICENSE'}
 
 
 def page(source, out, title, description):

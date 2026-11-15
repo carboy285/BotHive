@@ -72,4 +72,4 @@ We'll post changes here and on the website with a new date. If a change affects 
 
 ## Contact
 
-Open an issue at <https://github.com/carboy285/opengrokbot/issues>. Issues are public, so don't include personal details there; say you'd like to be contacted privately and we'll reply with a way to do that.
+Open an issue at <https://github.com/carboy285/bothive/issues>. Issues are public, so don't include personal details there; say you'd like to be contacted privately and we'll reply with a way to do that.

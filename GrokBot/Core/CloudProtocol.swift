@@ -7,6 +7,17 @@ enum CloudConfiguration {
     static let publishableKey = "sb_publishable_iDMMZU6icZ1Wjwrv_zkbLw_W4pr-nCK"
     static let callback = "opengrokbot://auth/callback"
 }
+/// 10.0: the project's public pages. The website is published from the gh-pages branch.
+enum LegalLinks {
+    static let site = URL(string: "https://carboy285.github.io/opengrokbot/")!
+    static let privacy = URL(string: "https://carboy285.github.io/opengrokbot/privacy.html")!
+    static let terms = URL(string: "https://carboy285.github.io/opengrokbot/terms.html")!
+    static let licenses = URL(string: "https://carboy285.github.io/opengrokbot/licenses.html")!
+    static let issues = URL(string: "https://github.com/carboy285/opengrokbot/issues")!
+    /// Shown wherever the app introduces itself.
+    static let aiNotice = "Bots are AI. They can be wrong, and they act through the AI accounts you connect."
+    static let affiliation = "Bothive is an independent project, not affiliated with xAI, Anthropic, OpenAI, Google, Microsoft or Composio."
+}
 struct CloudUser: Codable, Sendable { let id: UUID; var email: String? }
 struct CloudSession: Codable, Sendable {
     var access_token: String

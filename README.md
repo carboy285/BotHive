@@ -167,4 +167,8 @@ Live model inference and Composio OAuth/tool execution require configured user a
 
 ## License
 
-Original code and geometric artwork are [MIT licensed](LICENSE). This project is not affiliated with xAI, Anthropic, OpenAI, Google, Cursor, or Composio. Proprietary binaries and assets are not redistributed.
+Original code and geometric artwork are [MIT licensed](LICENSE). The open-source voice engine bundled in the Mac and Windows apps includes eSpeak NG and is distributed under the GPL-3.0-or-later; it and every other third-party component are listed with their licenses in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+The Bothive account service is covered by the [Terms](TERMS.md) and the [Privacy policy](PRIVACY.md).
+
+Bothive is an independent project. It is not affiliated with or endorsed by xAI, Anthropic, OpenAI, Google, Microsoft, Cursor or Composio. Their product names are used only to say which tools Bothive works with, and belong to their owners. Proprietary binaries and assets are not redistributed.

@@ -19,8 +19,14 @@ struct SettingsView: View {
                 Section("Appearance") { Picker("Theme",selection:$appearance) { Text("Follow system").tag("system");Text("Dark").tag("dark");Text("Light").tag("light") } }
                 Section("Setup") {
                     NavigationLink("Desktop connection guide") { IntegrationView() }
-                    Link("Project and downloads",destination:URL(string:"https://github.com/carboy285/opengrokbot")!)
+                    Link("Website and downloads",destination:LegalLinks.site)
                 }
+                Section {
+                    Link("Privacy policy",destination:LegalLinks.privacy)
+                    Link("Terms",destination:LegalLinks.terms)
+                    Link("Open-source licenses",destination:LegalLinks.licenses)
+                    Link("Report a problem",destination:LegalLinks.issues)
+                } header: { Text("About") } footer: { Text(LegalLinks.aiNotice + " " + LegalLinks.affiliation) }
                 Section { LabeledContent("App version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—");Text("AI CLIs and optional Composio tools run on your Mac or Windows host using its accounts and permissions.").font(.footnote).foregroundStyle(.secondary) }
             }.navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement:.confirmationAction) { Button("Done") { dismiss() } } }

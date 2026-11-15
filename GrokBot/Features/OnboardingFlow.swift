@@ -46,8 +46,11 @@ struct OnboardingFlow: View {
             }
             .frame(maxHeight: .infinity)
             primary("Get started") { advance() }
-                .padding(.horizontal, 24).padding(.bottom, 12)
+                .padding(.horizontal, 24)
                 .accessibilityIdentifier("onboarding-start")
+            Text(LegalLinks.aiNotice).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 32).padding(.top, 10).padding(.bottom, 12)
         }
     }
 

@@ -993,7 +993,7 @@ private struct ComposerActionRow: View {
     }
 }
 
-/// Tap-to-send follow-ups under the latest reply, like ChatGPT's suggestions.
+/// Tap-to-send follow-ups under the latest reply.
 struct MacFollowUps: View {
     let suggestions: [String]
     let send: (String) -> Void

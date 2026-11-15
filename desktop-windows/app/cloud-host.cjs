@@ -91,6 +91,12 @@ class CloudHost {
     const old = this.data.session; this.preferencesAbort?.abort(); this.abort?.abort(); this.generation++; this.accountGeneration++; this.refreshing = null; this.enabled = false; this.devices = []; this.data.session = null; this.data.enabled = false; await this.persist(); this.transition('signed-out', 'Signed out on this computer.');
     if (old) this.raw('/auth/v1/logout?scope=local', { body: {}, token: old.access_token }).catch(() => {}); return this.status();
   }
+  // 10.0: deletes this account and everything the relay holds for it, then signs out here. Chats stay on this PC.
+  async deleteAccount() {
+    if (!this.data.session) throw new Error('Sign in first.');
+    await this.request('/rest/v1/rpc/opengrok_delete_account', {});
+    return this.signOut();
+  }
   async setEnabled(value) {
     if (!this.data.session) throw new Error('Sign in first.');
     if (value) { this.data.enabled = true; await this.persist(); this.start(); }

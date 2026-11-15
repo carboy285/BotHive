@@ -762,6 +762,7 @@ function configureIPC() {
  handle('cloud:status',()=>cloud.status());
  handle('cloud:sign-in',(email,password,create)=>cloudAction(()=>cloud.signIn(email,password,create===true)));
  handle('cloud:sign-out',()=>cloudAction(()=>cloud.signOut()));
+ handle('cloud:delete-account',()=>cloudAction(()=>cloud.deleteAccount()));
  handle('cloud:enabled',value=>cloudAction(()=>cloud.setEnabled(value===true)));
  handle('cloud:approve',(id,allowed)=>cloudAction(()=>cloud.approve(id,allowed===true)));
  handle('cloud:reconnect',()=>cloudAction(async()=>{if(!cloud.data.session)throw new Error('Sign in first.');await cloud.setEnabled(true);return cloud.status();}));

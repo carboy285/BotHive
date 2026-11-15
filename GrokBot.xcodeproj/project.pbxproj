@@ -810,6 +810,8 @@
 				"2CD85C05820661ABC1377867",
 				"F7B42D4953D10AFD6971454C",
 				"AC291DFB41826093A7D812FF",
+				"FE10D67B67D65B5865157D40",
+				"5C94F04217BBBADA2405B2B1",
 			);
 			"name" = "GrokBotMac";
 			"sourceTree" = "<group>";
@@ -1475,6 +1477,8 @@
 				"A808AC4ECC6CC4AED5D945D3",
 				"FCF516EA981A858C96EEFC61",
 				"23CA80344BE343476299C878",
+				"476DAFFDAF70301BD4ECB5F1",
+				"8DE022D40FA01EBF739F5BC7",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -2455,6 +2459,26 @@
 		"C3EB320BD125CD252FD45F37" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "E85445FB8C908430C76181E1";
+		};
+		"FE10D67B67D65B5865157D40" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "net.daringfireball.markdown";
+			"path" = "THIRD_PARTY_NOTICES.md";
+			"sourceTree" = "<group>";
+		};
+		"476DAFFDAF70301BD4ECB5F1" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "FE10D67B67D65B5865157D40";
+		};
+		"5C94F04217BBBADA2405B2B1" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "text";
+			"path" = "LICENSE";
+			"sourceTree" = "<group>";
+		};
+		"8DE022D40FA01EBF739F5BC7" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "5C94F04217BBBADA2405B2B1";
 		};
 	};
 	"rootObject" = "244210E48437B6556980A702";

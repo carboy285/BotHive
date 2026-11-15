@@ -114,6 +114,18 @@ append(uid('group:' + EXT), 'children', ref)
 for path in ['GrokBotMac/Features/MacCallPill.swift']:
     if (ROOT / path).exists(): compile_in(path, 'GrokBotMac', 'GrokBotMac')
 
+# --- 10.0: legal files shipped inside the Mac app ---------------------------------------------
+def bundle_resource(path, target_name, group_name):
+    ref = reference(path, 'net.daringfireball.markdown' if path.endswith('.md') else 'text')
+    phase = phase_of(target(target_name), 'PBXResourcesBuildPhase')
+    if not any(objects[b].get('fileRef') == ref for b in objects[phase]['files']):
+        build = uid(f'resource:{target_name}:{path}')
+        objects[build] = {'isa': 'PBXBuildFile', 'fileRef': ref}
+        append(phase, 'files', build)
+    if not any(ref in value.get('children', []) for value in objects.values() if value.get('isa') == 'PBXGroup'):
+        append(group(group_name), 'children', ref)
+for legal in ['THIRD_PARTY_NOTICES.md', 'LICENSE']: bundle_resource(legal, 'GrokBotMac', 'GrokBotMac')
+
 # --- 0.9.9 version ----------------------------------------------------------------------------
 for key, value in objects.items():
     if value.get('isa') == 'XCBuildConfiguration' and 'MARKETING_VERSION' in value['buildSettings']:

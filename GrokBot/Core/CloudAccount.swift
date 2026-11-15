@@ -161,6 +161,22 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
         do { try secrets.delete(account:"session") } catch { self.error = "Keychain sign-out failed. Unlock this device and sign out again." }
         if let oldSession { _ = try? await raw(path:"/auth/v1/logout?scope=local",method:"POST",data:Data("{}".utf8),token:oldSession.access_token) }
     }
+    /// 10.0: deletes this account and everything the relay holds for it (devices, messages in flight, Bot pins),
+    /// then signs out here. Chats and Bots live on your computers and are not touched.
+    @discardableResult
+    func deleteAccount() async -> Bool {
+        guard signedIn else { return false }
+        busy = true; defer { busy = false }
+        do {
+            _ = try await request(path: "/rest/v1/rpc/opengrok_delete_account", body: [:])
+        } catch {
+            self.error = "The account could not be deleted. Check your connection and try again. (\(error.localizedDescription))"
+            return false
+        }
+        await signOut()
+        notice = "Your account was deleted. Your Bots and chats are still on your computers."
+        return true
+    }
     private func accessToken() async throws -> String {
         guard let current = session else { throw CloudError.signedOut }
         if (current.expires_at ?? 0) > Date().timeIntervalSince1970 + 90 { return current.access_token }

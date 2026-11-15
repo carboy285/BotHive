@@ -26,6 +26,10 @@
     "appId": "org.opengrokbot.windows",
     "productName": "Bothive",
     "executableName": "OpenGrokBot",
+    "extraResources": [
+      { "from": "THIRD_PARTY_NOTICES.md", "to": "THIRD_PARTY_NOTICES.md" },
+      { "from": "LICENSE", "to": "LICENSE.txt" }
+    ],
     "directories": {
       "output": "artifacts/windows"
     },

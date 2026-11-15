@@ -76,7 +76,7 @@ struct MacSettingsView: View {
                     Image(systemName: "shippingbox.fill")
                     Image(systemName: "sparkle")
                     MacBotAvatar(size: 35)
-                    Text("𝕏").font(.system(size: 36))
+                    Image(systemName: "terminal")
                 }.font(.system(size: 30)).foregroundStyle(.black).padding(28)
                     .frame(minWidth: 180, maxHeight: .infinity)
                     .background(LinearGradient(colors: [.white, Color(hex: 0xD0D0D0)], startPoint: .topTrailing, endPoint: .bottomLeading), in: RoundedRectangle(cornerRadius: 12))
@@ -119,6 +119,19 @@ struct MacSettingsView: View {
                     Text("Bots and conversations").font(.system(size: 15))
                     Spacer()
                     MacPillButton(title: "Reset conversations…") { reset = true }
+                }.padding(18)
+            }
+            section("About") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 18) {
+                        Link("Privacy policy", destination: LegalLinks.privacy)
+                        Link("Terms", destination: LegalLinks.terms)
+                        Link("Open-source licenses", destination: LegalLinks.licenses)
+                        Link("Website", destination: LegalLinks.site)
+                        Link("Report a problem", destination: LegalLinks.issues)
+                    }.font(.system(size: 14))
+                    Text(LegalLinks.aiNotice + " " + LegalLinks.affiliation)
+                        .font(.system(size: 13)).foregroundStyle(MacTheme.secondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(18)
             }
         }

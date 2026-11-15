@@ -10,6 +10,7 @@ struct CloudSignInView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var create = false
+    @State private var confirmDelete = false
     var body: some View {
         VStack(alignment:.leading,spacing:14) {
             if account.signedIn {
@@ -21,6 +22,13 @@ struct CloudSignInView: View {
                     #endif
                 }
                 Button("Sign out of this device",role:.destructive) { Task { await account.signOut() } }
+                Button("Delete account…",role:.destructive) { confirmDelete = true }
+                    .disabled(account.busy).accessibilityIdentifier("cloud-delete-account")
+                    .confirmationDialog("Delete your account?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                        Button("Delete account", role: .destructive) { Task { await account.deleteAccount() } }
+                    } message: {
+                        Text("This removes your account, your paired devices and any messages waiting in the relay. Your Bots and chats stay on your computers. This can't be undone.")
+                    }
             } else {
                 if showsHeading {
                     Text(create ? "Create your account":"Sign in to Bothive").font(.title3.weight(.medium))
@@ -36,6 +44,9 @@ struct CloudSignInView: View {
                     .buttonStyle(.borderedProminent).accessibilityIdentifier("cloud-sign-in")
                 Button(create ? "Already have an account? Sign in":"New here? Create an account") { create.toggle(); account.error = nil; account.notice = nil }.disabled(account.busy)
                 if create { Text("Use at least 8 characters. Confirm the email Supabase sends before signing in.").font(.caption).foregroundStyle(.secondary) }
+                // One sentence with Markdown links, so it wraps at any text size.
+                Text(LocalizedStringKey((create ? "By creating an account you agree to the " : "Read the ") + "[Terms](\(LegalLinks.terms.absoluteString)) and [Privacy policy](\(LegalLinks.privacy.absoluteString))."))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 ForEach(["google","github"],id:\.self) { provider in
                     if account.providers.contains(provider) {
                         Button("Continue with " + (provider == "google" ? "Google":"GitHub")) { Task { await account.oauth(provider) } }.disabled(account.busy)

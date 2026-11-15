@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('desktop', {
   cloudStatus:()=>ipcRenderer.invoke('cloud:status'),
   cloudSignIn:(email,password,create)=>ipcRenderer.invoke('cloud:sign-in',email,password,create),
   cloudSignOut:()=>ipcRenderer.invoke('cloud:sign-out'),
+  cloudDeleteAccount:()=>ipcRenderer.invoke('cloud:delete-account'),
   cloudEnabled:value=>ipcRenderer.invoke('cloud:enabled',value),
   cloudApprove:(id,allowed)=>ipcRenderer.invoke('cloud:approve',id,allowed),
   cloudReconnect:()=>ipcRenderer.invoke('cloud:reconnect'),

@@ -40,6 +40,7 @@ struct MacSetupView: View {
                 MacPillButton(title: "Get started", prominent: true) { greeting = false }
                     .keyboardShortcut(.defaultAction)
                     .padding(.top, 18)
+                Text(LegalLinks.aiNotice).font(.system(size: 12)).foregroundStyle(MacTheme.secondary).padding(.top, 6)
             }
             VStack {
                 HStack {

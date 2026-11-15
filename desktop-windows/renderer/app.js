@@ -567,7 +567,7 @@ async function showConnection(detail='') {
     const body=node('div','connection-details');content.append(body);
     if(detail)body.append(node('p','muted',detail));
     body.append(node('p','muted',`${step+1} of 6`));
-    if(step===0){append(body,avatar('white',true),node('h1','','A free app for your AI CLIs'),node('p','','Start with Hive, your main Bot. Choose a CLI installed on this computer, sign in through that CLI, then optionally connect your tools with Composio.'),node('p','muted','Bothive is free and open source. AI providers and Composio apply their own pricing, quotas, and model requirements.'));}
+    if(step===0){append(body,avatar('white',true),node('h1','','A free app for your AI CLIs'),node('p','muted','Bots are AI. They can be wrong, and they act through the AI accounts you connect.'),node('p','','Start with Hive, your main Bot. Choose a CLI installed on this computer, sign in through that CLI, then optionally connect your tools with Composio.'),node('p','muted','Bothive is free and open source. AI providers and Composio apply their own pricing, quotas, and model requirements.'));}
     else if(step===1){
       body.append(node('h2','','Choose an AI CLI'));
       if(!window.desktop)body.append(node('p','','Install the desktop app to use AI CLIs. A browser cannot launch local processes.'));
@@ -661,7 +661,7 @@ async function renderRemoteAccess(page){
   else{
    append(body,node('strong','',status.email),button(status.enabled?'Turn off phone access':'Allow phone access',()=>run(bridge.cloudEnabled(!status.enabled))),button('Reconnect now',()=>run(bridge.cloudReconnect())),node('p','fingerprint',`This computer: ${status.fingerprint}`));
    for(const phone of status.phones){const row=append(node('div','settings-card'),node('strong','',phone.name),node('p','fingerprint',phone.fingerprint),node('small','muted',phone.approved?'Approved':'Compare this fingerprint with your iPhone before approving.'));row.append(button(phone.approved?'Revoke':'Approve phone',()=>run(bridge.cloudApprove(phone.id,!phone.approved))));body.append(row);}
-   if(!status.phones.length)body.append(node('p','muted','Sign in on your iPhone to make it appear here.'));body.append(button('Sign out on this computer',()=>run(bridge.cloudSignOut())));
+   if(!status.phones.length)body.append(node('p','muted','Sign in on your iPhone to make it appear here.'));body.append(button('Sign out on this computer',()=>run(bridge.cloudSignOut())));if(bridge.cloudDeleteAccount)body.append(button('Delete account…',()=>{if(confirm('Delete your account? This removes your account, your paired devices and any messages waiting in the relay. Your Bots and chats stay on this PC. This can’t be undone.'))run(bridge.cloudDeleteAccount());}));
   }
   const diagnostics={state:status.phase,enabled:status.enabled,lastHeartbeat:status.lastHeartbeat||null,lastPhoneRequest:status.lastRequest||null,approvedPhones:status.phones.filter(x=>x.approved).length};append(body,node('p','muted','Keep this computer awake with Bothive running. Closing the window keeps phone access running in the system tray.'),button('Copy connection diagnostics',()=>navigator.clipboard.writeText(JSON.stringify(diagnostics,null,2))));
  };if(!bridge.cloudStatus){body.append(node('p','','Open the installed Windows app to connect your iPhone.'));return;}await draw();const timer=setInterval(()=>{if(!body.isConnected){clearInterval(timer);return;}if(!body.querySelector('input'))draw();},4000);
@@ -677,6 +677,8 @@ async function renderSharing(page){
  page.append(wrap);
 }
 async function renderUpdates(page){
+ // 10.0: About: the project's legal pages, the AI notice and who we're not affiliated with.
+ if(bridge.openLink){const about=append(node('section','settings-card'),node('h2','','About'),node('p','muted','Bots are AI. They can be wrong, and they act through the AI accounts you connect. Bothive is an independent project, not affiliated with xAI, Anthropic, OpenAI, Google, Microsoft or Composio.'));const row=node('div','about-links');for(const [label,url] of [['Privacy policy','https://carboy285.github.io/opengrokbot/privacy.html'],['Terms','https://carboy285.github.io/opengrokbot/terms.html'],['Open-source licenses','https://carboy285.github.io/opengrokbot/licenses.html'],['Website','https://carboy285.github.io/opengrokbot/'],['Report a problem','https://github.com/carboy285/opengrokbot/issues']])row.append(button(label,()=>result(bridge.openLink(url)).catch(error=>toast(error.message))));about.append(row);page.append(about);}
  const body=append(node('section','settings-card'),node('h2','','App updates'),node('p','muted','Updates come from the official project releases and are checked for size and integrity. Restart closes the app, installs the update and reopens it. Your workspace is kept.'));page.append(body);
  const check=button('Check for updates',async()=>{check.disabled=true;try{const update=await result(bridge.checkUpdates());body.append(node('p','',update.available?`${update.version} is available${update.prerelease?' (development release)':''}.`:`You’re using ${update.current}. No newer release is published.`));if(update.available){if(update.installer&&bridge.downloadUpdate){const action=button('Download update',async()=>{action.disabled=true;if(action.dataset.ready!=='true'){action.textContent='Downloading…';try{await result(bridge.downloadUpdate());action.dataset.ready='true';action.textContent='Restart and install';body.append(node('p','muted','Downloaded and verified. Restart closes the app, installs the update and reopens it. Your workspace is kept.'));}catch(error){toast(error.message);action.textContent='Download update';}action.disabled=false;return;}action.textContent='Restarting…';try{await result(bridge.installUpdate());}catch(error){toast(error.message);action.textContent='Restart and install';action.disabled=false;}},'pill primary');body.append(action);}body.append(button('Open download page',()=>bridge.openUpdate(update.url)));}}catch(error){toast(error.message);}finally{check.disabled=false;}});body.append(check);
 }
@@ -928,7 +930,7 @@ async function deleteMessage(entry) {
     render();
   } catch (error) { toast(error.message); }
 }
-/** Puts your latest message back in the box and removes it and everything after it, like editing in ChatGPT. */
+/** Puts your latest message back in the box and removes it and everything after it, so it can be edited and resent. */
 async function editAndResend(bot, entry) {
   const list = entries(bot), from = list.findIndex(x => x.id === entry.id);
   if (from < 0) return;

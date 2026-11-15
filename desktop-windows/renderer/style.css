@@ -363,7 +363,7 @@ body.voice-full .window-actions{z-index:70}
 /* 0.9.4: dictation, voice and send read as one control */
 .composer-actions{display:flex;align-items:center;gap:2px;padding:2px 2px 2px 4px;border-radius:99px;background:color-mix(in srgb,var(--text) 6%,transparent);flex:none}
 
-/* ===== 0.9.5: ChatGPT-style help: starters, follow-up chips ===== */
+/* ===== 0.9.5: help: starters, follow-up chips ===== */
 .starters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:min(560px,100%);margin-top:18px}
 .starter{text-align:left;padding:14px 16px;border-radius:16px;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 60%,transparent);font-size:14px;color:var(--text);line-height:1.35;transition:background .12s,border-color .12s}
 .starter:hover{background:var(--panel);border-color:color-mix(in srgb,var(--text) 14%,transparent)}
@@ -597,3 +597,6 @@ html.web #apps-button { display:none; }
 
 /* Canvas editor. */
 .canvas-editor{min-height:340px;width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;font-size:13px;line-height:1.5;resize:vertical;tab-size:2}
+
+/* 10.0: About links on the Updates page. */
+.about-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}

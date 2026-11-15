@@ -1,6 +1,6 @@
 {
   "name": "opengrokbot-windows",
-  "version": "0.9.9",
+  "version": "10.0.0",
   "private": true,
   "description": "Free desktop chat for local AI CLIs with optional Composio tools",
   "author": "Bothive contributors",

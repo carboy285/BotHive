@@ -126,15 +126,15 @@ def bundle_resource(path, target_name, group_name):
         append(group(group_name), 'children', ref)
 for legal in ['THIRD_PARTY_NOTICES.md', 'LICENSE']: bundle_resource(legal, 'GrokBotMac', 'GrokBotMac')
 
-# --- 0.9.9 version ----------------------------------------------------------------------------
+# --- Version (10.0.0: updaters need three parts; the Mac updater matches it to the tag exactly) ----------------------------------------------------------------------------
 for key, value in objects.items():
     if value.get('isa') == 'XCBuildConfiguration' and 'MARKETING_VERSION' in value['buildSettings']:
-        value['buildSettings']['MARKETING_VERSION'] = '0.9.9'
-        value['buildSettings']['CURRENT_PROJECT_VERSION'] = '37'
+        value['buildSettings']['MARKETING_VERSION'] = '10.0.0'
+        value['buildSettings']['CURRENT_PROJECT_VERSION'] = '38'
 
 def encode(value, indent=0):
     if isinstance(value, dict): return '{\n' + ''.join('\t' * (indent + 1) + json.dumps(k) + ' = ' + encode(v, indent + 1) + ';\n' for k, v in value.items()) + '\t' * indent + '}'
     if isinstance(value, list): return '(\n' + ''.join('\t' * (indent + 1) + encode(v, indent + 1) + ',\n' for v in value) + '\t' * indent + ')'
     return json.dumps(str(value))
 PROJECT.write_text('// !$*UTF8*$!\n' + encode(project) + '\n')
-print('Project updated for 0.9.9.')
+print('Project updated for 10.0.0.')

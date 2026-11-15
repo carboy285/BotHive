@@ -63,7 +63,7 @@ let initialization;
 let window,mirrorWindow;
 const rendererFile = path.resolve(__dirname, '../renderer/index.html');
 const mirrorFile = path.resolve(__dirname, '../renderer/mirror.html');
-const documentation = new Set(['https://ollama.com/download','https://lmstudio.ai/','https://huggingface.co/hexgrad/Kokoro-82M','https://www.virtualbox.org/wiki/Downloads','https://releases.ubuntu.com/24.04/','https://docs.x.ai/grok-bot/get-started', 'https://docs.x.ai/grok-bot/mobile', 'https://github.com/carboy285/bothive','https://platform.composio.dev','https://tailscale.com/download','https://nodejs.org/en/download',...cli.providers.map(x=>x.guide)]);
+const documentation = new Set(['https://ollama.com/download','https://lmstudio.ai/','https://huggingface.co/hexgrad/Kokoro-82M','https://www.virtualbox.org/wiki/Downloads','https://releases.ubuntu.com/24.04/','https://docs.x.ai/grok-bot/get-started', 'https://docs.x.ai/grok-bot/mobile', 'https://github.com/carboy285/BotHive','https://platform.composio.dev','https://tailscale.com/download','https://nodejs.org/en/download',...cli.providers.map(x=>x.guide)]);
 let writeQueue = Promise.resolve();
 function file(name) { return path.join(app.getPath('userData'), name); }
 function authorized(event) {

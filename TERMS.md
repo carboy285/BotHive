@@ -43,4 +43,4 @@ We may update these terms. We'll post the new version here and on the website wi
 
 ## Contact
 
-Open an issue at <https://github.com/carboy285/bothive/issues>.
+Open an issue at <https://github.com/carboy285/BotHive/issues>.

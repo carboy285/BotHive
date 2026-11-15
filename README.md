@@ -6,7 +6,7 @@ Start with **one empty assistant named Hive**. There are no seeded conversations
 
 Bothive was called OpenGrokBot before version 10.0. It is an independent project and is not affiliated with xAI or any AI provider (see [License and trademarks](#license)).
 
-[Website and downloads](https://carboy285.github.io/bothive/) · [Setup guide](docs/SETUP.md) · [Privacy](PRIVACY.md) · [Terms](TERMS.md) · [Verification](docs/VERIFICATION.md)
+[Website and downloads](https://carboy285.github.io/BotHive/) · [Setup guide](docs/SETUP.md) · [Privacy](PRIVACY.md) · [Terms](TERMS.md) · [Verification](docs/VERIFICATION.md)
 
 ![Native Mac workspace with only Hive](docs/screenshots/macos-workspace.png)
 
@@ -38,7 +38,7 @@ The phone controls the same Bots, chats, memories, active models and running tas
 
 ![Native Mac account setup](docs/screenshots/macos-account-setup.png)
 
-**10.0** is the first public release, as Bothive: the new name, a privacy policy and terms, Delete account on every app, open-source license notices, a [website](https://carboy285.github.io/bothive/), and fixes from a full UI audit. Bots, chats and settings carry over from OpenGrokBot.
+**10.0** is the first public release, as Bothive: the new name, a privacy policy and terms, Delete account on every app, open-source license notices, a [website](https://carboy285.github.io/BotHive/), and fixes from a full UI audit. Bots, chats and settings carry over from OpenGrokBot.
 
 **0.9.9** gives the Mac and iPhone a first run where the Bots say hello, and lets voice calls follow you out of the app: into the Dynamic Island and Lock Screen on iPhone (through CallKit), and into a pill hanging from the notch on the Mac. The Mac DMG window gets the same characters. Replies from your computer reach the iPhone faster, and with the new relay migration applied the phone and computer are pinged the moment a message lands instead of checking on a timer.
 

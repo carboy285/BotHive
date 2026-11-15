@@ -72,6 +72,8 @@ jobs:
           path: artifacts/*.xcresult
           if-no-files-found: warn
       - name: Build universal app and DMG
+        env:
+          BUILD_LABEL: Beta
         run: ./scripts/build-macos.sh
       - uses: actions/upload-artifact@v4
         with:

@@ -26,7 +26,8 @@ app_path="$derived_dir/Build/Products/Release/OpenGrokBot.app"
 if [[ ! -d "$app_path" ]]; then echo "Build did not produce OpenGrokBot.app" >&2; exit 1; fi
 codesign --verify --deep --strict "$app_path"
 version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app_path/Contents/Info.plist")"
-image_path="$output_dir/Bothive-${version}-mac-universal.dmg"
+# BUILD_LABEL (for example "Beta") marks a pre-release build in the file name: Bothive-10.1.0-Beta-mac-universal.dmg
+image_path="$output_dir/Bothive-${version}${BUILD_LABEL:+-$BUILD_LABEL}-mac-universal.dmg"
 if [[ -e "$image_path" ]]; then echo "Refusing to overwrite $image_path" >&2; exit 1; fi
 stage_dir="$(mktemp -d -t opengrokbot-dmg)"
 trap 'rm -rf -- "$stage_dir"' EXIT

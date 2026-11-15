@@ -110,12 +110,15 @@ final class DesktopUpdates: ObservableObject {
     }
     private static func trusted(_ value: String) -> Bool {
         guard let url = URL(string: value) else { return false }
-        return url.scheme == "https" && url.host == "github.com" && url.user == nil && url.password == nil && repositories.contains { url.path.hasPrefix("/\($0)/releases/") }
+        let path = url.path.lowercased() // GitHub names are case-insensitive: the repository is shown as BotHive.
+        return url.scheme == "https" && url.host == "github.com" && url.user == nil && url.password == nil && repositories.contains { path.hasPrefix("/\($0)/releases/") }
     }
     private static func trustedDownload(_ url: URL) -> Bool {
-        url.scheme == "https" && url.host == "github.com" && url.user == nil && url.password == nil && repositories.contains { url.path.hasPrefix("/\($0)/releases/download/") }
+        let path = url.path.lowercased()
+        return url.scheme == "https" && url.host == "github.com" && url.user == nil && url.password == nil && repositories.contains { path.hasPrefix("/\($0)/releases/download/") }
     }
-    /// The project's repository, new name first. Both stay trusted so updates work before and after the rename.
+    /// The project's repository, new name first, in lower case (paths are compared case-insensitively).
+    /// Both stay trusted so updates work before and after the rename.
     static let repositories = ["carboy285/bothive", "carboy285/opengrokbot"]
     /// Release numbers such as 0.8.0 or 0.7.9.1 (three or four parts), padded to four so they compare correctly.
     static func numbers(_ value: String) -> [Int]? {

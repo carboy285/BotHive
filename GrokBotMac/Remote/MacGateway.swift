@@ -18,6 +18,7 @@ final class MacGateway: ObservableObject {
             account: CloudAccount(kind: "controller", secrets: KeychainSecretStore(service: "org.opengrokbot.mac.mirror-identity")),
             secrets: KeychainSecretStore(service: "org.opengrokbot.mac.mirror-selection"))
         remote.account.useAccount(from: source)
+        remote.autoSelectsHost = false
         remote.attach(model)
         remote.setActive(true)
         remote.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)

@@ -68,15 +68,31 @@ final class RemoteController: ObservableObject {
         }.store(in:&subscriptions)
     }
     func receive(_ url: URL) { if url.host == "auth" { showConnection = true } }
+    /// A computer chosen before this controller's sign-in has loaded (a new Mac window starts without a session for a moment).
+    /// It is applied the moment the session arrives, so the choice is never lost.
+    private var wantedHost: CloudDevice?
+    /// False for a window that must only ever show a computer someone chose (the Mac's "look at another computer"),
+    /// never whichever single computer happens to be online, which could be the Mac itself.
+    var autoSelectsHost = true
     func select(_ device: CloudDevice) {
+        guard account.session != nil else {
+            wantedHost = device
+            clearState(); hostName = device.name; status = "Connecting to \(device.name)\u{2026}"
+            return
+        }
+        wantedHost = nil
         do {
-            try account.pin(device)
-            guard let owner = account.session?.user.id else { throw CloudError.signedOut }
-            try secrets.save(Data(device.id.uuidString.utf8),account:owner.uuidString)
-            try secrets.save(JSONEncoder().encode(device), account: "last-host-" + owner.uuidString)
-            direct = nil
+            try rememberHost(device)
             clearState(); connection = device; hostName = device.name; startPolling()
         } catch { self.error = error.localizedDescription }
+    }
+    /// Pins the computer's identity and saves it as this account's chosen computer.
+    private func rememberHost(_ device: CloudDevice) throws {
+        try account.pin(device)
+        guard let owner = account.session?.user.id else { throw CloudError.signedOut }
+        try secrets.save(Data(device.id.uuidString.utf8),account:owner.uuidString)
+        try secrets.save(JSONEncoder().encode(device), account: "last-host-" + owner.uuidString)
+        direct = nil
     }
     func disconnect() {
         if direct != nil { leaveServer(); return }
@@ -145,7 +161,7 @@ final class RemoteController: ObservableObject {
                         guard current == epoch else { return }
                         account.startWake()
                         nextDiscovery = Date().addingTimeInterval(connection == nil ? 2 : 20)
-                        if connection == nil, autoSelect, let owner = account.session?.user.id {
+                        if connection == nil, autoSelect, autoSelectsHost, let owner = account.session?.user.id {
                             let selection = try secrets.read(account:owner.uuidString).flatMap { String(data:$0,encoding:.utf8) }
                             let saved = selection.flatMap(UUID.init(uuidString:))
                             let hosts = account.hosts
@@ -225,6 +241,11 @@ final class RemoteController: ObservableObject {
         needsApproval = false; initialLoadFailed = false; online = true; status = "Connected to \(hostName)" + (state?.overview == true ? " · loading chat history…" : "")
     }
     private func restoreHost() {
+        if connection == nil, let device = wantedHost, account.session != nil {
+            wantedHost = nil
+            do { try rememberHost(device); connection = device; hostName = device.name; return }
+            catch { self.error = error.localizedDescription }
+        }
         guard connection == nil, let owner = account.session?.user.id else { return }
         do {
             guard let selection = try secrets.read(account: owner.uuidString),

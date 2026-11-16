@@ -42,6 +42,8 @@ struct SettingsView: View {
                                 .buttonStyle(SettingsRowStyle())
                         }
                         SettingsDivider()
+                        NavigationLink { ServersPage() } label: { SettingsRow(title: "Servers", subtitle: "Use a Bothive by its Tailscale or IP address") }.buttonStyle(SettingsRowStyle())
+                        SettingsDivider()
                         NavigationLink { IntegrationView() } label: { SettingsRow(title: "Set-up guide") }.buttonStyle(SettingsRowStyle())
                     }
 

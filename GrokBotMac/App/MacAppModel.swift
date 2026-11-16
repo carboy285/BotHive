@@ -15,7 +15,7 @@ enum MacPanel: String, Identifiable {
 }
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general = "General", headsUps = "Heads-ups", routines = "Routines", skills = "Skills", computer = "Computer", permissions = "Permissions", apiKeys = "API Keys", secureLogins = "Secure Logins", vault = "Vault", voice = "Voice", localModels = "Local Models", usage = "Usage & Billing", updates = "Updates"
+    case general = "General", headsUps = "Heads-ups", routines = "Routines", skills = "Skills", servers = "Servers", computer = "Computer", permissions = "Permissions", apiKeys = "API Keys", secureLogins = "Secure Logins", vault = "Vault", voice = "Voice", localModels = "Local Models", usage = "Usage & Billing", updates = "Updates"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -23,6 +23,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .headsUps: "sparkles"
         case .routines: "clock.arrow.circlepath"
         case .skills: "text.book.closed"
+        case .servers: "network"
         case .computer: "desktopcomputer"
         case .permissions: "shield"
         case .apiKeys: "key"
@@ -41,6 +42,8 @@ final class MacAppModel: ObservableObject {
     let composio = ComposioModel()
     /// Skills (10.1): instruction packs Bots can follow.
     let skills = MacSkillLibrary()
+    /// Other Bothive servers to open by address (10.1.1).
+    let servers = ServerList()
     let remote = MacRemoteHost()
     let updates = DesktopUpdates()
     @Published var providerHealth: [CLIProvider:String] = [:]
@@ -442,7 +445,7 @@ final class MacAppModel: ObservableObject {
         let info = Bundle.main.infoDictionary
         let defaults = UserDefaults.standard
         var lines = [
-            "Bothive \(info?["CFBundleShortVersionString"] as? String ?? "?") (build \(info?["CFBundleVersion"] as? String ?? "?"))",
+            "Bothive \(info?["CFBundleShortVersionString"] as? String ?? "?") Beta (build \(info?["CFBundleVersion"] as? String ?? "?"))",
             "macOS \(ProcessInfo.processInfo.operatingSystemVersionString) · \(ProcessInfo.processInfo.activeProcessorCount) cores · \(Int((Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824).rounded())) GB",
             "Providers: " + (installedCLIs.isEmpty ? "none found" : installedCLIs.map { "\($0.provider.name) \($0.version)" }.joined(separator: "; ")),
             "Bots: \(app.workspace.bots.count) · messages: \(app.workspace.entries.count)",

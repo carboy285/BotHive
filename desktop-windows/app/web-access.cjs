@@ -16,7 +16,10 @@ const INVOKE = new Set([
   'bot:touch', 'bot:organize', 'bots:reorder', 'bot:configure', 'bot:image', 'models:list', 'files:list', 'drafts:load', 'drafts:save',
   'setup:status', 'setup:scan', 'composio:status', 'proactive:status', 'proactive:configure', 'proactive:check', 'headsup:snooze', 'headsup:dismiss',
   'headsup:mute', 'tasks:cancel', 'tasks:pause', 'approval:answer', 'approval:pending', 'media-keys:status', 'cloud:status', 'rules:get',
-  'connected-apps:allow-get', 'ollama:models', 'canvas:save'
+  'connected-apps:allow-get', 'ollama:models', 'canvas:save',
+  // 10.1: skills (text only, fetched by the computer that runs Bothive), routines and Bot share codes. File pickers and the servers list stay host-only.
+  'skills:list', 'skills:get', 'skills:save', 'skills:delete', 'skills:set-bot', 'skills:find', 'skills:fetch',
+  'tasks:create', 'tasks:edit', 'tasks:run', 'share:make', 'share:read', 'share:add'
 ]);
 // Events another device receives.
 const EVENTS = new Set(['workspace:changed', 'proactive:changed', 'approval:request', 'bot:open']);

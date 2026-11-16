@@ -54,6 +54,8 @@
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
 	</dict>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
@@ -62,6 +64,6 @@
 		<string>audio</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Bothive can speak Bot replies using a NVIDIA NIM speech server you run on your network, only if you choose it in voice settings.</string>
+	<string>Bothive can speak Bot replies using a NVIDIA NIM speech server you run on your network, only if you choose it in voice settings. It can also open a Bothive server on your network, only if you add its address under Servers.</string>
 </dict>
 </plist>

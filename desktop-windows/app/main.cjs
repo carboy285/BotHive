@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Tray, Menu, Notification, protocol, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Tray, Menu, Notification, protocol, globalShortcut, net } = require('electron');
 // 0.9.3: the local voice engine loads models and its runtime through this scheme (see local-voice.cjs).
 protocol.registerSchemesAsPrivileged([{ scheme: 'ogb-models', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 const { readFile, writeFile, mkdir, rename, readdir, lstat, stat, copyFile } = require('node:fs/promises');
@@ -8,7 +8,9 @@ const { randomUUID } = require('node:crypto');
 const { validateWorkspace, previewWorkspace, migrateWorkspace } = require('./workspace.cjs');
 const ruleSet = require('./approval-rules.cjs');
 const skillsModule = require('./skills.cjs');
-const shareCode = require('./share-code.cjs'); // 10.1: instruction packs a Bot can follow
+const shareCode = require('./share-code.cjs');
+const serversModule = require('./servers.cjs');
+let serverStore = serversModule.load(null); // 10.1: instruction packs a Bot can follow
 let skillStore = skillsModule.loadStore(null);
 
 if (process.env.OPENGROKBOT_DATA_DIR) app.setPath('userData', process.env.OPENGROKBOT_DATA_DIR); // where to keep chats and settings, e.g. a Docker volume
@@ -111,6 +113,7 @@ async function ensureState(){
 async function initializeState(){
   const loaded=await loadJSON('preview-workspace.json',previewWorkspace());validateWorkspace(loaded);
   skillStore=skillsModule.loadStore(await loadJSON('skills.json',null));
+  serverStore=serversModule.load(await loadJSON('servers.json',null));
   if(loaded.version===1)await atomicJSON('legacy-workspace-backup.json',loaded);
   const migrated=migrateWorkspace(loaded);
   for(const entry of migrated.entries)if(entry.state==='streaming')entry.state='stopped';
@@ -609,7 +612,7 @@ function configureIPC() {
  // Settings → Copy diagnostics (0.9.5): versions, providers, voice settings and recent errors. No chats, keys or names of people.
  handle('diagnostics:get',async()=>{await ensureState();const os=require('node:os'),voiceSettings=await loadJSON('voice-settings.json',{});
   const errors=Object.entries(settings.providerHealth||{}).filter(([,v])=>v?.state&&v.state!=='ready'&&v.state!=='configured').map(([k,v])=>`${k}: ${String(v.detail||'').slice(0,160)}`);
-  return [`Bothive ${app.getVersion()} (Windows ${os.release()}, Electron ${process.versions.electron})`,`${os.cpus()[0]?.model||'CPU'} · ${os.cpus().length} cores · ${Math.round(os.totalmem()/2**30)} GB`,
+  return [`Bothive ${app.getVersion()} Beta (Windows ${os.release()}, Electron ${process.versions.electron})`,`${os.cpus()[0]?.model||'CPU'} · ${os.cpus().length} cores · ${Math.round(os.totalmem()/2**30)} GB`,
    `Providers: ${installed.map(x=>`${x.name} ${x.version||''}`.trim()).join('; ')||'none found'}`,`Bots: ${state.bots.length} · messages: ${state.entries.length}`,
    `Voice: listening ${voiceSettings.transcriber||'default'}, speaking ${voiceSettings.speaker||'default'}, patience ${voiceSettings.patience||'normal'}, quick model ${voiceSettings.fastModel!==false}, layout ${voiceSettings.layout||'card'}, Kokoro ${voiceSettings.kokoroVoice||'af_heart'}`,
    `Local voice models: ${JSON.stringify(voiceSettings.localModels||'recommended')}; voice models: ${JSON.stringify(voiceSettings.voiceModels||{})}; last speed test: ${voiceSettings.lastSpeed||'none'}`,
@@ -745,6 +748,38 @@ function configureIPC() {
   state.bots.push(bot);skillStore.skills.push(...added);
   if(added.length)await saveSkills();
   await atomicJSON('preview-workspace.json',state);notify();return {id:bot.id,name:bot.name,skills:added.length};});
+
+ // ---- Servers (10.1.1): use a Bothive that runs somewhere else, by its Tailscale or IP address ----
+ const serverWindows=new Map();
+ const saveServers=()=>atomicJSON('servers.json',serverStore);
+ const serverError=error=>{throw error instanceof PublicError?error:new PublicError(error?.message||'That server could not be used.');};
+ const serverFailed=(host)=>'Could not reach '+host+'. Check the address, that Bothive is running there with Web access on, and that Tailscale is on if you use it.';
+ const serverPage=(host)=>'data:text/html;charset=utf-8,'+encodeURIComponent('<!doctype html><meta charset="utf-8"><title>Bothive</title><body style="font:16px system-ui;background:#111;color:#eee;display:grid;place-items:center;height:100vh;margin:0"><div style="max-width:440px;text-align:center"><h2>Could not reach '+host.replace(/[<>&"]/g,'')+'</h2><p style="color:#aaa">Check that Bothive is running there with Web access on, and that Tailscale is on if you use it. Close this window and open the server again to retry.</p></div>');
+ function openServerWindow(entry){
+  const existing=serverWindows.get(entry.id);if(existing&&!existing.isDestroyed()){if(existing.isMinimized())existing.restore();existing.focus();return;}
+  const origin=entry.url;
+  const win=new BrowserWindow({width:1200,height:820,minWidth:700,minHeight:500,title:'Bothive \u00B7 '+entry.name,backgroundColor:'#111111',autoHideMenuBar:true,webPreferences:{partition:'persist:server-'+entry.id,sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true}});
+  serverWindows.set(entry.id,win);win.on('closed',()=>serverWindows.delete(entry.id));win.removeMenu();
+  const outside=target=>{try{const u=new URL(target);if(u.protocol==='https:'||u.protocol==='http:')shell.openExternal(u.href);}catch{}};
+  win.webContents.session.setPermissionRequestHandler((_contents,permission,callback)=>callback(permission==='clipboard-sanitized-write'));
+  win.webContents.setWindowOpenHandler(({url})=>{outside(url);return {action:'deny'};});
+  win.webContents.on('will-navigate',(event,target)=>{if(target.startsWith('data:'))return;try{if(new URL(target).origin===origin)return;}catch{}event.preventDefault();outside(target);});
+  win.webContents.on('page-title-updated',event=>event.preventDefault());
+  win.webContents.on('did-fail-load',(_event,code,_description,_url,isMainFrame)=>{if(isMainFrame&&code!==-3&&!win.isDestroyed())win.loadURL(serverPage(new URL(origin).host));});
+  win.loadURL(origin);
+ }
+ handle('servers:list',async()=>serverStore.servers.map(x=>({id:x.id,name:x.name,url:x.url})));
+ handle('servers:test',async address=>{let found;try{found=serversModule.normalize(address);}catch(error){serverError(error);}
+  try{const response=await net.fetch(found.origin+'/login',{signal:AbortSignal.timeout(8000),redirect:'manual'});const text=await response.text();
+   if(response.status===200&&text.includes('Bothive')&&text.includes('name="password"'))return {url:found.origin,message:'Found a Bothive server. You sign in on its own page when it opens.'};
+   throw new PublicError('That address answered, but it is not a Bothive server with Web access turned on.');}catch(error){if(error instanceof PublicError)throw error;throw new PublicError(serverFailed(found.host));}});
+ handle('servers:add',async(name,address)=>{let found;try{found=serversModule.normalize(address);}catch(error){serverError(error);}
+  if(serverStore.servers.length>=serversModule.MAX_SERVERS)throw new PublicError('You have the most servers this app keeps ('+serversModule.MAX_SERVERS+'). Remove one first.');
+  if(serverStore.servers.some(x=>x.url===found.origin))throw new PublicError('That server is already in your list.');
+  const entry={id:randomUUID(),name:serversModule.cleanName(name,found.host),url:found.origin};serverStore.servers.push(entry);await saveServers();return entry;});
+ handle('servers:remove',async id=>{const before=serverStore.servers.length;serverStore.servers=serverStore.servers.filter(x=>x.id!==id);if(serverStore.servers.length===before)throw new PublicError('Unknown server');
+  serverWindows.get(id)?.close();try{await require('electron').session.fromPartition('persist:server-'+id).clearStorageData();}catch{}await saveServers();return true;});
+ handle('servers:open',async id=>{const entry=serverStore.servers.find(x=>x.id===id);if(!entry)throw new PublicError('Unknown server');openServerWindow(entry);return true;});
 
  // ---- Routines screen (10.1): create, edit and run now. Pause and delete are the handlers below. ----
  const routineBot=botID=>{const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Routines belong to an individual Bot.');return bot;};

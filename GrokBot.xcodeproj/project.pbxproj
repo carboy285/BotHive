@@ -258,6 +258,8 @@
 				"8ECA00763C20C90E7FE4CFFC",
 				"750ADD191075DBD9C76B1B2A",
 				"C043C60E7E4498D72B3937F0",
+				"4FE4964950AE095375E0635B",
+				"A8508BBA75DCB312C8FD5D5F",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -303,6 +305,7 @@
 				"7B1C3D4F5CF7A817B11A6B39",
 				"3C973D5F702B9B920211D005",
 				"DFEC149A9FD93A24342AF446",
+				"343DE0E97C73A7889AFA163A",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -385,8 +388,8 @@
 				"INFOPLIST_FILE" = "GrokBot/Resources/Info.plist";
 				"GENERATE_INFOPLIST_FILE" = "NO";
 				"CODE_SIGN_STYLE" = "Automatic";
-				"CURRENT_PROJECT_VERSION" = "39";
-				"MARKETING_VERSION" = "10.1.0";
+				"CURRENT_PROJECT_VERSION" = "40";
+				"MARKETING_VERSION" = "10.1.1";
 				"TARGETED_DEVICE_FAMILY" = "1";
 				"SUPPORTED_PLATFORMS" = "iphoneos iphonesimulator";
 				"SUPPORTS_MACCATALYST" = "NO";
@@ -408,8 +411,8 @@
 				"INFOPLIST_FILE" = "GrokBot/Resources/Info.plist";
 				"GENERATE_INFOPLIST_FILE" = "NO";
 				"CODE_SIGN_STYLE" = "Automatic";
-				"CURRENT_PROJECT_VERSION" = "39";
-				"MARKETING_VERSION" = "10.1.0";
+				"CURRENT_PROJECT_VERSION" = "40";
+				"MARKETING_VERSION" = "10.1.1";
 				"TARGETED_DEVICE_FAMILY" = "1";
 				"SUPPORTED_PLATFORMS" = "iphoneos iphonesimulator";
 				"SUPPORTS_MACCATALYST" = "NO";
@@ -553,6 +556,8 @@
 				"6C549D615CF3943CF8DBEE54",
 				"E85445FB8C908430C76181E1",
 				"9C60D480B389473BEA8D75DC",
+				"6CF983959F3C0B21F861A225",
+				"F1E0514E834DF7739BBDD25E",
 			);
 			"name" = "GrokBot";
 			"sourceTree" = "<group>";
@@ -573,6 +578,7 @@
 				"5D8E6986D447D2640BB25A84",
 				"2610A66E7C1BDB2C4B1E3728",
 				"C00EAA908627B07EE93E474A",
+				"71EAF320E1E29E26B71DA4D4",
 			);
 			"name" = "GrokBotTests";
 			"sourceTree" = "<group>";
@@ -822,6 +828,7 @@
 				"76792AFB0D1CBDE1CC4AECEB",
 				"9135EC216FDB48E55BEDD4E1",
 				"9925A2B0F960E501D1BD9400",
+				"49FB58D36A25162C85FA896B",
 			);
 			"name" = "GrokBotMac";
 			"sourceTree" = "<group>";
@@ -841,8 +848,8 @@
 				"PRODUCT_MODULE_NAME" = "GrokBotMac";
 				"INFOPLIST_FILE" = "GrokBotMac/Resources/Info.plist";
 				"GENERATE_INFOPLIST_FILE" = "NO";
-				"CURRENT_PROJECT_VERSION" = "39";
-				"MARKETING_VERSION" = "10.1.0";
+				"CURRENT_PROJECT_VERSION" = "40";
+				"MARKETING_VERSION" = "10.1.1";
 				"CODE_SIGN_ENTITLEMENTS" = "GrokBotMac/Resources/GrokBotMac.entitlements";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"ENABLE_APP_SANDBOX" = "NO";
@@ -868,8 +875,8 @@
 				"PRODUCT_MODULE_NAME" = "GrokBotMac";
 				"INFOPLIST_FILE" = "GrokBotMac/Resources/Info.plist";
 				"GENERATE_INFOPLIST_FILE" = "NO";
-				"CURRENT_PROJECT_VERSION" = "39";
-				"MARKETING_VERSION" = "10.1.0";
+				"CURRENT_PROJECT_VERSION" = "40";
+				"MARKETING_VERSION" = "10.1.1";
 				"CODE_SIGN_ENTITLEMENTS" = "GrokBotMac/Resources/GrokBotMac.entitlements";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"ENABLE_APP_SANDBOX" = "NO";
@@ -1459,6 +1466,8 @@
 				"7DD36E56084AB8AFB8F9310B",
 				"6A58DFC01BB01B975EC37A8B",
 				"F9488000BAF94ACF2A477492",
+				"184322FF99ABDBC08E9FBF7A",
+				"CF06174EA71A323A8B669A6E",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -1547,6 +1556,7 @@
 				"CABA21E860827AEDC2F53D27",
 				"1C8A428177FFEC3112760792",
 				"CDE00D4EE73ABDCC6EA0E649",
+				"3DA38813C42021601353A57A",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -2256,8 +2266,8 @@
 				"INFOPLIST_FILE" = "GrokBotLiveActivity/Info.plist";
 				"GENERATE_INFOPLIST_FILE" = "NO";
 				"CODE_SIGN_STYLE" = "Automatic";
-				"CURRENT_PROJECT_VERSION" = "39";
-				"MARKETING_VERSION" = "10.1.0";
+				"CURRENT_PROJECT_VERSION" = "40";
+				"MARKETING_VERSION" = "10.1.1";
 				"TARGETED_DEVICE_FAMILY" = "1";
 				"SUPPORTED_PLATFORMS" = "iphoneos iphonesimulator";
 				"SUPPORTS_MACCATALYST" = "NO";
@@ -2280,8 +2290,8 @@
 				"INFOPLIST_FILE" = "GrokBotLiveActivity/Info.plist";
 				"GENERATE_INFOPLIST_FILE" = "NO";
 				"CODE_SIGN_STYLE" = "Automatic";
-				"CURRENT_PROJECT_VERSION" = "39";
-				"MARKETING_VERSION" = "10.1.0";
+				"CURRENT_PROJECT_VERSION" = "40";
+				"MARKETING_VERSION" = "10.1.1";
 				"TARGETED_DEVICE_FAMILY" = "1";
 				"SUPPORTED_PLATFORMS" = "iphoneos iphonesimulator";
 				"SUPPORTS_MACCATALYST" = "NO";
@@ -2585,6 +2595,54 @@
 		"F9488000BAF94ACF2A477492" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "9925A2B0F960E501D1BD9400";
+		};
+		"6CF983959F3C0B21F861A225" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBot/Core/ServerAddress.swift";
+			"sourceTree" = "<group>";
+		};
+		"4FE4964950AE095375E0635B" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "6CF983959F3C0B21F861A225";
+		};
+		"184322FF99ABDBC08E9FBF7A" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "6CF983959F3C0B21F861A225";
+		};
+		"49FB58D36A25162C85FA896B" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Features/MacServers.swift";
+			"sourceTree" = "<group>";
+		};
+		"CF06174EA71A323A8B669A6E" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "49FB58D36A25162C85FA896B";
+		};
+		"71EAF320E1E29E26B71DA4D4" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotTests/ServerAddressTests.swift";
+			"sourceTree" = "<group>";
+		};
+		"343DE0E97C73A7889AFA163A" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "71EAF320E1E29E26B71DA4D4";
+		};
+		"3DA38813C42021601353A57A" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "71EAF320E1E29E26B71DA4D4";
+		};
+		"F1E0514E834DF7739BBDD25E" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBot/Remote/RemoteServersView.swift";
+			"sourceTree" = "<group>";
+		};
+		"A8508BBA75DCB312C8FD5D5F" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "F1E0514E834DF7739BBDD25E";
 		};
 	};
 	"rootObject" = "244210E48437B6556980A702";

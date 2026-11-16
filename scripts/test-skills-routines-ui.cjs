@@ -62,6 +62,11 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
         cloudStatus: async () => ok({ signedIn: true, email: 'ben@example.com' }),
         cloudSignOut: async () => { calls.push(['cloudSignOut']); return ok(true); },
         openLink: async url => { calls.push(['openLink', url]); return ok(true); },
+        serversList: async () => ok(window.__servers || (window.__servers = [])),
+        serversTest: async address => { calls.push(['serversTest', address]); return address.includes('bad') ? fail('Could not reach bad. Check the address.') : ok({ url: address, message: 'Found a Bothive server. You sign in on its own page when it opens.' }); },
+        serversAdd: async (name, address) => { calls.push(['serversAdd', name, address]); if (address.startsWith('ftp')) return fail('Use an address that starts with https:// or http://.'); const entry = { id: crypto.randomUUID(), name: name || address, url: address }; (window.__servers ||= []).push(entry); return ok(entry); },
+        serversRemove: async id => { calls.push(['serversRemove', id]); window.__servers = window.__servers.filter(x => x.id !== id); return ok(true); },
+        serversOpen: async id => { calls.push(['serversOpen', id]); return ok(true); },
         pauseTask: async (botID, id, enabled) => { calls.push(['pauseTask', id, enabled]); task(botID, id).enabled = enabled; return ok(true); },
         runTask: async (botID, id) => { calls.push(['runTask', id]); const t = task(botID, id); t.lastRun = new Date().toISOString(); t.lastResult = 'running'; return ok(true); },
         editTask: async (botID, id, input) => { calls.push(['editTask', id, input]); const t = task(botID, id); Object.assign(t, { name: input.name, text: input.text }); if (input.recurrence) t.recurrence = input.recurrence; if (input.at) t.nextRun = input.at; return ok(true); },
@@ -217,6 +222,25 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
     assert.equal(await page.locator('.app-initial').count(), 0, 'no letter tiles are left');
     const gmailFill = await page.locator('.app-card', { hasText: 'Gmail' }).first().locator('svg path').getAttribute('fill');
     assert.equal(gmailFill.toLowerCase(), '#ea4335', 'Gmail uses its own colour');
+    await page.keyboard.press('Escape');
+
+    // ---------- Servers ----------
+    await openTab('Servers');
+    await page.getByText('No servers yet.', { exact: false }).waitFor();
+    await page.getByLabel('Address').fill('http://100.101.102.103:8765');
+    await page.getByRole('button', { name: 'Test', exact: true }).click();
+    await page.getByText('Found a Bothive server', { exact: false }).waitFor();
+    await page.getByLabel('Address').fill('ftp://nope.example.com');
+    await page.getByRole('button', { name: 'Add server', exact: true }).click();
+    await page.getByText('Use an address that starts with', { exact: false }).waitFor();
+    await page.getByLabel('Address').fill('http://100.101.102.103:8765'); await page.getByLabel('Name').fill('Home <b>box</b>');
+    await page.getByRole('button', { name: 'Add server', exact: true }).click();
+    await page.locator('.skill-row', { hasText: 'http://100.101.102.103:8765' }).waitFor();
+    assert.equal(await page.locator('.servers-page b').count(), 0, 'a server name stays text');
+    await page.locator('.skill-row').getByRole('button', { name: 'Open', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'serversOpen'));
+    await page.locator('.skill-row').getByRole('button', { name: 'Remove', exact: true }).click();
+    await page.getByText('No servers yet.', { exact: false }).waitFor();
     await page.keyboard.press('Escape');
 
     // ---------- Sidebar resize, Share menu, chat width ----------

@@ -391,6 +391,17 @@ final class MacAppModel: ObservableObject {
         }
     }
 
+    /// Shows a server used by its address in the main window, exactly like another computer on this account (10.1.1).
+    func openServer(_ client: DirectServerClient, app: AppModel) {
+        gatewayRunning = nil
+        localApp?.search = ""; gateway?.model.search = ""; showSearch = false
+        let next = gateway ?? MacGateway(source: remote.account)
+        gateway = next; next.connectServer(client)
+        selectedID = nil; showBotInspector = false; panel = nil
+        runningBots = next.running
+        gatewayRunning = next.remote.$running.sink { [weak self] value in Task { @MainActor [weak self] in if self?.gateway != nil { self?.runningBots = value } } }
+    }
+
     func selectFirst(in app: AppModel) {
         if selectedID == nil { selectedID = app.workspace.bots.first?.id }
     }

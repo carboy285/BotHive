@@ -260,6 +260,7 @@
 				"C043C60E7E4498D72B3937F0",
 				"4FE4964950AE095375E0635B",
 				"A8508BBA75DCB312C8FD5D5F",
+				"8BD6B86D9D619C454C239D6D",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -558,6 +559,7 @@
 				"9C60D480B389473BEA8D75DC",
 				"6CF983959F3C0B21F861A225",
 				"F1E0514E834DF7739BBDD25E",
+				"EDD1FD1256FC2687CC0CF970",
 			);
 			"name" = "GrokBot";
 			"sourceTree" = "<group>";
@@ -1468,6 +1470,7 @@
 				"F9488000BAF94ACF2A477492",
 				"184322FF99ABDBC08E9FBF7A",
 				"CF06174EA71A323A8B669A6E",
+				"02AF96B515413AF77B1708EE",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -2643,6 +2646,20 @@
 		"A8508BBA75DCB312C8FD5D5F" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "F1E0514E834DF7739BBDD25E";
+		};
+		"EDD1FD1256FC2687CC0CF970" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBot/Core/DirectServerClient.swift";
+			"sourceTree" = "<group>";
+		};
+		"8BD6B86D9D619C454C239D6D" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "EDD1FD1256FC2687CC0CF970";
+		};
+		"02AF96B515413AF77B1708EE" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "EDD1FD1256FC2687CC0CF970";
 		};
 	};
 	"rootObject" = "244210E48437B6556980A702";

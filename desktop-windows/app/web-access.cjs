@@ -180,7 +180,11 @@ class WebAccess {
       const token = /(?:^|;\s*)ogb_session=([A-Za-z0-9_-]{43})/.exec(req.headers.cookie || '')?.[1]; if (token) this.sessions.delete(token);
       return this.send(res, 303, 'text/plain', '', { Location: '/login', 'Set-Cookie': this.cookie('', 0) });
     }
-    if (!this.session(req)) {
+    // 10.1.1: the Mac, Windows and iPhone apps connect straight to this server by its address: sign in once, then send the same requests they would send through the account relay.
+    if (url.pathname === '/api/app/login') return this.appLogin(req, res, remote);
+    if (url.pathname === '/api/app/request') return this.appRequest(req, res);
+    // The same app token that opens /api/app/* also works for the calls the web page makes, so the Windows app can use this server for its whole window.
+    if (!this.session(req) && !this.bearer(req)) {
       if (url.pathname.startsWith('/api/')) return this.send(res, 401, 'application/json', '{"ok":false,"error":"Sign in again."}');
       return this.send(res, 303, 'text/plain', '', { Location: '/login' });
     }
@@ -213,6 +217,45 @@ class WebAccess {
     this.sessions.set(token, { expires: Date.now() + SESSION_DAYS * 86400000, user: username });
     if (this.sessions.size > 200) this.sessions.delete(this.sessions.keys().next().value);
     return this.send(res, 303, 'text/plain', '', { Location: '/', 'Set-Cookie': this.cookie(token, SESSION_DAYS * 86400) });
+  }
+
+  bearer(req) {
+    const token = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(req.headers.authorization || '')?.[1];
+    const found = token && this.sessions.get(token);
+    if (!found || found.expires < Date.now()) { if (token) this.sessions.delete(token); return null; }
+    return found;
+  }
+
+  /** An app signs in with the Web access username and password and gets a token it keeps for SESSION_DAYS days. */
+  async appLogin(req, res, remote) {
+    const json = (status, value) => this.send(res, status, 'application/json', JSON.stringify(value));
+    if (req.method !== 'POST') return json(405, { ok: false, error: 'Not allowed.' });
+    const failure = this.failures.get(remote) || { count: 0, until: 0 };
+    if (failure.until > Date.now()) return json(429, { ok: false, error: `Too many tries. Wait ${Math.ceil((failure.until - Date.now()) / 1000)} seconds.` });
+    let input; try { input = JSON.parse(await this.body(req, 4096)); } catch { return json(400, { ok: false, error: 'Try again.' }); }
+    const { username, passwordHash } = this.deps.config();
+    const nameOK = typeof username === 'string' && username.length > 0 && crypto.timingSafeEqual(crypto.createHash('sha256').update(String(input?.username ?? '')).digest(), crypto.createHash('sha256').update(username).digest());
+    const passwordOK = checkPassword(String(input?.password ?? ''), passwordHash);
+    if (!nameOK || !passwordOK) {
+      failure.count++; if (failure.count >= 5) failure.until = Date.now() + Math.min(3600000, 30000 * 2 ** (failure.count - 5));
+      this.failures.set(remote, failure);
+      return json(401, { ok: false, error: 'That username and password don\u2019t match.' });
+    }
+    this.failures.delete(remote);
+    const token = crypto.randomBytes(32).toString('base64url');
+    this.sessions.set(token, { expires: Date.now() + SESSION_DAYS * 86400000, user: username, app: true });
+    if (this.sessions.size > 200) this.sessions.delete(this.sessions.keys().next().value);
+    return json(200, { ok: true, token, name: String(this.deps.hostName?.() || 'Bothive').slice(0, 80), days: SESSION_DAYS });
+  }
+
+  /** The body is a relay request ({method, target, body}); the answer is the relay response ({status, body}). */
+  async appRequest(req, res) {
+    const json = (status, value) => this.send(res, status, 'application/json', JSON.stringify(value));
+    if (req.method !== 'POST') return json(405, { ok: false, error: 'Not allowed.' });
+    if (!this.bearer(req)) return json(401, { ok: false, error: 'Sign in again.' });
+    let request; try { request = JSON.parse(await this.body(req, 6 * 1024 * 1024)); } catch (error) { return json(error.status || 400, { ok: false, error: 'Invalid request.' }); }
+    try { return json(200, await this.deps.appRequest(request)); }
+    catch (error) { return json(409, { ok: false, error: error?.publicMessage || error?.message || 'The server could not complete this request.' }); }
   }
 
   async invoke(req, res) {

@@ -9,7 +9,7 @@ import { openAccountMenu } from './account-menu.js';
 import { connectorIcon } from './connector-icon.js';
 import { installSidebarResize, installChatTools } from './layout-ui.js';
 import { renderRoutines } from './routines-ui.js';
-import { renderServers } from './servers-ui.js';
+import { renderServers, installServerBanner } from './servers-ui.js';
 import { encodeWav, splitSuggestions, starters } from './voice-core.mjs';
 import { renderMarkdown } from './markdown.js';
 import * as catalog from './catalog.js';
@@ -753,6 +753,7 @@ function renderChips(){
 function addFiles(bot,names){if(!bot||!names?.length)return;const list=[...(pendingFiles.get(bot.id)||[]),...names];if(list.length>10){toast('Attach up to 10 files per message.');return;}pendingFiles.set(bot.id,list);renderChips();}
 async function attachFiles(bot=currentBot()){if(!bot)return;if(!window.desktop){toast('Attachments are available in the installed app.');return;}try{addFiles(bot,await result(bridge.attachFiles(bot.id)));}catch(error){toast(error.message);}}
 installSidebarResize();
+installServerBanner({bridge,result,toast});
 installChatTools({copyText:()=>{const bot=currentBot();return bot?workspace.entries.filter(x=>x.botID===bot.id&&x.kind!=='activity').map(x=>`${x.kind==='user'?'You':bot.name}: ${x.text}`).join('\n\n'):'';},exportAs:kind=>exportConversation(currentBot(),kind),toast});
 installDrop({target:document.querySelector('main.conversation'),bridge,result,toast,currentBot:()=>currentBot(),pendingCount:bot=>(pendingFiles.get(bot.id)||[]).length,addFiles});
 $('#draft').addEventListener('paste',async event=>{

@@ -23,6 +23,12 @@ final class MacGateway: ObservableObject {
         remote.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
     }
 
+    /// Views a server by its address instead of a computer on this account (10.1.1). Not remembered across launches.
+    func connectServer(_ client: DirectServerClient) {
+        remote.persistsServer = false
+        remote.connectServer(client)
+    }
+
     func close() { remote.setActive(false) }
 
     var hosts: [CloudDevice] { remote.account.hosts }

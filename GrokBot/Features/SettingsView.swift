@@ -85,6 +85,7 @@ struct SettingsView: View {
             .overlay(alignment: .top) { header }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $voice) { VoiceSettingsView() }
+            .onChange(of: remote.serverName) { _, name in if name != nil { dismiss() } }
             .confirmationDialog("Disconnect this phone from your computer?", isPresented: $disconnect, titleVisibility: .visible) {
                 Button("Disconnect", role: .destructive) { remote.disconnect() }
             }

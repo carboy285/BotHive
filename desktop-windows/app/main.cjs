@@ -34,10 +34,19 @@ const proactive = require('./proactive.cjs');
 const media = require('./media.cjs');
 const composioTools = require('./composio-tools.cjs');
 const webAccessModule = require('./web-access.cjs');
+// ---------- Servers (10.1.1): this window can use a Bothive that runs somewhere else ----------
+const remoteBackendModule = require('./remote-backend.cjs');
+const remoteBackend = new remoteBackendModule.RemoteBackend({
+  fetchImpl: (url, options) => net.fetch(url, options),
+  onEvent: (channel, value) => { if (window && !window.isDestroyed()) window.webContents.send(channel, value); },
+  onChange: () => { if (window && !window.isDestroyed()) window.webContents.reload(); },
+});
 // ---------- Web access (0.9.7): this app from another device's browser ----------
 const webAccess = new webAccessModule.WebAccess({
  invoke:async(channel,args)=>{const callback=webAccessModule.INVOKE.has(channel)&&channelHandlers.get(channel);return callback?runHandler(callback,args):{ok:false,error:'Not available over web access.'};},
  config:()=>({username:settings?.webAccess?.username,passwordHash:settings?.webAccess?.passwordHash}),
+ hostName:()=>require('node:os').hostname(),
+ appRequest:request=>cloud.respond(request,{direct:true}),
  rendererDir:path.resolve(__dirname,'../renderer'),preloadFile:path.join(__dirname,'preload.cjs')
 });
 let webState={address:null,urls:[],error:null};
@@ -84,6 +93,7 @@ function handle(name, callback) {
   channelHandlers.set(name,callback);
   ipcMain.handle(name, async (event, ...args) => {
     if (!authorized(event) || event.sender === mirrorWindow?.webContents && !name.startsWith('mirror:')) return { ok: false, error: 'Untrusted request' };
+    if (remoteBackend.active && webAccessModule.INVOKE.has(name)) return remoteBackend.invoke(name, args);
     return runHandler(callback,args);
   });
 }
@@ -132,7 +142,7 @@ function composioStatus(){return {configured:!!composioConfiguration,toolkits:co
 // Every change is sent at once, except streamed reply text: that changes many times a second and each message carries the whole
 // workspace, so streamed text is sent at most about twelve times a second. Any other change sends immediately and includes the latest text.
 let notifyTimer=null,lastNotify=0;
-function sendNotify(){clearTimeout(notifyTimer);notifyTimer=null;lastNotify=Date.now();if(window&&!window.isDestroyed())window.webContents.send('workspace:changed',{workspace:state,running:[...active.keys()]});}
+function sendNotify(){clearTimeout(notifyTimer);notifyTimer=null;if(remoteBackend.active)return;lastNotify=Date.now();if(window&&!window.isDestroyed())window.webContents.send('workspace:changed',{workspace:state,running:[...active.keys()]});}
 function notify(){revision=randomUUID();sendNotify();}
 function notifyStreaming(){revision=randomUUID();if(notifyTimer)return;const wait=80-(Date.now()-lastNotify);if(wait<=0)sendNotify();else notifyTimer=setTimeout(sendNotify,wait);}
 async function cliKeyEnv(provider){
@@ -750,24 +760,9 @@ function configureIPC() {
   await atomicJSON('preview-workspace.json',state);notify();return {id:bot.id,name:bot.name,skills:added.length};});
 
  // ---- Servers (10.1.1): use a Bothive that runs somewhere else, by its Tailscale or IP address ----
- const serverWindows=new Map();
- const saveServers=()=>atomicJSON('servers.json',serverStore);
  const serverError=error=>{throw error instanceof PublicError?error:new PublicError(error?.message||'That server could not be used.');};
+ const saveServers=()=>atomicJSON('servers.json',serverStore);
  const serverFailed=(host)=>'Could not reach '+host+'. Check the address, that Bothive is running there with Web access on, and that Tailscale is on if you use it.';
- const serverPage=(host)=>'data:text/html;charset=utf-8,'+encodeURIComponent('<!doctype html><meta charset="utf-8"><title>Bothive</title><body style="font:16px system-ui;background:#111;color:#eee;display:grid;place-items:center;height:100vh;margin:0"><div style="max-width:440px;text-align:center"><h2>Could not reach '+host.replace(/[<>&"]/g,'')+'</h2><p style="color:#aaa">Check that Bothive is running there with Web access on, and that Tailscale is on if you use it. Close this window and open the server again to retry.</p></div>');
- function openServerWindow(entry){
-  const existing=serverWindows.get(entry.id);if(existing&&!existing.isDestroyed()){if(existing.isMinimized())existing.restore();existing.focus();return;}
-  const origin=entry.url;
-  const win=new BrowserWindow({width:1200,height:820,minWidth:700,minHeight:500,title:'Bothive \u00B7 '+entry.name,backgroundColor:'#111111',autoHideMenuBar:true,webPreferences:{partition:'persist:server-'+entry.id,sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true}});
-  serverWindows.set(entry.id,win);win.on('closed',()=>serverWindows.delete(entry.id));win.removeMenu();
-  const outside=target=>{try{const u=new URL(target);if(u.protocol==='https:'||u.protocol==='http:')shell.openExternal(u.href);}catch{}};
-  win.webContents.session.setPermissionRequestHandler((_contents,permission,callback)=>callback(permission==='clipboard-sanitized-write'));
-  win.webContents.setWindowOpenHandler(({url})=>{outside(url);return {action:'deny'};});
-  win.webContents.on('will-navigate',(event,target)=>{if(target.startsWith('data:'))return;try{if(new URL(target).origin===origin)return;}catch{}event.preventDefault();outside(target);});
-  win.webContents.on('page-title-updated',event=>event.preventDefault());
-  win.webContents.on('did-fail-load',(_event,code,_description,_url,isMainFrame)=>{if(isMainFrame&&code!==-3&&!win.isDestroyed())win.loadURL(serverPage(new URL(origin).host));});
-  win.loadURL(origin);
- }
  handle('servers:list',async()=>serverStore.servers.map(x=>({id:x.id,name:x.name,url:x.url})));
  handle('servers:test',async address=>{let found;try{found=serversModule.normalize(address);}catch(error){serverError(error);}
   try{const response=await net.fetch(found.origin+'/login',{signal:AbortSignal.timeout(8000),redirect:'manual'});const text=await response.text();
@@ -777,9 +772,13 @@ function configureIPC() {
   if(serverStore.servers.length>=serversModule.MAX_SERVERS)throw new PublicError('You have the most servers this app keeps ('+serversModule.MAX_SERVERS+'). Remove one first.');
   if(serverStore.servers.some(x=>x.url===found.origin))throw new PublicError('That server is already in your list.');
   const entry={id:randomUUID(),name:serversModule.cleanName(name,found.host),url:found.origin};serverStore.servers.push(entry);await saveServers();return entry;});
- handle('servers:remove',async id=>{const before=serverStore.servers.length;serverStore.servers=serverStore.servers.filter(x=>x.id!==id);if(serverStore.servers.length===before)throw new PublicError('Unknown server');
-  serverWindows.get(id)?.close();try{await require('electron').session.fromPartition('persist:server-'+id).clearStorageData();}catch{}await saveServers();return true;});
- handle('servers:open',async id=>{const entry=serverStore.servers.find(x=>x.id===id);if(!entry)throw new PublicError('Unknown server');openServerWindow(entry);return true;});
+ handle('servers:remove',async id=>{const entry=serverStore.servers.find(x=>x.id===id);if(!entry)throw new PublicError('Unknown server');
+  if(remoteBackend.active&&remoteBackend.status().url===entry.url)remoteBackend.disconnect();
+  serverStore.servers=serverStore.servers.filter(x=>x.id!==id);await saveServers();return true;});
+ handle('servers:connect',async(id,username,password)=>{const entry=serverStore.servers.find(x=>x.id===id);if(!entry)throw new PublicError('Unknown server');
+  try{return await remoteBackend.connect(entry.url,username,password,entry.name);}catch(error){throw new PublicError(error.message);}});
+ handle('servers:status',async()=>remoteBackend.status());
+ handle('servers:disconnect',async()=>{remoteBackend.disconnect();return remoteBackend.status();});
 
  // ---- Routines screen (10.1): create, edit and run now. Pause and delete are the handlers below. ----
  const routineBot=botID=>{const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Routines belong to an individual Bot.');return bot;};
@@ -1165,7 +1164,7 @@ app.whenReady().then(() => {
   const nativeTitleBar = process.platform === 'win32' ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#0a0a0b', symbolColor: '#ececee', height: 40 } } : { frame: false };
   const background = process.argv.includes('--background');
   window = new BrowserWindow({ show: !background, width: 1370, height: 940, minWidth: 860, minHeight: 620, ...nativeTitleBar, backgroundColor: '#0f0f10', title: 'Bothive', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
-  {const send=window.webContents.send.bind(window.webContents);window.webContents.send=(channel,...args)=>{send(channel,...args);webAccess.broadcast(channel,args[0]);};}
+  {const send=window.webContents.send.bind(window.webContents);window.webContents.send=(channel,...args)=>{send(channel,...args);if(!remoteBackend.active)webAccess.broadcast(channel,args[0]);};}
   window.on('close',event=>{if(keepRunning()&&!quitting){event.preventDefault();window.hide();if(!cloud.active&&settings&&!settings.trayHintShown){settings.trayHintShown=true;saveSettings().catch(()=>{});headsUpBanner(mainBot()?.id,'Still watching for you','Bothive keeps running in the tray so heads-ups keep coming. Quit from the tray icon.',true);}}});
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('render-process-gone',()=>denyAllApprovals());window.on('closed',()=>{denyAllApprovals();voiceEngine?.destroy();voiceEngine=null;});

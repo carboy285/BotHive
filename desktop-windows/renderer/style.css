@@ -677,3 +677,10 @@ main.conversation { position: relative; }
 #panel { border-radius: 28px; }
 :root[data-theme=light] #panel { background: #fff; }
 :root[data-theme=light] #panel::backdrop { background: rgba(0,0,0,.34); }
+
+/* 10.1.1: servers */
+.server-signin { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; margin-top: 8px; }
+.server-signin[hidden] { display: none; }
+.server-signin input { flex: 1; min-width: 120px; }
+.skill-row { flex-wrap: wrap; }
+.server-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 14px 8px; padding: 7px 10px 7px 14px; border-radius: 999px; background: color-mix(in srgb, var(--bot-accent, #9355ff) 22%, transparent); font-size: 13px; }

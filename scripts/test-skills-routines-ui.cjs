@@ -66,7 +66,9 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
         serversTest: async address => { calls.push(['serversTest', address]); return address.includes('bad') ? fail('Could not reach bad. Check the address.') : ok({ url: address, message: 'Found a Bothive server. You sign in on its own page when it opens.' }); },
         serversAdd: async (name, address) => { calls.push(['serversAdd', name, address]); if (address.startsWith('ftp')) return fail('Use an address that starts with https:// or http://.'); const entry = { id: crypto.randomUUID(), name: name || address, url: address }; (window.__servers ||= []).push(entry); return ok(entry); },
         serversRemove: async id => { calls.push(['serversRemove', id]); window.__servers = window.__servers.filter(x => x.id !== id); return ok(true); },
-        serversOpen: async id => { calls.push(['serversOpen', id]); return ok(true); },
+        serversStatus: async () => ok(window.__serverStatus || { active: false }),
+        serversConnect: async (id, user, pass) => { calls.push(['serversConnect', id, user, pass]); if (pass === 'wrong-password') return fail('That username and password don\u2019t match.'); const entry = window.__servers.find(x => x.id === id); window.__serverStatus = { active: true, name: entry.name, url: entry.url }; return ok(window.__serverStatus); },
+        serversDisconnect: async () => { calls.push(['serversDisconnect']); window.__serverStatus = { active: false }; return ok({ active: false }); },
         pauseTask: async (botID, id, enabled) => { calls.push(['pauseTask', id, enabled]); task(botID, id).enabled = enabled; return ok(true); },
         runTask: async (botID, id) => { calls.push(['runTask', id]); const t = task(botID, id); t.lastRun = new Date().toISOString(); t.lastResult = 'running'; return ok(true); },
         editTask: async (botID, id, input) => { calls.push(['editTask', id, input]); const t = task(botID, id); Object.assign(t, { name: input.name, text: input.text }); if (input.recurrence) t.recurrence = input.recurrence; if (input.at) t.nextRun = input.at; return ok(true); },
@@ -237,8 +239,17 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
     await page.getByRole('button', { name: 'Add server', exact: true }).click();
     await page.locator('.skill-row', { hasText: 'http://100.101.102.103:8765' }).waitFor();
     assert.equal(await page.locator('.servers-page b').count(), 0, 'a server name stays text');
-    await page.locator('.skill-row').getByRole('button', { name: 'Open', exact: true }).click();
-    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'serversOpen'));
+    await page.locator('.skill-row').getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.getByLabel('Server password').fill('wrong-password'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.getByText('don\u2019t match', { exact: false }).waitFor();
+    await page.getByLabel('Server password').fill('right-password-1'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'serversConnect' && x[3] === 'right-password-1'));
+    assert.equal((await calls()).find(x => x[0] === 'serversConnect')[2], 'admin', 'the username starts as admin');
+    await page.evaluate(() => { window.__serverStatus = { active: true, name: 'Home <b>box</b>', url: 'http://100.101.102.103:8765' }; });
+    await page.keyboard.press('Escape'); await openTab('Servers');
+    await page.getByText('Using Home', { exact: false }).waitFor();
+    await page.getByRole('button', { name: 'Back to this computer', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'serversDisconnect'));
     await page.locator('.skill-row').getByRole('button', { name: 'Remove', exact: true }).click();
     await page.getByText('No servers yet.', { exact: false }).waitFor();
     await page.keyboard.press('Escape');

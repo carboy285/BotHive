@@ -33,6 +33,13 @@ final class RemoteController: ObservableObject {
     var viewingBotID: UUID?
     @Published var error: String?
     private let client: CloudRelayClient
+    /// Set while this device uses a server by its address instead of the account relay (10.1.1).
+    private var direct: DirectServerClient?
+    var usingServer: Bool { direct != nil }
+    /// The iPhone remembers the server it was using across launches; a Mac window that views one does not (it is a temporary view).
+    var persistsServer = true
+    var serverName: String? { direct?.name }
+    private static let directAccount = "direct-server"
     private let secrets: KeychainSecretStore
     private var connection: CloudDevice?
     private var polling: Task<Void,Never>?
@@ -67,10 +74,12 @@ final class RemoteController: ObservableObject {
             guard let owner = account.session?.user.id else { throw CloudError.signedOut }
             try secrets.save(Data(device.id.uuidString.utf8),account:owner.uuidString)
             try secrets.save(JSONEncoder().encode(device), account: "last-host-" + owner.uuidString)
+            direct = nil
             clearState(); connection = device; hostName = device.name; startPolling()
         } catch { self.error = error.localizedDescription }
     }
     func disconnect() {
+        if direct != nil { leaveServer(); return }
         if let owner = account.session?.user.id { try? secrets.save(Data("disconnected".utf8),account:owner.uuidString) }
         clearState(); status = "Choose your desktop"; startPolling(autoSelect:false)
     }
@@ -80,6 +89,35 @@ final class RemoteController: ObservableObject {
         drafts = [:]; draftImages = [:]; pendingSends = [:]; serverPins = [:]; pendingPins = [:]; legacyPins = []; pinSyncNotice = nil
         model?.applyRemoteSnapshot(Workspace()); model?.leavePreview()
     }
+    /// One place that decides how a request reaches the computer: straight to a server by address, or through the account relay.
+    private func transport(_ peer: CloudDevice, target: String, command: RemoteCommand? = nil) async throws -> CloudResponse {
+        if let direct { return try await direct.fetch(target: target, command: command) }
+        return try await client.fetch(peer, target: target, command: command)
+    }
+
+    /// Starts using a server by its address. Its Bots load here like any computer's.
+    func connectServer(_ server: DirectServerClient) {
+        if persistsServer, let data = try? JSONEncoder().encode(server) { try? secrets.save(data, account: Self.directAccount) }
+        clearState()
+        direct = server; connection = server.device; hostName = server.name
+        status = "Loading Bots from \(server.name)\u{2026}"
+        showConnection = false
+        startPolling()
+    }
+
+    /// Goes back to the account relay and forgets the server's sign-in on this device.
+    func leaveServer() {
+        guard direct != nil else { return }
+        try? secrets.delete(account: Self.directAccount)
+        direct = nil
+        clearState(); status = "Choose your desktop"; startPolling(autoSelect: false)
+    }
+
+    private func restoreServer() {
+        guard persistsServer, direct == nil, connection == nil, let data = try? secrets.read(account: Self.directAccount), let saved = try? JSONDecoder().decode(DirectServerClient.self, from: data) else { return }
+        direct = saved; connection = saved.device; hostName = saved.name
+    }
+
     func setActive(_ active: Bool) {
         if !active, keepAliveInBackground { return }
         if self.active == active, (!active || polling != nil) { return }
@@ -88,9 +126,9 @@ final class RemoteController: ObservableObject {
     }
     private func startPolling(autoSelect: Bool = true) {
         polling?.cancel()
-        guard active, account.signedIn else { status = "Sign in to connect your desktop"; return }
-        restoreHost()
-        account.startWake()
+        restoreServer()
+        guard active, account.signedIn || direct != nil else { status = "Sign in to connect your desktop"; return }
+        if direct == nil { restoreHost(); account.startWake() }
         if connection == nil { status = "Finding your computer…" }
         let current = epoch
         polling = Task {
@@ -99,7 +137,7 @@ final class RemoteController: ObservableObject {
             var nextDiscovery = connection == nil ? Date.distantPast : Date().addingTimeInterval(15)
             while !Task.isCancelled, current == epoch {
                 do {
-                    if Date() >= nextDiscovery {
+                    if direct == nil, Date() >= nextDiscovery {
                         try await account.sync()
                         try Task.checkCancellation()
                         guard current == epoch else { return }
@@ -126,7 +164,7 @@ final class RemoteController: ObservableObject {
                     if connection != nil {
                         if !hasSnapshot, !needsApproval, !initialLoadFailed { status = "Loading Bots from \(hostName)…" }
                         try await refresh()
-                        if hasSnapshot, Date() >= nextPinSync {
+                        if hasSnapshot, direct == nil, Date() >= nextPinSync {
                             do { try await syncPins(); nextPinSync = Date().addingTimeInterval(2) }
                             catch { if current == epoch { pinSyncNotice = "Pins will sync when the account service reconnects." }; nextPinSync = Date().addingTimeInterval(5) }
                         }
@@ -137,6 +175,11 @@ final class RemoteController: ObservableObject {
                     }
                 } catch {
                     if Task.isCancelled || current != epoch { return }
+                    if direct != nil, let cloud = error as? CloudError, case .signedOut = cloud {
+                        // The server no longer knows this sign-in (it expired or the password changed): ask for it again.
+                        let name = direct?.name ?? "the server"
+                        try? secrets.delete(account: Self.directAccount); direct = nil; clearState(); status = "Sign in again to \(name) under Settings → Servers."; return
+                    }
                     online = false; initialLoadFailed = true; status = error.localizedDescription + " Retrying…"
                     nextDiscovery = Date.distantPast
                     if let cloudError = error as? CloudError {
@@ -155,7 +198,7 @@ final class RemoteController: ObservableObject {
         if !hasSnapshot { parts.queryItems = [URLQueryItem(name: "overview", value: "true")] }
         else if let revision = state?.revision { parts.queryItems = [URLQueryItem(name:"since",value:revision)] }
         guard let target = parts.string else { throw CloudError.invalidPacket }
-        let response = try await client.fetch(peer,target:target)
+        let response = try await transport(peer, target:target)
         try Task.checkCancellation(); guard current == epoch else { return }
         if response.status == 204, state == nil || !hasSnapshot { throw CloudError.resync }
         if response.status != 204 {
@@ -207,7 +250,14 @@ final class RemoteController: ObservableObject {
     }
     func isPinned(_ bot: Bot) -> Bool { serverPins[bot.id] ?? pinnedBotIDs?.contains(bot.id) ?? bot.isPinned ?? (bot.isMain == true) }
     func setPinned(_ pinned: Bool, bot: Bot) {
-        guard let key = pinsKey else { return }
+        guard let key = pinsKey else {
+            if direct != nil {
+                var ids = pinnedBotIDs ?? model?.workspace.bots.filter { isPinned($0) }.map(\.id) ?? []
+                ids.removeAll { $0 == bot.id }; if pinned { ids.append(bot.id) }
+                serverPins[bot.id] = pinned; pinnedBotIDs = ids
+            }
+            return
+        }
         var ids = pinnedBotIDs ?? model?.workspace.bots.filter { isPinned($0) }.map(\.id) ?? []
         ids.removeAll { $0 == bot.id }; if pinned { ids.append(bot.id) }
         do {
@@ -252,7 +302,7 @@ final class RemoteController: ObservableObject {
         guard online, let peer = connection else { error = "Reconnect to your desktop before changing the workspace."; return false }
         let current = epoch
         do {
-            _ = try await client.fetch(peer,target:"/v1/command",command:command)
+            _ = try await transport(peer, target:"/v1/command",command:command)
             guard current == epoch else { return false }
             // Check for the result now instead of at the next tick.
             kick.signal()
@@ -273,13 +323,13 @@ final class RemoteController: ObservableObject {
         if accepted, pendingSends[bot.id]?.1 == id { pendingSends[bot.id] = nil }; return accepted
     }
     func models(_ provider: CLIProvider) async -> [AvailableCLIModel] {
-        guard let peer = connection, let response = try? await client.fetch(peer,target:"/v1/models?provider=" + provider.rawValue) else { return [] }
+        guard let peer = connection, let response = try? await transport(peer, target:"/v1/models?provider=" + provider.rawValue) else { return [] }
         var seen = Set<String>()
         return ((try? CloudCoding.decoder().decode([AvailableCLIModel].self,from:response.body)) ?? []).filter { seen.insert($0.id).inserted }
     }
     func browserPreview(_ botID: UUID, vm: Bool = false) async throws -> RemoteBrowserPreview {
         guard let peer = connection else { throw CloudError.message("Choose a hosting computer first.") }
-        let response = try await client.fetch(peer, target: "/v1/" + (vm ? "vm" : "browser") + "?bot=" + botID.uuidString)
+        let response = try await transport(peer, target: "/v1/" + (vm ? "vm" : "browser") + "?bot=" + botID.uuidString)
         return try CloudCoding.decoder().decode(RemoteBrowserPreview.self, from: response.body)
     }
     /// Linux VMs another computer is sharing with this account.
@@ -287,7 +337,7 @@ final class RemoteController: ObservableObject {
         guard let peer = host ?? connection else { throw CloudError.message("Choose a computer first.") }
         vmDiagnostics = ["host": peer.name, "checkedAt": ISO8601DateFormatter().string(from: Date()), "appVersion": Self.appVersion, "protocolVersion": "1"]
         do {
-            let response = try await client.fetch(peer, target: "/v1/vms")
+            let response = try await transport(peer, target: "/v1/vms")
             let list = try CloudCoding.decoder().decode([RemoteVM].self, from: response.body)
             vmDiagnostics["lastStatus"] = "ok, \(list.count) VM(s)"
             return list
@@ -307,13 +357,13 @@ final class RemoteController: ObservableObject {
     /// A picture of a shared VM's screen on another computer (it must have remote VM viewing turned on).
     func vmPreview(vm: UUID, on host: CloudDevice? = nil) async throws -> RemoteBrowserPreview {
         guard let peer = host ?? connection else { throw CloudError.message("Choose a computer first.") }
-        let response = try await client.fetch(peer, target: "/v1/vm?bot=" + vm.uuidString)
+        let response = try await transport(peer, target: "/v1/vm?bot=" + vm.uuidString)
         return try CloudCoding.decoder().decode(RemoteBrowserPreview.self, from: response.body)
     }
     /// Opens a shared VM's console on the computer that has it, so the human can use it there.
     func openVM(vm: UUID, on host: CloudDevice? = nil) async throws {
         guard let peer = host ?? connection else { throw CloudError.message("Choose a computer first.") }
-        _ = try await client.fetch(peer, target: "/v1/command", command: RemoteCommand(action: "open_vm", botID: vm))
+        _ = try await transport(peer, target: "/v1/command", command: RemoteCommand(action: "open_vm", botID: vm))
     }
     /// Runs a command inside a VM another computer is sharing and returns what it printed. The computer is asked to start the command, then
     /// asked for the result every couple of seconds, because the relay answers within seconds but a command inside a VM may take a minute.
@@ -321,11 +371,11 @@ final class RemoteController: ObservableObject {
         guard let peer = host ?? connection else { throw CloudError.message("Choose a computer first.") }
         guard (1...16).contains(argv.count) else { throw CloudError.message("Use 1–16 command words, with the program path first.") }
         let requestID = UUID()
-        _ = try await client.fetch(peer, target: "/v1/command", command: RemoteCommand(requestID: requestID, action: "vm_exec", botID: vm, argv: argv))
+        _ = try await transport(peer, target: "/v1/command", command: RemoteCommand(requestID: requestID, action: "vm_exec", botID: vm, argv: argv))
         let deadline = Date().addingTimeInterval(130)
         while Date() < deadline {
             try await Task.sleep(for: .milliseconds(700))
-            let response = try await client.fetch(peer, target: "/v1/vm-result?id=" + requestID.uuidString)
+            let response = try await transport(peer, target: "/v1/vm-result?id=" + requestID.uuidString)
             let result = try CloudCoding.decoder().decode(RemoteVMResult.self, from: response.body)
             switch result.status {
             case "done": return result.output ?? ""
@@ -338,36 +388,36 @@ final class RemoteController: ObservableObject {
     /// An encoded Bot package from the connected computer.
     func botPackage(_ bot: Bot) async throws -> Data {
         guard let peer = connection else { throw CloudError.message("Choose a hosting computer first.") }
-        return try await client.fetch(peer, target: "/v1/bot-package?bot=" + bot.id.uuidString).body
+        return try await transport(peer, target: "/v1/bot-package?bot=" + bot.id.uuidString).body
     }
     /// Sends a Bot package to a computer on this account (the connected one unless another is named).
     func importPackage(_ data: Data, to host: CloudDevice? = nil) async throws {
         guard let peer = host ?? connection else { throw CloudError.message("Choose a hosting computer first.") }
-        _ = try await client.fetch(peer, target: "/v1/command", command: RemoteCommand(action: "import_bot", package: data))
+        _ = try await transport(peer, target: "/v1/command", command: RemoteCommand(action: "import_bot", package: data))
     }
     /// The connected computer's own settings (providers, which keys are set, connectors, versions).
     func hostSettings() async throws -> RemoteHostSettings {
         guard let peer = connection else { throw CloudError.message("Choose a hosting computer first.") }
-        let response = try await client.fetch(peer, target: "/v1/host-settings")
+        let response = try await transport(peer, target: "/v1/host-settings")
         return try CloudCoding.decoder().decode(RemoteHostSettings.self, from: response.body)
     }
     /// Saves (or, with an empty key, removes) an AI provider API key on the connected computer.
     func setAPIKey(_ key: String, for provider: CLIProvider) async throws {
         guard let peer = connection else { throw CloudError.message("Choose a hosting computer first.") }
-        _ = try await client.fetch(peer, target: "/v1/command", command: RemoteCommand(action: "set_api_key", text: key, name: provider.rawValue))
+        _ = try await transport(peer, target: "/v1/command", command: RemoteCommand(action: "set_api_key", text: key, name: provider.rawValue))
     }
     /// Keys and connector settings from the connected computer (it must have sharing switched on).
     func settingsBundle() async throws -> Data {
         guard let peer = connection else { throw CloudError.message("Choose a hosting computer first.") }
-        return try await client.fetch(peer, target: "/v1/bundle").body
+        return try await transport(peer, target: "/v1/bundle").body
     }
     /// Sends keys and connector settings to a computer on this account (it must have sharing switched on).
     func importSettings(_ data: Data, to host: CloudDevice? = nil) async throws {
         guard let peer = host ?? connection else { throw CloudError.message("Choose a hosting computer first.") }
-        _ = try await client.fetch(peer, target: "/v1/command", command: RemoteCommand(action: "import_settings", package: data))
+        _ = try await transport(peer, target: "/v1/command", command: RemoteCommand(action: "import_settings", package: data))
     }
     func files(_ bot: Bot) async -> [RemoteFile] {
-        guard let peer = connection, let response = try? await client.fetch(peer,target:"/v1/files?bot=" + bot.id.uuidString) else { return [] }
+        guard let peer = connection, let response = try? await transport(peer, target:"/v1/files?bot=" + bot.id.uuidString) else { return [] }
         return (try? CloudCoding.decoder().decode([RemoteFile].self,from:response.body)) ?? []
     }
 }

@@ -39,9 +39,14 @@ Your sign-in is stored in the container's home folder, not in the image. Keep it
 
 ## Using the server from the apps (10.1.1 Beta)
 
-Once it runs, the Mac, Windows and iPhone apps can open it by address instead of through the account relay:
+Once it runs, the Mac, Windows and iPhone apps can use it by address instead of through the account relay. Its Bots load in the app itself and you text and talk to them there.
 
-- **Mac and Windows:** Settings → Servers → Add a server.
+- **Mac and Windows:** Settings → Servers → Add a server, then Connect.
 - **iPhone:** Settings → Your computer → Servers (or "Use a server by address" on the first screen).
 
-Type the server's address, for example `https://my-box.tailnet-name.ts.net` (from `tailscale serve`) or `http://100.101.102.103:8765`, then open it and sign in with the Web access username and password. Plain `http://` is only accepted for private addresses (Tailscale, home Wi-Fi, local names). The server opens in the app's own window; chats and Bots stay on the server.
+Type the server's address, for example `https://my-box.tailnet-name.ts.net` (from `tailscale serve`) or `http://100.101.102.103:8765`, and sign in with the Web access username and password. Plain `http://` is only accepted for private addresses (Tailscale, home Wi-Fi, local names). Chats and Bots stay on the server.
+
+- On **Mac** the server appears in the main window like another computer on your account; "Back to this Mac" returns.
+- On **Windows** the whole window uses the server until you press Back.
+- On **iPhone** the app remembers the server until you choose "Back to my account's computer".
+- Voice (speaking and listening) happens on the device you are holding; only the text goes to the server.

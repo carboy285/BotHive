@@ -149,6 +149,7 @@ struct RootView: View {
             .onChange(of: phase) { _, new in if new == .active { sendPendingAsk() } }
             .fullScreenCover(isPresented: Binding(get: { !seenWelcome }, set: { if !$0 { seenWelcome = true } })) { OnboardingFlow(account: remote.account) { seenWelcome = true }.environmentObject(remote) }
             .sheet(isPresented: $createBot) { CreateBotView() }
+            .onChange(of: remote.serverName) { _, name in if name != nil { showServers = false } }
             .sheet(isPresented: $showServers) { NavigationStack { ServersPage().toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { showServers = false } } } } }
             .sheet(item: $inspectedBot) { bot in
                 NavigationStack {

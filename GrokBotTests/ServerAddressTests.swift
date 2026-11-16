@@ -40,4 +40,14 @@ final class ServerAddressTests: XCTestCase {
         XCTAssertEqual(ServerAddress.cleanName("  Home\nlab  ", fallback: "x"), "Home lab")
         XCTAssertEqual(ServerAddress.cleanName("", fallback: "Fallback"), "Fallback")
     }
+
+    func testDirectServerStandsInForAComputer() throws {
+        let a = DirectServerClient(origin: try XCTUnwrap(URL(string: "https://box.ts.net")), token: "t", name: "Box")
+        let b = DirectServerClient(origin: try XCTUnwrap(URL(string: "https://other.ts.net")), token: "t", name: "Other")
+        XCTAssertEqual(a.device.id, a.device.id, "the same server is always the same computer")
+        XCTAssertNotEqual(a.device.id, b.device.id)
+        XCTAssertEqual(a.device.name, "Box"); XCTAssertEqual(a.device.kind, "host")
+        let saved = try JSONDecoder().decode(DirectServerClient.self, from: JSONEncoder().encode(a))
+        XCTAssertEqual(saved, a)
+    }
 }

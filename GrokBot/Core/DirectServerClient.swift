@@ -15,7 +15,7 @@ struct DirectServerClient: Codable, Sendable, Equatable {
         return URLSession(configuration: configuration)
     }()
 
-    private struct Reply: Decodable { var ok: Bool?; var error: String?; var token: String?; var name: String? }
+    private struct Reply: Decodable { var ok: Bool?; var code: String?; var error: String?; var token: String?; var name: String? }
 
     /// Signs in. Throws an error whose text says what went wrong (wrong password, unreachable, not a Bothive server).
     static func login(address: String, username: String, password: String) async throws -> DirectServerClient {
@@ -32,7 +32,11 @@ struct DirectServerClient: Codable, Sendable, Equatable {
         case 200:
             guard reply?.ok == true, let token = reply?.token else { throw ServerError("\(parsed.host) did not answer like a Bothive server.") }
             return DirectServerClient(origin: origin, token: token, name: reply?.name ?? parsed.host)
-        case 401, 429: throw ServerError(reply?.error ?? "That username and password don\u{2019}t match.")
+        case 401:
+            // Only a server that knows this sign-in route says bad_credentials. An older Bothive answers 401 "Sign in again." to a route it does not have.
+            if reply?.code == "bad_credentials" { throw ServerError(reply?.error ?? "That username and password don\u{2019}t match.") }
+            throw ServerError("\(parsed.host) answered, but it does not accept sign-in from the apps. It is running an older Bothive. Update it to 10.1.1 or later, then try again.")
+        case 429: throw ServerError(reply?.error ?? "Too many tries. Wait a minute and try again.")
         case 404: throw ServerError("\(parsed.host) answered, but Web access is not turned on there, or it is not Bothive 10.1.1 or later.")
         default: throw ServerError(reply?.error ?? "\(parsed.host) answered with an error (\(http.statusCode)).")
         }

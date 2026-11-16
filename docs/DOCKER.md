@@ -44,6 +44,8 @@ Once it runs, the Mac, Windows and iPhone apps can use it by address instead of 
 - **Mac and Windows:** Settings → Servers → Add a server, then Connect.
 - **iPhone:** Settings → Your computer → Servers (or "Use a server by address" on the first screen).
 
+If the app says the server "is running an older Bothive", the server needs 10.1.1 or later. In the Docker folder run `git pull` and then `docker compose -f docker/compose.yml up --build -d`.
+
 Type the server's address, for example `https://my-box.tailnet-name.ts.net` (from `tailscale serve`) or `http://100.101.102.103:8765`, and sign in with the Web access username and password. Plain `http://` is only accepted for private addresses (Tailscale, home Wi-Fi, local names). Chats and Bots stay on the server.
 
 - On **Mac** the server appears in the main window like another computer on your account; "Back to this Mac" returns.

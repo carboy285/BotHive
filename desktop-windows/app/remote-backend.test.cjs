@@ -57,3 +57,13 @@ test('when the server forgets the sign-in the window is let go of', async () => 
     assert.equal(backend.active, false);
   } finally { backend.disconnect(false); await web.stop(); }
 });
+
+test('an older Bothive that has no app sign-in is named as old, not as a wrong password', async () => {
+  const http = require('node:http');
+  const old = http.createServer((req, res) => { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end('{"ok":false,"error":"Sign in again."}'); });
+  await new Promise(resolve => old.listen(0, '127.0.0.1', resolve));
+  try {
+    const backend = new RemoteBackend({ onEvent() {} });
+    await assert.rejects(backend.connect(`http://127.0.0.1:${old.address().port}`, 'admin', 'a-long-password-1'), /older Bothive/);
+  } finally { old.close(); }
+});

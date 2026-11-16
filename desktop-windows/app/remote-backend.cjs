@@ -28,6 +28,8 @@ class RemoteBackend {
       this.onChange();
       return this.status();
     }
+    // Only a server that knows the sign-in route says bad_credentials. An older Bothive answers 401 "Sign in again." to a route it does not have.
+    if (response.status === 401 && reply?.code !== 'bad_credentials') throw new Error(`${found.host} answered, but it does not accept sign-in from the apps. It is running an older Bothive. Update it to 10.1.1 or later, then try again.`);
     if (response.status === 401 || response.status === 429) throw new Error(reply?.error || 'That username and password don’t match.');
     if (response.status === 404) throw new Error(`${found.host} answered, but Web access is not turned on there, or it is not Bothive 10.1.1 or later.`);
     throw new Error(reply?.error || `${found.host} answered with an error (${response.status}).`);

@@ -231,7 +231,7 @@ class WebAccess {
     const json = (status, value) => this.send(res, status, 'application/json', JSON.stringify(value));
     if (req.method !== 'POST') return json(405, { ok: false, error: 'Not allowed.' });
     const failure = this.failures.get(remote) || { count: 0, until: 0 };
-    if (failure.until > Date.now()) return json(429, { ok: false, error: `Too many tries. Wait ${Math.ceil((failure.until - Date.now()) / 1000)} seconds.` });
+    if (failure.until > Date.now()) return json(429, { ok: false, code: 'rate_limited', error: `Too many tries. Wait ${Math.ceil((failure.until - Date.now()) / 1000)} seconds.` });
     let input; try { input = JSON.parse(await this.body(req, 4096)); } catch { return json(400, { ok: false, error: 'Try again.' }); }
     const { username, passwordHash } = this.deps.config();
     const nameOK = typeof username === 'string' && username.length > 0 && crypto.timingSafeEqual(crypto.createHash('sha256').update(String(input?.username ?? '')).digest(), crypto.createHash('sha256').update(username).digest());
@@ -239,7 +239,7 @@ class WebAccess {
     if (!nameOK || !passwordOK) {
       failure.count++; if (failure.count >= 5) failure.until = Date.now() + Math.min(3600000, 30000 * 2 ** (failure.count - 5));
       this.failures.set(remote, failure);
-      return json(401, { ok: false, error: 'That username and password don\u2019t match.' });
+      return json(401, { ok: false, code: 'bad_credentials', error: 'That username and password don\u2019t match.' });
     }
     this.failures.delete(remote);
     const token = crypto.randomBytes(32).toString('base64url');

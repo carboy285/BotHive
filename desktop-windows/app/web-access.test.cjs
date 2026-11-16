@@ -24,6 +24,7 @@ test('an app signs in with the web access login and gets a token', async () => {
   try {
     const bad = await post('/api/app/login', { username: 'admin', password: 'wrong-password-1' });
     assert.equal(bad.status, 401);
+    assert.equal((await bad.json()).code, 'bad_credentials', 'a wrong password is told apart from a server that lacks the route');
     const good = await post('/api/app/login', { username: 'admin', password: 'a-long-password-1' });
     assert.equal(good.status, 200);
     const body = await good.json();

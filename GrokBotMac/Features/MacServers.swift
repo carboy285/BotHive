@@ -97,7 +97,8 @@ private struct MacServerSignIn: View {
         let secret = password; password = ""
         Task {
             do {
-                let client = try await DirectServerClient.login(address: server.url, username: username, password: secret)
+                var client = try await DirectServerClient.login(address: server.url, username: username, password: secret)
+                client.name = server.name
                 desktop.openServer(client, app: desktop.localApp ?? app)
                 dismiss()
             } catch { message = error.localizedDescription; working = false }

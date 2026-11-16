@@ -90,7 +90,8 @@ private struct ServerSignIn: View {
         let secret = password; password = ""
         Task {
             do {
-                let client = try await DirectServerClient.login(address: server.url, username: username, password: secret)
+                var client = try await DirectServerClient.login(address: server.url, username: username, password: secret)
+                client.name = server.name
                 remote.connectServer(client)
                 dismiss()
             } catch { message = error.localizedDescription; working = false }

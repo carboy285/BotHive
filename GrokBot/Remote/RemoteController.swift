@@ -114,6 +114,8 @@ final class RemoteController: ObservableObject {
     }
 
     private func restoreServer() {
+        // A server chosen in this session survives the state being cleared (a window sets itself up, then clears once): point back at it.
+        if let direct, connection == nil { connection = direct.device; hostName = direct.name; return }
         guard persistsServer, direct == nil, connection == nil, let data = try? secrets.read(account: Self.directAccount), let saved = try? JSONDecoder().decode(DirectServerClient.self, from: data) else { return }
         direct = saved; connection = saved.device; hostName = saved.name
     }

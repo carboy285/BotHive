@@ -11,6 +11,9 @@ services:
     environment:
       OPENGROKBOT_WEB_PASSWORD: ${OPENGROKBOT_WEB_PASSWORD:?set a password of 10 or more characters}
       OPENGROKBOT_WEB_USER: ${OPENGROKBOT_WEB_USER:-admin}
+      # 1 lets the Mac, Windows and iPhone apps signed in to this server change its settings, API keys and installed CLIs (nothing else can reach it
+      # except through the password). Set it to 0 to keep the server read-only from the apps.
+      OPENGROKBOT_WEB_ADMIN: ${OPENGROKBOT_WEB_ADMIN:-1}
     volumes:
       - opengrokbot-data:/data
     restart: unless-stopped

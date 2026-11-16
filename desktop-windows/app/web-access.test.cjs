@@ -4,11 +4,11 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { WebAccess, hashPassword } = require('./web-access.cjs');
 
-async function server(extra = {}) {
+async function server(extra = {}, admin = false) {
   const calls = [];
   const web = new WebAccess({
-    invoke: async () => ({ ok: true, value: null }),
-    config: () => ({ username: 'admin', passwordHash: hashPassword('a-long-password-1') }),
+    invoke: async (channel, args, context) => ({ ok: true, value: { channel, admin: context?.admin === true } }),
+    config: () => ({ username: 'admin', passwordHash: hashPassword('a-long-password-1'), admin }),
     hostName: () => 'Test Box',
     appRequest: async request => { calls.push(request); if (request.target === '/boom') throw Object.assign(new Error('x'), { publicMessage: 'Nope.' }); return { status: 200, body: Buffer.from('{"ok":true}').toString('base64') }; },
     rendererDir: path.resolve(__dirname, '../renderer'), preloadFile: path.join(__dirname, 'preload.cjs'), ...extra,
@@ -59,4 +59,27 @@ test('the app token works for the window\u2019s calls but not for host-only ones
     for (let i = 0; i < 5; i++) await post('/api/app/login', { username: 'admin', password: 'wrong-password-' + i });
     assert.equal((await post('/api/app/login', { username: 'admin', password: 'a-long-password-1' })).status, 429);
   } finally { await web.stop(); }
+});
+
+test('settings, keys and CLI installs are for app tokens, and only while the owner turned remote administration on', async () => {
+  const off = await server({}, false);
+  try {
+    const { token } = await (await off.post('/api/app/login', { username: 'admin', password: 'a-long-password-1' })).json();
+    const headers = { Authorization: 'Bearer ' + token, 'X-OGB-Request': '1' };
+    const refused = await off.post('/api/invoke', { channel: 'cli:install', args: ['claude'] }, headers);
+    assert.equal(refused.status, 403); assert.match((await refused.json()).error, /Remote administration is off/);
+  } finally { await off.web.stop(); }
+  const on = await server({}, true);
+  try {
+    const { token } = await (await on.post('/api/app/login', { username: 'admin', password: 'a-long-password-1' })).json();
+    const headers = { Authorization: 'Bearer ' + token, 'X-OGB-Request': '1' };
+    for (const channel of ['cli:install', 'cli-keys:set', 'setup:choose', 'composio:connect', 'cloud:sign-in', 'vault:read']) {
+      const answer = await on.post('/api/invoke', { channel, args: [] }, headers);
+      assert.equal(answer.status, 200, channel); assert.deepEqual((await answer.json()).value, { channel, admin: true });
+    }
+    // Never available over a server, even for an administrator: the web access settings themselves, file pickers and backups.
+    for (const channel of ['web:configure', 'web:signout', 'backup:export', 'files:attach', 'updates:install', 'cloud:delete-account']) {
+      assert.equal((await on.post('/api/invoke', { channel, args: [] }, headers)).status, 403, channel);
+    }
+  } finally { await on.web.stop(); }
 });

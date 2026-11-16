@@ -35,6 +35,13 @@ const media = require('./media.cjs');
 const composioTools = require('./composio-tools.cjs');
 const webAccessModule = require('./web-access.cjs');
 // ---------- Servers (10.1.1): this window can use a Bothive that runs somewhere else ----------
+const cliInstallModule = require('./cli-install.cjs');
+let cliInstaller;
+function makeCliInstaller(){
+  const base=app.getPath('userData');
+  process.env.OPENGROKBOT_CLI_BIN=cliInstallModule.binDirectory(base);
+  cliInstaller=new cliInstallModule.Installer({base,onDone:async()=>{installed=await cli.discover(settings.overrides);if(!installed.some(x=>x.id===settings.selected))settings.selected=installed[0]?.id||'';await saveSettings();notify();}});
+}
 const remoteBackendModule = require('./remote-backend.cjs');
 const remoteBackend = new remoteBackendModule.RemoteBackend({
   fetchImpl: (url, options) => net.fetch(url, options),
@@ -43,8 +50,8 @@ const remoteBackend = new remoteBackendModule.RemoteBackend({
 });
 // ---------- Web access (0.9.7): this app from another device's browser ----------
 const webAccess = new webAccessModule.WebAccess({
- invoke:async(channel,args)=>{const callback=webAccessModule.INVOKE.has(channel)&&channelHandlers.get(channel);return callback?runHandler(callback,args):{ok:false,error:'Not available over web access.'};},
- config:()=>({username:settings?.webAccess?.username,passwordHash:settings?.webAccess?.passwordHash}),
+ invoke:async(channel,args,context={})=>{const callback=(webAccessModule.INVOKE.has(channel)||(context.admin===true&&webAccessModule.ADMIN_INVOKE.has(channel)))&&channelHandlers.get(channel);return callback?runHandler(callback,args):{ok:false,error:'Not available over web access.'};},
+ config:()=>({username:settings?.webAccess?.username,passwordHash:settings?.webAccess?.passwordHash,admin:settings?.webAccess?.admin===true}),
  hostName:()=>require('node:os').hostname(),
  appRequest:request=>cloud.respond(request,{direct:true}),
  rendererDir:path.resolve(__dirname,'../renderer'),preloadFile:path.join(__dirname,'preload.cjs')
@@ -52,7 +59,7 @@ const webAccess = new webAccessModule.WebAccess({
 let webState={address:null,urls:[],error:null};
 const WEB_PORT=8765;
 function lanAddresses(port){return Object.values(require('node:os').networkInterfaces()).flat().filter(x=>x&&x.family==='IPv4'&&!x.internal&&require('./remote-host.cjs').localHost(x.address)).map(x=>`http://${x.address}:${port}`);}
-function webStatus(){const config=settings?.webAccess||{};return {enabled:!!config.enabled&&webAccess.active,configured:!!config.passwordHash,username:config.username||'',mode:config.mode==='tailscale'?'tailscale':'wifi',urls:webState.urls,error:webState.error};}
+function webStatus(){const config=settings?.webAccess||{};return {admin:config.admin===true,enabled:!!config.enabled&&webAccess.active,configured:!!config.passwordHash,username:config.username||'',mode:config.mode==='tailscale'?'tailscale':'wifi',urls:webState.urls,error:webState.error};}
 async function applyWebAccess(){
  const config=settings?.webAccess||{};
  if(webState.address){await require('./tailscale.cjs').remove(WEB_PORT,webState.address,false).catch(()=>{});webState.address=null;}
@@ -93,7 +100,7 @@ function handle(name, callback) {
   channelHandlers.set(name,callback);
   ipcMain.handle(name, async (event, ...args) => {
     if (!authorized(event) || event.sender === mirrorWindow?.webContents && !name.startsWith('mirror:')) return { ok: false, error: 'Untrusted request' };
-    if (remoteBackend.active && webAccessModule.INVOKE.has(name)) return remoteBackend.invoke(name, args);
+    if (remoteBackend.active && (webAccessModule.INVOKE.has(name) || webAccessModule.ADMIN_INVOKE.has(name))) return remoteBackend.invoke(name, args);
     return runHandler(callback,args);
   });
 }
@@ -122,6 +129,7 @@ async function ensureState(){
 }
 async function initializeState(){
   const loaded=await loadJSON('preview-workspace.json',previewWorkspace());validateWorkspace(loaded);
+  if(!cliInstaller)makeCliInstaller();
   skillStore=skillsModule.loadStore(await loadJSON('skills.json',null));
   serverStore=serversModule.load(await loadJSON('servers.json',null));
   if(loaded.version===1)await atomicJSON('legacy-workspace-backup.json',loaded);
@@ -448,7 +456,8 @@ async function hostSettings(){
  const defaultProvider=selectedCLI()?.provider;
  return {hostName:require('node:os').hostname(),platform:'windows',appVersion:app.getVersion(),providers:installed.map(x=>({provider:x.provider,version:x.version})),...(defaultProvider?{defaultProvider}:{}),
   apiKeys:Object.fromEntries([...providerKeys.PROVIDERS].map(p=>[p,!!cli[p]])),voiceKeys:Object.fromEntries([...settingsBundles.VOICE_PROVIDERS].map(p=>[p,!!voiceK[p]])),
-  connectors:{configured:!!composioConfiguration,toolkits:composioConfiguration?.toolkits||[]},sharing:!!settings.shareKeys};
+  connectors:{configured:!!composioConfiguration,toolkits:composioConfiguration?.toolkits||[]},sharing:!!settings.shareKeys,admin:settings.webAccess?.admin===true,
+  installable:cliInstallModule.catalog().map(item=>({id:item.id,name:item.name,guide:item.guide,installed:installed.some(x=>x.provider===item.id),...(cliInstaller.status()[item.id]||{})}))};
 }
 /** This computer's keys and connector settings, for copying to another computer on the account (only while sharing is on). */
 async function exportBundle(){
@@ -485,15 +494,27 @@ async function applyBundle(raw){
 async function remoteCommand(command){
  if(state.entries.some(x=>x.id.toLowerCase()===command.requestID.toLowerCase()))return;
  const bot=state.bots.find(x=>x.id.toLowerCase()===String(command.botID).toLowerCase());
+ // Changing keys, settings or installed software from another device needs the owner's say-so: the old sharing switch for phones on the
+ // account, or remote administration for an app signed in straight to this server (10.1.1).
+ const remoteChangesAllowed=Boolean(settings?.shareKeys||(command.direct===true&&settings?.webAccess?.admin===true));
+ if(command.action==='install_cli'){
+  if(!remoteChangesAllowed)throw new PublicError('Turn on remote administration for this server first (Settings → Web access → Let apps change settings).');
+  try{cliInstaller.start(command.name);}catch(error){throw new PublicError(error.message);}return;
+ }
+ if(command.action==='choose_cli'){
+  if(!remoteChangesAllowed)throw new PublicError('Turn on remote administration for this server first (Settings → Web access → Let apps change settings).');
+  const found=installed.find(x=>x.provider===command.name);if(!found)throw new PublicError('Install that CLI first.');
+  settings.selected=found.id;await saveSettings();notify();return;
+ }
  if(command.action==='set_api_key'){
-  if(!settings?.shareKeys)throw new PublicError('Turn on “Share keys and connectors” on this computer first (Settings → Computer).');
+  if(!remoteChangesAllowed)throw new PublicError('Turn on “Share keys and connectors” on this computer first (Settings → Computer).');
   if(!providerKeys.PROVIDERS.has(command.name))throw new PublicError('Choose a provider that uses an API key.');
   requireVault();const keys=await loadJSON('cli-keys.encrypted.json',{});const text=String(command.text??'').trim();
   if(!text)delete keys[command.name];else{const key=providerKeys.normalized(text);if(!key)throw new PublicError('That key does not look right (no spaces, 8 to 512 characters).');keys[command.name]=safeStorage.encryptString(key).toString('base64');}
   await atomicJSON('cli-keys.encrypted.json',keys);return;
  }
  if(command.action==='import_settings'){
-  if(!settings?.shareKeys)throw new PublicError(settingsBundles.SHARING_OFF);
+  if(!remoteChangesAllowed)throw new PublicError(settingsBundles.SHARING_OFF);
   if(typeof command.package!=='string'||command.package.length>400000)throw new PublicError('No settings were sent.');
   let raw;try{raw=JSON.parse(Buffer.from(command.package,'base64').toString('utf8'));}catch{throw new PublicError('That settings bundle could not be read.');}
   await applyBundle(raw);notify();return;
@@ -759,6 +780,8 @@ function configureIPC() {
   if(added.length)await saveSkills();
   await atomicJSON('preview-workspace.json',state);notify();return {id:bot.id,name:bot.name,skills:added.length};});
 
+ handle('cli:install',async id=>{await ensureState();try{return cliInstaller.start(id);}catch(error){throw new PublicError(error.message);}});
+ handle('cli:install-status',async()=>{await ensureState();return {catalog:cliInstallModule.catalog().map(x=>({...x,installed:installed.some(i=>i.provider===x.id)})),status:cliInstaller.status()};});
  // ---- Servers (10.1.1): use a Bothive that runs somewhere else, by its Tailscale or IP address ----
  const serverError=error=>{throw error instanceof PublicError?error:new PublicError(error?.message||'That server could not be used.');};
  const saveServers=()=>atomicJSON('servers.json',serverStore);
@@ -850,6 +873,7 @@ function configureIPC() {
   if(typeof value?.password==='string'&&value.password){const problem=webAccessModule.passwordProblem(value.password);if(problem)throw new PublicError(problem);next.passwordHash=webAccessModule.hashPassword(value.password);webAccess.signOutEverywhere();}
   if(['wifi','tailscale'].includes(value?.mode))next.mode=value.mode;
   if(typeof value?.enabled==='boolean')next.enabled=value.enabled;
+  if(typeof value?.admin==='boolean')next.admin=value.admin;
   if(next.enabled&&(!next.username||!next.passwordHash))throw new PublicError('Choose a username and password first.');
   settings.webAccess=next;await saveSettings();return applyWebAccess();
  });

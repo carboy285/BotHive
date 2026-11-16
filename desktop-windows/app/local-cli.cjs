@@ -26,6 +26,8 @@ function directories() {
     values.push('/opt/homebrew/bin','/usr/local/bin',...['.local/bin','.npm-global/bin','.bun/bin','.opencode/bin','.volta/bin','.asdf/shims'].map(x=>path.join(home,x)));
     try {values.push(...fs.readdirSync(path.join(home,'.nvm/versions/node')).sort((a,b)=>b.localeCompare(a,undefined,{numeric:true})).slice(0,6).map(x=>path.join(home,'.nvm/versions/node',x,'bin')));}catch{}
   }
+  // CLIs that Bothive installed itself (cli-install.cjs) live in a folder the app sets up at start.
+  if(process.env.OPENGROKBOT_CLI_BIN)values.unshift(process.env.OPENGROKBOT_CLI_BIN);
   return [...new Set(values)];
 }
 function invocation(file, definition) {

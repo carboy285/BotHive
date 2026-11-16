@@ -28,6 +28,20 @@ struct RemoteHostSettings: Codable, Sendable, Equatable {
     var voiceKeys: [String: Bool]
     var connectors: Connectors
     var sharing: Bool
+    /// 10.1.1: the owner turned on remote administration (a server used by its address lets the apps change settings and install CLIs).
+    var admin: Bool? = nil
+    /// 10.1.1: CLIs the computer can install by itself, and how each install is going.
+    var installable: [Installable]? = nil
+
+    struct Installable: Codable, Sendable, Equatable, Identifiable {
+        var id: String
+        var name: String
+        var guide: String?
+        var installed: Bool
+        /// "installing", "done" or "failed" while an install has run since the app started.
+        var state: String?
+        var message: String?
+    }
 }
 
 /// A Bot request waiting for a yes or no on the Mac that the approved phone can answer too.

@@ -244,7 +244,10 @@ async function renderWebAccess(page){
    const option=button('',()=>save({mode:value}),`web-mode ${status.mode===value?'selected':''}`);option.setAttribute('role','radio');option.setAttribute('aria-checked',String(status.mode===value));
    append(option,node('strong','',title),node('small','muted',detail));where.append(option);
   }
-  append(body,append(node('div','settings-card'),master,append(node('div','web-signin'),user,pass,keep)),node('p','settings-label','Where'),where);
+  const adminRow=node('label','setting-row toggle-row');const adminCheck=node('input','switch');adminCheck.type='checkbox';adminCheck.setAttribute('role','switch');adminCheck.setAttribute('aria-label','Let apps change settings');adminCheck.checked=status.admin===true;
+  adminCheck.addEventListener('change',()=>save({admin:adminCheck.checked}));
+  append(adminRow,append(node('span','toggle-text'),node('strong','','Let apps change settings'),node('small','muted','Lets the Mac, Windows and iPhone apps signed in with this password change settings, API keys and installed CLIs here, and install a CLI for you. Leave it off if they should only chat.')),adminCheck);
+  append(body,append(node('div','settings-card'),master,append(node('div','web-signin'),user,pass,keep),adminRow),node('p','settings-label','Where'),where);
   if(status.error)body.append(node('p','heads-up-error',status.error));
   if(status.enabled&&status.urls.length){
    const list=node('div','settings-card web-urls');
@@ -587,6 +590,19 @@ async function showConnection(detail='') {
       const definition=setup.providers.find(x=>x.id===provider),found=setup.installed.find(x=>x.provider===provider);
       append(body,node('h2','',`Install ${definition?.name||'a CLI'}`),node('p','',found?`Already installed: ${found.path}`:'Follow the official install guide, then return and scan again.'));
       if(definition?.install){const code=node('pre','',definition.install);append(body,code,button('Copy install command',()=>navigator.clipboard.writeText(definition.install)),button('Get Node.js ↗',()=>bridge.openDocs('https://nodejs.org/en/download')));}
+      if(definition?.install&&!found&&bridge.cliInstall){
+       const progress=node('p','muted');
+       const install=button('Install it for me',async()=>{
+        install.disabled=true;progress.textContent='Starting\u2026';
+        try{await result(bridge.cliInstall(provider));}catch(error){progress.textContent=error.message;install.disabled=false;return;}
+        for(;;){await new Promise(resolve=>setTimeout(resolve,1500));if(!progress.isConnected)return;
+         let report;try{report=await result(bridge.cliInstallStatus());}catch(error){progress.textContent=error.message;install.disabled=false;return;}
+         const entry=report.status?.[provider];if(entry)progress.textContent=entry.message;
+         if(entry?.state==='done'){try{setup=await result(bridge.scanCLIs());}catch{}draw();return;}
+         if(entry?.state==='failed'){install.disabled=false;return;}}
+       },'pill primary');
+       append(body,install,progress);
+      }
       if(definition)body.append(button('Official install guide ↗',()=>bridge.openDocs(definition.guide)));
       append(body,button('Scan again',async()=>{setup=await result(bridge.scanCLIs());draw();}),button('Choose executable…',async()=>{await result(bridge.choosePath(provider));setup=await result(bridge.scanCLIs());draw();}));
     }else if(step===3){

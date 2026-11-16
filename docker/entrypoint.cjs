@@ -17,8 +17,9 @@ fs.mkdirSync(dataDir, { recursive: true });
 const file = path.join(dataDir, 'settings.json');
 let settings = {};
 try { settings = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
-settings.webAccess = { ...(settings.webAccess || {}), enabled: true, username: user, passwordHash: hashPassword(password), mode: 'wifi' };
+// OPENGROKBOT_WEB_ADMIN=1 lets the Mac, Windows and iPhone apps signed in to this server change its settings, API keys and installed CLIs.
+settings.webAccess = { ...(settings.webAccess || {}), enabled: true, username: user, passwordHash: hashPassword(password), mode: 'wifi', admin: process.env.OPENGROKBOT_WEB_ADMIN === '1' };
 const plugins = (process.env.OPENGROKBOT_PLUGINS || '').split(',').map(x => x.trim()).filter(Boolean);
 if (plugins.length) settings.plugins = { ...(settings.plugins || {}), allowed: plugins };
 fs.writeFileSync(file, JSON.stringify(settings), { mode: 0o600 });
-console.log(`Web access is on for user "${user}" at port 8765.`);
+console.log(`Web access is on for user "${user}" at port 8765. Remote administration is ${process.env.OPENGROKBOT_WEB_ADMIN === '1' ? 'on' : 'off'}.`);

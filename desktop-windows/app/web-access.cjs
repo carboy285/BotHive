@@ -21,6 +21,16 @@ const INVOKE = new Set([
   'skills:list', 'skills:get', 'skills:save', 'skills:delete', 'skills:set-bot', 'skills:find', 'skills:fetch',
   'tasks:create', 'tasks:edit', 'tasks:run', 'share:make', 'share:read', 'share:add'
 ]);
+// 10.1.1: what an app signed in to this server may also do when the owner has turned on remote administration (Web access settings, or
+// OPENGROKBOT_WEB_ADMIN=1 in Docker): the settings, API keys, CLI install and sign-in a person would otherwise need the server's own screen for.
+// Only app tokens count; a browser signed in with the same password still gets the list above. File pickers and the web access settings
+// themselves (including its password) are left out on purpose.
+const ADMIN_INVOKE = new Set([
+  'cli:install', 'cli:install-status', 'cli-keys:set', 'cli-keys:status', 'setup:choose', 'setup:scan', 'setup:login', 'setup:server', 'setup:complete',
+  'composio:connect', 'composio:refresh', 'composio:remove', 'media-keys:set', 'media-settings:set', 'voice:key', 'voice:save', 'voice:settings',
+  'sharing:get', 'sharing:set', 'rules:set', 'connected-apps:allow-set', 'logins:add', 'logins:list', 'logins:remove', 'vault:list', 'vault:read', 'vault:save', 'vault:delete',
+  'ollama:pull', 'ollama:delete', 'cloud:sign-in', 'cloud:sign-out', 'cloud:enabled', 'cloud:approve', 'cloud:reconnect', 'diagnostics:get'
+]);
 // Events another device receives.
 const EVENTS = new Set(['workspace:changed', 'proactive:changed', 'approval:request', 'bot:open']);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2' };
@@ -261,8 +271,16 @@ class WebAccess {
   async invoke(req, res) {
     if (req.method !== 'POST' || req.headers['x-ogb-request'] !== '1' || !this.sameOrigin(req)) return this.send(res, 403, 'application/json', '{"ok":false,"error":"Not allowed."}');
     let request; try { request = JSON.parse(await this.body(req, 32 * 1024 * 1024)); } catch (error) { return this.send(res, error.status || 400, 'application/json', '{"ok":false,"error":"Invalid request."}'); }
-    if (!request || typeof request.channel !== 'string' || !INVOKE.has(request.channel) || !Array.isArray(request.args) || request.args.length > 8) return this.send(res, 403, 'application/json', '{"ok":false,"error":"Open Bothive on the computer that runs it to do this."}');
-    const result = await this.deps.invoke(request.channel, request.args);
+    if (!request || typeof request.channel !== 'string' || !Array.isArray(request.args) || request.args.length > 8) return this.send(res, 403, 'application/json', '{"ok":false,"error":"Invalid request."}');
+    // Remote administration: only an app token (not a browser cookie), and only while the owner has it turned on.
+    const admin = !this.session(req) && !!this.bearer(req) && this.deps.config().admin === true;
+    if (!INVOKE.has(request.channel) && !(admin && ADMIN_INVOKE.has(request.channel))) {
+      const needsAdmin = ADMIN_INVOKE.has(request.channel);
+      return this.send(res, 403, 'application/json', JSON.stringify({ ok: false, error: needsAdmin
+        ? 'Remote administration is off on this server. Turn on \u201cLet apps change settings\u201d in its Web access settings (Docker: OPENGROKBOT_WEB_ADMIN=1).'
+        : 'Open Bothive on the computer that runs it to do this.' }));
+    }
+    const result = await this.deps.invoke(request.channel, request.args, { admin });
     return this.send(res, 200, 'application/json', JSON.stringify(result));
   }
 
@@ -295,4 +313,4 @@ class WebAccess {
   }
 }
 
-module.exports = { WebAccess, INVOKE, EVENTS, hashPassword, checkPassword, passwordProblem, bridgeTable, bridgeScript, USER };
+module.exports = { WebAccess, INVOKE, ADMIN_INVOKE, EVENTS, hashPassword, checkPassword, passwordProblem, bridgeTable, bridgeScript, USER };

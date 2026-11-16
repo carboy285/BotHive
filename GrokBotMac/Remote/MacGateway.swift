@@ -81,6 +81,11 @@ final class MacGateway: ObservableObject {
     /// The Bot as a package, from the computer being viewed.
     func package(_ bot: Bot) async throws -> Data { try await remote.botPackage(bot) }
     func settingsBundle() async throws -> Data { try await remote.settingsBundle() }
+    func installCLI(_ provider: String) async -> Bool { await remote.installCLI(provider) }
+    func chooseCLI(_ provider: String) async -> Bool { await remote.chooseCLI(provider) }
+    /// "Copy all": sends this Mac's keys and connectors to the server being used by its address.
+    func deliverSettingsHere(_ data: Data) async throws { try await remote.importSettings(data) }
+    var usingServer: Bool { remote.usingServer }
     func deliverSettings(_ data: Data, to host: CloudDevice) async throws { try await remote.importSettings(data, to: host) }
     /// Sends a package to a computer on this account.
     func deliver(_ data: Data, to host: CloudDevice) async throws { try await remote.importPackage(data, to: host) }

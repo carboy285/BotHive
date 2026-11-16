@@ -85,6 +85,8 @@ contextBridge.exposeInMainWorld('desktop', {
   skillsFind:input=>ipcRenderer.invoke('skills:find',input),
   skillsFetch:descriptor=>ipcRenderer.invoke('skills:fetch',descriptor),
   skillsImportFile:()=>ipcRenderer.invoke('skills:import-file'),
+  cliInstall:id=>ipcRenderer.invoke('cli:install',id),
+  cliInstallStatus:()=>ipcRenderer.invoke('cli:install-status'),
   serversList:()=>ipcRenderer.invoke('servers:list'),
   serversTest:address=>ipcRenderer.invoke('servers:test',address),
   serversAdd:(name,address)=>ipcRenderer.invoke('servers:add',name,address),

@@ -408,6 +408,10 @@ final class RemoteController: ObservableObject {
         guard let peer = connection else { throw CloudError.message("Choose a hosting computer first.") }
         _ = try await transport(peer, target: "/v1/command", command: RemoteCommand(action: "set_api_key", text: key, name: provider.rawValue))
     }
+    /// Asks the computer (or server) to install an AI CLI by itself. Progress shows in hostSettings().installable.
+    func installCLI(_ provider: String) async -> Bool { await command(RemoteCommand(action: "install_cli", name: provider)) }
+    /// Makes an installed AI CLI the computer's default.
+    func chooseCLI(_ provider: String) async -> Bool { await command(RemoteCommand(action: "choose_cli", name: provider)) }
     /// Keys and connector settings from the connected computer (it must have sharing switched on).
     func settingsBundle() async throws -> Data {
         guard let peer = connection else { throw CloudError.message("Choose a hosting computer first.") }

@@ -138,6 +138,7 @@ class CloudHost {
     if (typeof request.body !== 'string' || request.body.length > 4700000) throw new Error('Invalid command size.');
     const bytes = Buffer.from(request.body, 'base64'); if (bytes.length > 3500000) throw new Error('Command too large.');
     const command = JSON.parse(bytes.toString('utf8')); if (!uuid(command.requestID)) throw new Error('Invalid command.');
+    command.direct = direct === true; // set here, never taken from the request: only a signed-in app talking straight to this server is 'direct'
     if (direct) {
       // Direct requests are sent once over a connection that reports its own failures, so a short in-memory list is enough to ignore a repeat.
       const seen = (this.directReceipts ||= []), id = lower(command.requestID);

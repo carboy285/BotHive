@@ -136,6 +136,10 @@ for path in ['GrokBotMac/Features/MacServers.swift', 'GrokBotMac/Composio/Connec
 for name in ['GrokBotTests', 'GrokBotMacTests']: compile_in('GrokBotTests/BotSkillsTests.swift', name, 'GrokBotTests')
 for name in ['GrokBotTests', 'GrokBotMacTests']: compile_in('GrokBotTests/ServerAddressTests.swift', name, 'GrokBotTests')
 
+# --- 10.1.1: background checks for Bot messages on iPhone ---------------------------------------------------------
+compile_in('GrokBot/Remote/BackgroundCheck.swift', 'GrokBot', 'GrokBot')
+compile_in('GrokBotTests/BackgroundCheckTests.swift', 'GrokBotTests', 'GrokBotTests')
+
 # --- Version (10.1.1: updaters need three parts; the Mac updater matches it to the tag exactly) ----------------------------------------------------------------------------
 for key, value in objects.items():
     if value.get('isa') == 'XCBuildConfiguration' and 'MARKETING_VERSION' in value['buildSettings']:

@@ -39,7 +39,7 @@ final class CloudAccount: NSObject, ObservableObject, ASWebAuthenticationPresent
     var hosts: [CloudDevice] { devices.filter { $0.kind == "host" } }
 
     init(kind: String, secrets: KeychainSecretStore? = nil, configuration: URLSessionConfiguration = .ephemeral) {
-        self.kind = kind; self.secrets = secrets ?? KeychainSecretStore(service: "org.opengrokbot.cloud." + kind)
+        self.kind = kind; self.secrets = secrets ?? KeychainSecretStore(service: "org.opengrokbot.cloud." + kind, availableInBackground: kind == "controller")
         configuration.httpCookieStorage = nil; configuration.urlCache = nil; configuration.timeoutIntervalForRequest = 20; configuration.timeoutIntervalForResource = 30
         network = URLSession(configuration: configuration, delegate: CloudNetworkDelegate(), delegateQueue: nil); super.init()
         do {

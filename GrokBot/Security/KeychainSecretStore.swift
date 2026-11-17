@@ -4,6 +4,8 @@ import Security
 /// Device-only secret storage for secure notes and Composio project configuration.
 struct KeychainSecretStore {
     let service: String
+    /// Readable while the device is locked but has been unlocked once since it started, so a background check can use the saved sign-in.
+    var availableInBackground = false
 
     enum StoreError: Error { case status(OSStatus); case invalidData }
 
@@ -17,7 +19,7 @@ struct KeychainSecretStore {
     func save(_ secret: Data, account: String) throws {
         let attributes: [String: Any] = [
             kSecValueData as String: secret,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: availableInBackground ? kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly : kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
         let status = SecItemUpdate(query(account: account) as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
@@ -37,6 +39,12 @@ struct KeychainSecretStore {
         guard status == errSecSuccess else { throw StoreError.status(status) }
         guard let data = value as? Data else { throw StoreError.invalidData }
         return data
+    }
+
+    /// Changes every item of this service to the background-readable setting (items saved earlier were saved as unlocked-only).
+    func makeAvailableInBackground() {
+        let match: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrSynchronizable as String: false]
+        _ = SecItemUpdate(match as CFDictionary, [kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly] as CFDictionary)
     }
 
     func delete(account: String) throws {

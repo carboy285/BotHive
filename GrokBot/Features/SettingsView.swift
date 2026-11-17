@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @AppStorage("appearance") private var appearance = "system"
+    @AppStorage(BackgroundCheck.enabledKey) private var backgroundAlerts = true
     @State private var disconnect = false
     @State private var signOut = false
     @State private var voice = false
@@ -47,7 +48,16 @@ struct SettingsView: View {
                         NavigationLink { IntegrationView() } label: { SettingsRow(title: "Set-up guide") }.buttonStyle(SettingsRowStyle())
                     }
 
-                    SettingsCard(label: "App") {
+                    SettingsCard(label: "App", footer: "iOS decides when to check, about every 15 minutes at best, and only if Background App Refresh is on for Bothive in iOS Settings. Nothing arrives if the app was force-closed or your computer is asleep.") {
+                        Toggle(isOn: $backgroundAlerts) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Alerts when Bothive is closed").font(.body)
+                                Text("A Bot that messages you shows a notification").font(.footnote).foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 10).frame(minHeight: 52)
+                        .onChange(of: backgroundAlerts) { _, _ in BackgroundCheck.schedule() }
+                        SettingsDivider()
                         Button { voice = true } label: { SettingsRow(title: "Voice", subtitle: "Listening, speaking and patience") }.buttonStyle(SettingsRowStyle())
                         SettingsDivider()
                         NavigationLink { AppearancePage() } label: { SettingsRow(title: "Appearance", value: appearanceName) }.buttonStyle(SettingsRowStyle())

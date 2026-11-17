@@ -57,7 +57,7 @@ final class RemoteController: ObservableObject {
         didSet { if keepAliveInBackground, !active { setActive(true) } }
     }
 
-    init(account: CloudAccount = CloudAccount(kind:"controller"), secrets: KeychainSecretStore = KeychainSecretStore(service:"org.opengrokbot.ios.cloud-selection")) {
+    init(account: CloudAccount = CloudAccount(kind:"controller"), secrets: KeychainSecretStore = KeychainSecretStore(service:"org.opengrokbot.ios.cloud-selection", availableInBackground: true)) {
         self.account = account; self.client = CloudRelayClient(account:account); self.secrets = secrets
         account.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in:&subscriptions)
     }
@@ -228,6 +228,9 @@ final class RemoteController: ObservableObject {
                 state = snapshot; hostName = snapshot.hostName; running = Set(snapshot.running); approval = snapshot.approval
                 providers = snapshot.providers; defaultProvider = snapshot.defaultProvider
                 model?.applyRemoteSnapshot(snapshot.workspace)
+                #if os(iOS)
+                BackgroundCheck.markSeen(snapshot.workspace)
+                #endif
                 if wasLoaded, !finished.isEmpty { ReplyNotifier.notify(finished: finished, workspace: snapshot.workspace, viewing: viewingBotID) }
                 if !hasSnapshot {
                     loadPins(); showConnection = false

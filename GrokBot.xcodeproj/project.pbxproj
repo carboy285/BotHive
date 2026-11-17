@@ -261,6 +261,7 @@
 				"4FE4964950AE095375E0635B",
 				"A8508BBA75DCB312C8FD5D5F",
 				"8BD6B86D9D619C454C239D6D",
+				"C26D4C9BB5BB676C245586D0",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -307,6 +308,7 @@
 				"3C973D5F702B9B920211D005",
 				"DFEC149A9FD93A24342AF446",
 				"343DE0E97C73A7889AFA163A",
+				"43973E451DE35D081931EC80",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -560,6 +562,7 @@
 				"6CF983959F3C0B21F861A225",
 				"F1E0514E834DF7739BBDD25E",
 				"EDD1FD1256FC2687CC0CF970",
+				"7A5DA955FEFCA649D5123031",
 			);
 			"name" = "GrokBot";
 			"sourceTree" = "<group>";
@@ -581,6 +584,7 @@
 				"2610A66E7C1BDB2C4B1E3728",
 				"C00EAA908627B07EE93E474A",
 				"71EAF320E1E29E26B71DA4D4",
+				"89F3741D57D4DEE682D6D059",
 			);
 			"name" = "GrokBotTests";
 			"sourceTree" = "<group>";
@@ -2660,6 +2664,26 @@
 		"02AF96B515413AF77B1708EE" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "EDD1FD1256FC2687CC0CF970";
+		};
+		"7A5DA955FEFCA649D5123031" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBot/Remote/BackgroundCheck.swift";
+			"sourceTree" = "<group>";
+		};
+		"C26D4C9BB5BB676C245586D0" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "7A5DA955FEFCA649D5123031";
+		};
+		"89F3741D57D4DEE682D6D059" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotTests/BackgroundCheckTests.swift";
+			"sourceTree" = "<group>";
+		};
+		"43973E451DE35D081931EC80" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "89F3741D57D4DEE682D6D059";
 		};
 	};
 	"rootObject" = "244210E48437B6556980A702";

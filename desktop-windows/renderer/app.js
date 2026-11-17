@@ -3,6 +3,7 @@ import { createVoice } from './voice.js';
 import { renderApiKeys } from './api-keys.js';
 import { renderSecureLogins } from './secure-logins.js';
 import { renderSkills, renderBotSkills } from './skills-ui.js';
+import { renderBotGroups } from './groups-ui.js';
 import { renderShareBot, renderAddFromCode } from './share-ui.js';
 import { installDrop } from './drop-ui.js';
 import { openAccountMenu } from './account-menu.js';
@@ -517,7 +518,8 @@ function renderInspector(){
   for(const task of bot.schedules||[]){const history=node('details'),summary=node('summary','','Run history');history.append(summary);for(const run of task.history||[])history.append(node('p','muted',`${run.date} · ${run.status}`));if(task.history?.length)body.append(history);append(body,node('p','',`${task.name} · ${task.enabled?(task.nextRun||'Incoming Bot message'):'Paused'} · ${task.recurrence} · ${task.timezone}${task.lastRun?' · Last run: '+task.lastRun+' · '+(task.lastResult||'outcome unavailable'):''}`),append(node('div','row-actions'),...(bridge.pauseTask?[button(task.enabled?'Pause':'Resume',async()=>{try{await result(bridge.pauseTask(bot.id,task.id,!task.enabled));}catch(error){toast(error.message);}})]:[]),button('Delete',async()=>{try{await result(bridge.cancelTask(bot.id,task.id));}catch(error){toast(error.message);}})));}
   if(!(bot.schedules||[]).length)body.append(node('p','muted','No routines yet. You can also ask in chat to add one.'));
   append(body,node('h3','','Voice chat'),voiceCard(bot));
-  if(bot.memberIDs){body.append(node('h3','','Group members'));for(const member of workspace.bots.filter(x=>bot.memberIDs.includes(x.id)))body.append(button(member.name,()=>selectBot(member.id)));body.append(node('p','muted','Each member answers with its own provider and model.'));}
+  {const groupsBox=node('div','bot-groups');body.append(groupsBox);renderBotGroups({bridge,result,toast,workspace,bot,container:groupsBox,open:selectBot,changed:(next,openID)=>{workspace=next;if(openID)selectBot(openID);else render();}});}
+  if(bot.memberIDs){}
   else{
    providersMark=body.childNodes.length;
    append(body,node('h3','','Providers & models'),node('p','muted','Pick the provider and model that answer for this Bot. Access follows each CLI’s account.'));

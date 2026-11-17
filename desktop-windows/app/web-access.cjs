@@ -13,7 +13,7 @@ const { localHost } = require('./remote-host.cjs');
 // backups and web access settings themselves are deliberately absent.
 const INVOKE = new Set([
   'workspace:load', 'workspace:save', 'chat:send', 'chat:retry', 'chat:stop', 'chat:pin', 'entry:delete', 'entry:react',
-  'bot:touch', 'bot:organize', 'bots:reorder', 'bot:configure', 'bot:image', 'models:list', 'files:list', 'drafts:load', 'drafts:save',
+  'bot:touch', 'bot:organize', 'bots:reorder', 'group:create', 'group:members', 'bot:configure', 'bot:image', 'models:list', 'files:list', 'drafts:load', 'drafts:save',
   'setup:status', 'setup:scan', 'composio:status', 'proactive:status', 'proactive:configure', 'proactive:check', 'headsup:snooze', 'headsup:dismiss',
   'headsup:mute', 'tasks:cancel', 'tasks:pause', 'approval:answer', 'approval:pending', 'media-keys:status', 'cloud:status', 'rules:get',
   'connected-apps:allow-get', 'ollama:models', 'canvas:save',

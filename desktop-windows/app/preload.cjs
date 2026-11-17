@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('desktop', {
   reactEntry:(id,emoji)=>ipcRenderer.invoke('entry:react',id,emoji),
   deleteEntry:id=>ipcRenderer.invoke('entry:delete',id),
   reorderBots:ids=>ipcRenderer.invoke('bots:reorder',ids),
+  createGroup:(name,members)=>ipcRenderer.invoke('group:create',name,members),
+  setGroupMembers:(id,members)=>ipcRenderer.invoke('group:members',id,members),
   loadDrafts:()=>ipcRenderer.invoke('drafts:load'),
   saveDrafts:value=>ipcRenderer.invoke('drafts:save',value),
   checkUpdates:()=>ipcRenderer.invoke('updates:check'),

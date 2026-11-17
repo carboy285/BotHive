@@ -32,6 +32,8 @@ struct RemoteHostSettings: Codable, Sendable, Equatable {
     var admin: Bool? = nil
     /// 10.1.1: CLIs the computer can install by itself, and how each install is going.
     var installable: [Installable]? = nil
+    /// 10.1.2: the chat channels (Telegram, Discord, Slack, iMessage, SMS and calls) this computer or server runs. Never holds a token.
+    var channels: RemoteChannels? = nil
 
     struct Installable: Codable, Sendable, Equatable, Identifiable {
         var id: String
@@ -90,6 +92,8 @@ struct RemoteCommand: Codable, Sendable {
     var package: Data?
     /// vm_exec: the command to run inside a shared VM (program path first), at most 16 words.
     var argv: [String]?
+    /// channels_configure: a chat channel's settings (tokens, numbers), by field name.
+    var fields: [String: String]?
 }
 /// A Linux VM a computer is sharing with the others on the account.
 struct RemoteVM: Codable, Sendable, Identifiable, Hashable {
@@ -147,4 +151,40 @@ struct RemoteBrowserPreview: Codable, Sendable {
     var title: String
     var url: String
     var imageData: Data?
+}
+
+
+/// What a computer reports about its chat channels (10.1.2). Settings that are secrets arrive only as "is it set".
+struct RemoteChannels: Codable, Sendable, Equatable {
+    enum FieldValue: Codable, Sendable, Equatable {
+        case isSet(Bool), text(String)
+        init(from decoder: Decoder) throws {
+            let box = try decoder.singleValueContainer()
+            if let flag = try? box.decode(Bool.self) { self = .isSet(flag) } else { self = .text(try box.decode(String.self)) }
+        }
+        func encode(to encoder: Encoder) throws {
+            var box = encoder.singleValueContainer()
+            switch self { case .isSet(let value): try box.encode(value); case .text(let value): try box.encode(value) }
+        }
+        var text: String? { if case .text(let value) = self { return value }; return nil }
+        var set: Bool { switch self { case .isSet(let value): return value; case .text(let value): return !value.isEmpty } }
+    }
+    struct State: Codable, Sendable, Equatable { var state: String; var detail: String? }
+    struct Approved: Codable, Sendable, Equatable, Identifiable { var id: String; var name: String }
+    struct Waiting: Codable, Sendable, Equatable, Identifiable { var name: String; var code: String; var id: String { code } }
+    struct Channel: Codable, Sendable, Equatable {
+        var name: String
+        var enabled: Bool
+        var configured: Bool
+        var fields: [String: FieldValue]
+        var state: State
+        var approved: [Approved]
+        var pending: [Waiting]
+    }
+    struct BotChoice: Codable, Sendable, Equatable, Identifiable { var id: String; var name: String }
+    struct Calls: Codable, Sendable, Equatable { var ready: Bool; var listening: Bool }
+    var bot: String?
+    var bots: [BotChoice]
+    var channels: [String: Channel]
+    var calls: Calls
 }

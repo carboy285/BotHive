@@ -86,6 +86,9 @@ struct MacRemoteSettingsView: View {
             if let installFeedback { Text(installFeedback).font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
             Text("Install downloads the CLI onto \(s.hostName) for you, so there are no commands to type there. To use an account instead of an API key, sign in to that CLI once on \(s.hostName); keys work from here.").font(.system(size: 12)).lineSpacing(3).foregroundStyle(MacTheme.secondary)
         }
+        if let channels = s.channels {
+            MacChannelsSection(channels: channels, serverName: s.hostName, canChange: canChange(s), reload: { settings = try? await desktop.gateway?.hostSettings() })
+        }
         card {
             Text("API keys on \(s.hostName)").font(.system(size: 16, weight: .medium))
             Text("A key replaces that CLI’s own sign-in on \(s.hostName). It is sent only inside your encrypted account link and stored in its secure storage.").font(.system(size: 12)).lineSpacing(3).foregroundStyle(MacTheme.secondary)

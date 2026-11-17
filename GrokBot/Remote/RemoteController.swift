@@ -434,6 +434,11 @@ final class RemoteController: ObservableObject {
     }
     /// Asks the computer (or server) to install an AI CLI by itself. Progress shows in hostSettings().installable.
     func installCLI(_ provider: String) async -> Bool { await command(RemoteCommand(action: "install_cli", name: provider)) }
+    /// Changes a chat channel on the computer or server (10.1.2): channels_set_bot, channels_configure, channels_enable, channels_approve,
+    /// channels_remove or channels_test_call.
+    func channelCommand(_ action: String, channel: String? = nil, text: String? = nil, fields: [String: String]? = nil) async -> Bool {
+        await command(RemoteCommand(action: action, text: text, name: channel, fields: fields))
+    }
     /// Makes an installed AI CLI the computer's default.
     func chooseCLI(_ provider: String) async -> Bool { await command(RemoteCommand(action: "choose_cli", name: provider)) }
     /// Keys and connector settings from the connected computer (it must have sharing switched on).

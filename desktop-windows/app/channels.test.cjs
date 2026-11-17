@@ -295,3 +295,37 @@ test('The public voice listener answers only signed Twilio requests on its own p
     assert.equal(get, 404);
   } finally { server.close(); }
 });
+
+test('iMessage through Inkbox: old messages are ignored, new one-to-one messages reach the hub once and are marked read, replies go into the same conversation', async () => {
+  const { InkboxIMessageChannel } = require('./channel-inkbox.cjs');
+  const inbox = [{ id: 'm1', direction: 'inbound', is_group: false, is_blocked: false, content: 'old', remote_number: '+15550002222', conversation_id: 'c1' }];
+  const calls = []; let tick;
+  const fetchImpl = async (url, options = {}) => {
+    const path = url.replace('https://inkbox.ai/api/v1/imessage', ''); calls.push([options.method || 'GET', path, options.body ? JSON.parse(options.body) : null, options.headers]);
+    if (path.startsWith('/messages?')) return { ok: true, status: 200, json: async () => [...inbox].reverse() };
+    if (path.startsWith('/conversations?')) return { ok: true, status: 200, json: async () => [] };
+    return { ok: true, status: 200, json: async () => ({ status: 'sent' }) };
+  };
+  const got = [];
+  const channel = new InkboxIMessageChannel({ fields: { apiKey: 'ik_0123456789abcdef' }, handlers: { onMessage: m => got.push(m) }, fetchImpl, setTimer: fn => { tick = fn; return 1; }, clearTimer: () => {}, uuid: () => 'key-1' });
+  await channel.start();
+  assert.ok(calls.every(c => c[3]['X-API-Key'] === 'ik_0123456789abcdef'));
+  inbox.push(
+    { id: 'm2', direction: 'inbound', is_group: false, is_blocked: false, content: 'hello', remote_number: '+15550002222', conversation_id: 'c1' },
+    { id: 'm3', direction: 'inbound', is_group: true, is_blocked: false, content: 'group', remote_number: '+15550003333', conversation_id: 'g1' },
+    { id: 'm4', direction: 'inbound', is_group: false, is_blocked: false, content: 'from email', remote_number: 'sam@example.com', conversation_id: 'c2' },
+    { id: 'm5', direction: 'outbound', is_group: false, is_blocked: false, content: 'mine', remote_number: '+15550002222', conversation_id: 'c1' },
+    { id: 'm6', direction: 'inbound', is_group: false, is_blocked: false, content: null, remote_number: '+15550002222', conversation_id: 'c1' });
+  await tick(); await tick();
+  assert.deepEqual(got, [{ senderId: '+15550002222', senderName: '+15550002222', chatId: 'c1', text: 'hello' }]);
+  assert.deepEqual(calls.filter(c => c[1] === '/mark-read').map(c => c[2]), [{ conversation_id: 'c1' }]);
+  await channel.send('c1', 'on it'); const sent = calls.at(-1);
+  assert.deepEqual([sent[0], sent[1], sent[2]], ['POST', '/messages', { conversation_id: 'c1', text: 'on it' }]);
+  assert.equal(sent[3]['Idempotency-Key'], 'key-1');
+  await channel.typing('c1'); assert.deepEqual(calls.at(-1).slice(0, 3), ['POST', '/typing', { conversation_id: 'c1' }]);
+  // A key Inkbox refuses, or an agent without iMessage, is explained.
+  const refuse = status => new InkboxIMessageChannel({ fields: { apiKey: 'ik_0123456789abcdef' }, handlers: {}, fetchImpl: async () => ({ ok: false, status, json: async () => ({}), headers: new Map() }) });
+  await assert.rejects(refuse(401).start(), /did not accept that API key/);
+  await assert.rejects(refuse(400).start(), /iMessage is not turned on/);
+  await assert.rejects(new InkboxIMessageChannel({ fields: { apiKey: 'x' }, handlers: {} }).start(), /Paste the API key/);
+});

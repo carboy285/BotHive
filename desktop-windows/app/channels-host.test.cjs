@@ -51,7 +51,7 @@ test('a Docker server can be set up from environment variables, with people appr
   assert.equal(status.bot, 'travel');
   assert.equal(status.channels.telegram.enabled, true, 'a configured channel switches on');
   assert.equal(status.channels.discord.enabled, false);
-  assert.deepEqual(status.people, { telegram: 1, discord: 1, slack: 0, sms: 1 });
+  assert.deepEqual(status.people, { telegram: 1, discord: 1, slack: 0, sms: 1, imessage: 0 });
   await f.host.stop();
   // With no Bot named, the main Bot answers. A group is never chosen.
   const g = fixture(); await g.host.init(); assert.equal(g.host.status().bot, 'hive');

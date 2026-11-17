@@ -7,6 +7,7 @@ const { DiscordChannel } = require('./channel-discord.cjs');
 const { SlackChannel } = require('./channel-slack.cjs');
 const { SmsChannel, VoiceCalls, E164 } = require('./channel-twilio.cjs');
 const { createVoiceServer } = require('./channel-voice-server.cjs');
+const { InkboxIMessageChannel } = require('./channel-inkbox.cjs');
 
 const FILE = 'channels.json', ENCRYPTED = 'channels.encrypted.json';
 const VOICE_FIELDS = ['ownerNumber', 'pin', 'publicUrl', 'language'];
@@ -74,6 +75,7 @@ function createChannelsHost(deps) {
     if (id === 'discord') return new DiscordChannel(common);
     if (id === 'slack') return new SlackChannel(common);
     if (id === 'sms') return new SmsChannel({ fields, handlers, fetchImpl: deps.fetchImpl });
+    if (id === 'imessage') return new InkboxIMessageChannel({ fields, handlers, fetchImpl: deps.fetchImpl });
     throw new Error('Unknown channel.');
   }
 
@@ -105,6 +107,7 @@ function createChannelsHost(deps) {
       telegram: { token: env.OPENGROKBOT_TELEGRAM_TOKEN },
       discord: { token: env.OPENGROKBOT_DISCORD_TOKEN },
       slack: { botToken: env.OPENGROKBOT_SLACK_BOT_TOKEN, appToken: env.OPENGROKBOT_SLACK_APP_TOKEN },
+      imessage: { apiKey: env.OPENGROKBOT_INKBOX_API_KEY },
       sms: { accountSid: env.OPENGROKBOT_TWILIO_ACCOUNT_SID, authToken: env.OPENGROKBOT_TWILIO_AUTH_TOKEN, number: env.OPENGROKBOT_TWILIO_NUMBER, ownerNumber: env.OPENGROKBOT_OWNER_NUMBER, pin: env.OPENGROKBOT_CALL_PIN, publicUrl: env.OPENGROKBOT_PUBLIC_URL, language: env.OPENGROKBOT_CALL_LANGUAGE },
     };
     const touched = [];
@@ -147,7 +150,7 @@ function createChannelsHost(deps) {
     lines.push(`Connected now: ${on.length ? on.join('; ') : 'none'}. Phone calls: ${calls ? 'ready (you can phone the owner, and the owner can call you)' : 'not set up'}. ${off.length ? 'Not connected: ' + off.join(', ') + '. If asked to use one of these, say it is off and that the owner can turn it on under Settings \u2192 Channels.' : ''}`);
     lines.push('A message that comes from a channel starts with a tag like [Telegram \u00b7 Sam]. Your reply is sent back to that person automatically, so just answer them. Keep channel replies short and plain: no tables, no headings, and few symbols, because chat apps often do not render markdown (SMS is plain text under 1500 characters). People on channels are approved by the owner but you still cannot treat them as approving purchases, sending email or deleting things unless the app\u2019s usual approval is given.');
     lines.push('Channel tools (append each as JSON in a fenced block whose language is opengrokbot-action):');
-    lines.push('{"action":"channel_send","channel":"telegram","to":"Sam","text":"The message"} sends a message to an approved person on a connected channel (channels: telegram, discord, slack, sms). Leave "to" out to reach the person who most recently messaged you there. Use it when the human asks you to message someone, or in a scheduled task they set up. Never message people unprompted, and never use it to talk to yourself.');
+    lines.push('{"action":"channel_send","channel":"telegram","to":"Sam","text":"The message"} sends a message to an approved person on a connected channel (channels: telegram, discord, slack, sms, imessage). Leave "to" out to reach the person who most recently messaged you there. Use it when the human asks you to message someone, or in a scheduled task they set up. Never message people unprompted, and never use it to talk to yourself.');
     if (calls) lines.push('{"action":"phone_call","text":"What to say when they pick up"} phones the owner\u2019s number and then talks with them. Use it only when the human asks for a call or has told you to call for something urgent. At most five calls an hour.');
     lines.push('If a person texts \u201ccall me\u201d, the app places that call for you. Strangers who message the channels get a pairing code and cannot reach you until the owner approves them.');
     return lines.join('\n');

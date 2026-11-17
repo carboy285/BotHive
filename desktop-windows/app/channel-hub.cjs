@@ -14,6 +14,7 @@ const CHANNELS = {
   discord: { name: 'Discord', limit: 1900 },
   slack: { name: 'Slack', limit: 3000 },
   sms: { name: 'SMS', limit: 1500 },
+  imessage: { name: 'iMessage', limit: 4000 },
 };
 const PAIR_TTL = 60 * 60 * 1000, MAX_PENDING = 20, WINDOW = 10 * 60 * 1000, MAX_PER_WINDOW = 30, MAX_TEXT = 4000, NOTICE_GAP = 10 * 60 * 1000;
 const CALL_WORDS = /^\s*(?:\/call|(?:hey\s+)?(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?(?:give\s+me\s+a\s+)?(?:call|phone|ring)(?:\s+me)?(?:\s+now|\s+please)?[.!?]*)\s*$/i;
@@ -63,7 +64,7 @@ class ChannelHub {
   }
   secretField(id, key) { return /token|secret|password|key|pin/i.test(key); }
   configured(id) { return this.requirements(id).every(key => this.data.channels[id]?.fields?.[key]); }
-  requirements(id) { return { telegram: ['token'], discord: ['token'], slack: ['botToken', 'appToken'], sms: ['accountSid', 'authToken', 'number'] }[id] || []; }
+  requirements(id) { return { telegram: ['token'], discord: ['token'], slack: ['botToken', 'appToken'], sms: ['accountSid', 'authToken', 'number'], imessage: ['apiKey'] }[id] || []; }
 
   async setBot(botID) {
     if (botID !== null && !this.deps.botExists(botID)) throw new Error('Choose one of your Bots.');
@@ -148,7 +149,7 @@ class ChannelHub {
       }
       if (now - (this.notices.get(key) || 0) > NOTICE_GAP) {
         this.notices.set(key, now);
-        await reply(`This Bot only answers people its owner has approved. Your code is ${entry.code}. The owner types it in Bothive under Settings → Channels to let you in.`);
+        await reply(`I only answer people my owner approved. Your code is ${entry.code}. The owner enters it in Bothive, Settings > Channels.`);
       }
       return;
     }

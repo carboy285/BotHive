@@ -169,6 +169,14 @@ function configuredProviders(bot){
  const choices=[config.providers.find(x=>x.provider===config.activeProvider)||config.providers[0]].filter(Boolean);
  return choices.map(choice=>({choice,installation:installed.find(x=>x.provider===choice.provider)}));
 }
+// Typing while a Bot is working steers it: the running turn is stopped and the new message carries on from it.
+const STEER_NOTE='\n\n(The person sent this while you were still working. Carry on with their original request with this in mind. Do not redo work that is already finished.)';
+async function steerIfRunning(botID,text){
+ if(!active.has(botID)&&!pendingBots.has(botID))return text;
+ stoppedBots.add(botID);for(const run of active.get(botID)||[])run.cancel();
+ for(let i=0;i<240&&(active.has(botID)||pendingBots.has(botID));i++)await new Promise(resolve=>setTimeout(resolve,50));
+ return text+STEER_NOTE;
+}
 // One quick, silent request to the Bot's own CLI on the faster model: used to keep the Bot's summary and notes up to date.
 async function quickTurn(botID,prompt){
  const bot=state.bots.find(x=>x.id===botID);if(!bot)throw new Error('That Bot is gone.');
@@ -570,7 +578,7 @@ async function remoteCommand(command){
  if(command.action==='open_vm'){if(!bot)throw new Error('Unknown Bot');await localVMs.open(bot.id);return;}
  if(command.action==='vm_exec'){await startVMJob(command.requestID,bot,command.argv);return;}
  if(command.action==='open_browser'){if(!bot)throw new Error('Unknown Bot');localBrowsers.open(bot.id,command.text);return;} // a phone shows a preview; no window opens here
- if(command.action==='send'){if(!bot||typeof command.text!=='string'||!command.text.trim()||command.text.length>100000)throw new Error('Invalid message');let text=command.text;if(Array.isArray(command.attachments)&&command.attachments.length){let names;try{names=await attachments.saveRemoteImages(botDirectory(bot.id),command.attachments);}catch{throw new PublicError('The images could not be accepted. Send up to 3 JPEG or PNG images.');}text=attachments.attachmentMessage(text,names);}await startChat(bot.id,text,undefined,command.requestID);return;}
+ if(command.action==='send'){if(!bot||typeof command.text!=='string'||!command.text.trim()||command.text.length>100000)throw new Error('Invalid message');let text=command.text;if(Array.isArray(command.attachments)&&command.attachments.length){let names;try{names=await attachments.saveRemoteImages(botDirectory(bot.id),command.attachments);}catch{throw new PublicError('The images could not be accepted. Send up to 3 JPEG or PNG images.');}text=attachments.attachmentMessage(text,names);}text=await steerIfRunning(bot.id,text);await startChat(bot.id,text,undefined,command.requestID);return;}
  if(command.action==='stop'){if(bot)stoppedBots.add(bot.id);if(!bot)throw new Error('Unknown Bot');for(const run of active.get(bot.id)||[])run.cancel();return;}
  if(command.action==='retry'){if(!bot)throw new Error('Unknown Bot');const message=state.teamMessages?.findLast(x=>x.to===bot.id&&['failed','stopped'].includes(x.status));if(message){message.status='queued';await deliverQueued();}else await startChat(bot.id);return;}
  if(command.action==='react'){await setReaction(command.taskID,command.text??'');return;}
@@ -1043,7 +1051,7 @@ function configureIPC() {
    try{const found=await attachments.expandDropped(paths,limit);if(!found.files.length)throw new Error('Nothing in what you dropped could be attached. Files must be under 20 MB and not empty.');
     return {names:await attachments.copyLocalFiles(botDirectory(bot.id),found.files),skipped:found.skipped};}catch(error){throw new PublicError(error.message);}});
   handle('files:attach-data',async(botID,mime,data)=>{await ensureState();const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Attachments are available in individual Bot chats.');try{return await attachments.saveDataFile(botDirectory(bot.id),mime,data);}catch{throw new PublicError('Paste a PNG, JPEG, GIF or WebP image under 20 MB.');}});
-  handle('chat:send',async(botID,text,requestID,files,mode)=>{await ensureState();if(typeof text!=='string'||text.length>100000)throw new PublicError('Enter a message of up to 100,000 characters.');let names=[];if(files!==undefined&&files!==null){const bot=state.bots.find(x=>x.id===botID);if(!bot)throw new PublicError('Choose a Bot.');try{names=await attachments.existingNames(botDirectory(bot.id),files);}catch{throw new PublicError('An attachment is missing. Remove it and attach it again.');}}if(!text.trim()&&!names.length)throw new PublicError('Enter a message of up to 100,000 characters.');text=attachments.attachmentMessage(text.trim(),names);if(requestID&&!/^[0-9a-f-]{36}$/i.test(requestID))throw new PublicError('Invalid delivery ID.');if(!requestID||!state.entries.some(x=>x.id.toLowerCase()===requestID.toLowerCase())){const chosen=answerModes.normalize(mode);if(chosen)modeByBot.set(botID,chosen);else modeByBot.delete(botID);await startChat(botID,text,undefined,requestID);}return state;});
+  handle('chat:send',async(botID,text,requestID,files,mode)=>{await ensureState();if(typeof text!=='string'||text.length>100000)throw new PublicError('Enter a message of up to 100,000 characters.');let names=[];if(files!==undefined&&files!==null){const bot=state.bots.find(x=>x.id===botID);if(!bot)throw new PublicError('Choose a Bot.');try{names=await attachments.existingNames(botDirectory(bot.id),files);}catch{throw new PublicError('An attachment is missing. Remove it and attach it again.');}}if(!text.trim()&&!names.length)throw new PublicError('Enter a message of up to 100,000 characters.');text=attachments.attachmentMessage(text.trim(),names);if(requestID&&!/^[0-9a-f-]{36}$/i.test(requestID))throw new PublicError('Invalid delivery ID.');if(!requestID||!state.entries.some(x=>x.id.toLowerCase()===requestID.toLowerCase())){const chosen=answerModes.normalize(mode);if(chosen)modeByBot.set(botID,chosen);else modeByBot.delete(botID);text=await steerIfRunning(botID,text);await startChat(botID,text,undefined,requestID);}return state;});
   handle('chat:retry',async botID=>{await ensureState();const message=state.teamMessages?.findLast(x=>x.to===botID&&['failed','stopped'].includes(x.status));if(message){message.status='queued';await deliverQueued();}else await startChat(botID);return state;});
   handle('chat:stop',async botID=>{stoppedBots.add(botID);for(const run of active.get(botID)||[])run.cancel();});
   handle('composio:status',async()=>{await ensureState();return composioStatus();});

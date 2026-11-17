@@ -397,8 +397,8 @@ function renderMessages(bot){
  const pending=pendingSends.get(bot.id);
  if(pending&&!live.has(pending.id)){const row=append(node('div','message-row user pending'),append(node('div','message-body'),node('div','bubble',pending.text),node('small','delivery-state',pending.failed?'Failed to send':'Sending…')));row.dataset.extra='true';if(pending.failed)row.firstChild.append(button('Retry sending',()=>submitMessage(bot,pending.text,pending.id)));messages.append(row);}
  if(!entries(bot).length&&!pending){const cards=node('div','starters');for(const idea of starters(bot.name,bot.purpose))cards.append(append(button('',()=>submitMessage(bot,idea,undefined,[]),'starter'),node('span','',idea)));const empty=append(node('div','empty empty-chat'),avatar(bot),node('h2','',bot.name),node('p','',bot.purpose||'What’s on your mind?'),cards);empty.dataset.extra='true';messages.append(empty);}
- const busy=running.has(bot.id),send=$('#save-note');send.classList.toggle('stop',busy);send.textContent=busy?'■':'↑';send.title=busy?'Stop response':'Send';
- send.disabled=!busy&&!!pending&&!pending.failed;send.setAttribute('aria-label',busy?'Stop response':pending&&!pending.failed?'Sending message':'Send message');
+ const busy=running.has(bot.id),send=$('#save-note'),stopMode=busy&&!$('#draft').value.trim()&&!(pendingFiles.get(bot.id)||[]).length;send.classList.toggle('stop',stopMode);send.textContent=stopMode?'■':'↑';send.title=stopMode?'Stop response':busy?'Send (steers the Bot)':'Send';
+ send.disabled=!stopMode&&!!pending&&!pending.failed;send.setAttribute('aria-label',stopMode?'Stop response':busy?'Steer the Bot':pending&&!pending.failed?'Sending message':'Send message');
  renderApprovalCard();
  if(chatScroll.follow)scheduleChatBottom();else chatViewport.scrollTop=previousScroll;
 }
@@ -479,7 +479,8 @@ function renderApprovalCard(){
  append(card,head,node('h3','',next.title),next.detail?node('pre','approval-detail',next.detail):null,append(node('div','approval-actions'),deny,allow));
  area.prepend(card);
 }
-$('#save-note').addEventListener('click',event=>{const bot=currentBot();if(bot&&running.has(bot.id)){event.preventDefault();bridge.stop(bot.id);}});
+$('#save-note').addEventListener('click',event=>{const bot=currentBot();if(bot&&running.has(bot.id)&&!$('#draft').value.trim()&&!(pendingFiles.get(bot.id)||[]).length){event.preventDefault();bridge.stop(bot.id);}});
+$('#draft').addEventListener('input',()=>{const bot=currentBot();if(!bot)return;const send=$('#save-note'),stopMode=running.has(bot.id)&&!$('#draft').value.trim()&&!(pendingFiles.get(bot.id)||[]).length;send.classList.toggle('stop',stopMode);send.textContent=stopMode?'■':'↑';send.title=stopMode?'Stop response':running.has(bot.id)?'Send (steers the Bot)':'Send';send.setAttribute('aria-label',stopMode?'Stop response':running.has(bot.id)?'Steer the Bot':'Send message');});
 const waitingOn=bot=>[...approvals.values()].some(x=>x.title.startsWith(`Let ${bot.name} `));
 bridge.onApproval?.(request=>{if(!request?.id)return;approvals.set(request.id,request);render();});
 bridge.pendingApprovals?.().then(response=>{if(response?.ok)for(const request of response.value||[])approvals.set(request.id,request);if(approvals.size)render();}).catch(()=>{});
@@ -488,7 +489,7 @@ let answerMode=null;
 function showAnswerMode(){for(const [name,id] of [['think','#mode-think'],['deep','#mode-deep']]){const button=$(id);if(button){button.setAttribute('aria-pressed',String(answerMode===name));button.classList.toggle('on',answerMode===name);}}}
 for(const [name,id] of [['think','#mode-think'],['deep','#mode-deep']])$(id)?.addEventListener('click',()=>{answerMode=answerMode===name?null:name;showAnswerMode();$('#draft')?.focus();});
 async function submitMessage(bot,text,id=crypto.randomUUID(),files=pendingFiles.get(bot.id)||[]){
- if(running.has(bot.id)||pendingSends.get(bot.id)&&!pendingSends.get(bot.id).failed)return;
+ if(pendingSends.get(bot.id)&&!pendingSends.get(bot.id).failed)return;
  if(selected===bot.id)chatScroll.follow=true;
  const pending={id,text:text||(files.length?`📎 ${files.length} attachment${files.length===1?'':'s'}`:''),failed:false};pendingSends.set(bot.id,pending);drafts.set(bot.id,text);persistDrafts();renderMessages(bot);
  const mode=answerMode;try{workspace=await result(bridge.send(bot.id,text,id,files.length?files:undefined,mode||undefined));answerMode=null;showAnswerMode();pendingSends.delete(bot.id);if(files.length&&pendingFiles.get(bot.id)===files){pendingFiles.delete(bot.id);renderChips();}if(drafts.get(bot.id)===text){drafts.delete(bot.id);if(selected===bot.id&&$('#draft').value.trim()===text)$('#draft').value='';}persistDrafts();render();if(selected===bot.id)$('#draft').focus();}
@@ -793,7 +794,7 @@ const voice = createVoice({
   openBot: id => { if (workspace.bots.some(x => x.id === id)) selectBot(id); }
 });
 $('#voice-button').addEventListener('click', () => { if (!window.desktop) { toast('Voice mode is available in the installed app.'); return; } if (!setup.installed.length) { showConnection(); return; } voice.start(); });
-$('#composer').addEventListener('submit',event=>{event.preventDefault();const bot=currentBot(),text=$('#draft').value.trim();if(!bot||(!text&&!(pendingFiles.get(bot.id)||[]).length)||running.has(bot.id))return;if(!window.desktop||!setup.installed.length){showConnection();return;}submitMessage(bot,text,pendingSends.get(bot.id)?.text===text?pendingSends.get(bot.id).id:undefined);});
+$('#composer').addEventListener('submit',event=>{event.preventDefault();const bot=currentBot(),text=$('#draft').value.trim();if(!bot||(!text&&!(pendingFiles.get(bot.id)||[]).length))return;if(!window.desktop||!setup.installed.length){showConnection();return;}submitMessage(bot,text,pendingSends.get(bot.id)?.text===text?pendingSends.get(bot.id).id:undefined);});
 $('#draft').addEventListener('input',()=>{ drafts.set(selected,$('#draft').value);persistDrafts(); $('#draft').style.height='auto';$('#draft').style.height=Math.min(180,$('#draft').scrollHeight)+'px'; });
 $('#search-button').addEventListener('click',openPalette);
 $('#new-button').addEventListener('click',showNewBot); $('#profile-button').addEventListener('click',event=>{if(document.querySelector('.account-menu')){document.querySelector('.account-menu').remove();return;}openAccountMenu({anchor:event.currentTarget,bridge,result,toast,openSettings:tab=>showSettings(tab)});}); $('#apps-button').addEventListener('click',showApps); $('#status-button').addEventListener('click',()=>showConnection()); $('#attachment-button').addEventListener('click',()=>{const content=panel('Conversation actions');const bot=currentBot();append(content,button('Attach files…',()=>{dialog.close();attachFiles(bot);}),button('Export conversation…',()=>exportConversation()),node('p','muted','Tip: press Ctrl+V in the message box to paste an image.'));});

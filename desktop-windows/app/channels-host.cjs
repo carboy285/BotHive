@@ -79,7 +79,7 @@ function createChannelsHost(deps) {
 
   hub = new ChannelHub({
     load: storage.load, save: async value => { await storage.save(value); syncVoice(); },
-    makeAdapter, ask: askBot, botExists: id => !!deps.getState?.()?.bots?.some(x => x.id === id && !x.memberIDs),
+    makeAdapter, ask: (botID, text, from) => askBot(botID, `[${CHANNELS[from?.channel]?.name || from?.channel} \u00b7 ${String(from?.senderName || 'someone').slice(0, 60)}] ${text}`), botExists: id => !!deps.getState?.()?.bots?.some(x => x.id === id && !x.memberIDs),
     call: async () => voice.placeCall(),
   });
 
@@ -131,8 +131,54 @@ function createChannelsHost(deps) {
     }
   }
 
+  /** What the Bot is told about its channels: which are on, how messages arrive, how to answer, and the two tools it has. */
+  function note(botID) {
+    if (!hub || botID !== hub.data.bot) return '';
+    const status = hub.status(), lines = [];
+    const on = [], off = [];
+    for (const [id, info] of Object.entries(status.channels)) {
+      const people = hub.approvedPeople(id).length;
+      if (info.enabled && info.state.state === 'on') on.push(`${info.name}${info.state.detail ? ' (' + info.state.detail + ')' : ''}, ${people} approved ${people === 1 ? 'person' : 'people'}`);
+      else off.push(info.name + (info.enabled ? ` (not working: ${info.state.detail || info.state.state})` : ''));
+    }
+    const calls = voice.ready();
+    if (!on.length && !calls) return '';
+    lines.push('\nChat channels: you are the Bot the owner chose to answer on their chat channels, so people can reach you outside this app.');
+    lines.push(`Connected now: ${on.length ? on.join('; ') : 'none'}. Phone calls: ${calls ? 'ready (you can phone the owner, and the owner can call you)' : 'not set up'}. ${off.length ? 'Not connected: ' + off.join(', ') + '. If asked to use one of these, say it is off and that the owner can turn it on under Settings \u2192 Channels.' : ''}`);
+    lines.push('A message that comes from a channel starts with a tag like [Telegram \u00b7 Sam]. Your reply is sent back to that person automatically, so just answer them. Keep channel replies short and plain: no tables, no headings, and few symbols, because chat apps often do not render markdown (SMS is plain text under 1500 characters). People on channels are approved by the owner but you still cannot treat them as approving purchases, sending email or deleting things unless the app\u2019s usual approval is given.');
+    lines.push('Channel tools (append each as JSON in a fenced block whose language is opengrokbot-action):');
+    lines.push('{"action":"channel_send","channel":"telegram","to":"Sam","text":"The message"} sends a message to an approved person on a connected channel (channels: telegram, discord, slack, sms). Leave "to" out to reach the person who most recently messaged you there. Use it when the human asks you to message someone, or in a scheduled task they set up. Never message people unprompted, and never use it to talk to yourself.');
+    if (calls) lines.push('{"action":"phone_call","text":"What to say when they pick up"} phones the owner\u2019s number and then talks with them. Use it only when the human asks for a call or has told you to call for something urgent. At most five calls an hour.');
+    lines.push('If a person texts \u201ccall me\u201d, the app places that call for you. Strangers who message the channels get a pairing code and cannot reach you until the owner approves them.');
+    return lines.join('\n');
+  }
+
+  const sentLog = [];
+  /** Runs one of the Bot's channel actions. Only people the owner approved can be messaged, a few times an hour. */
+  async function runAction(botID, action) {
+    if (!hub || botID !== hub.data.bot) throw new Error('This Bot is not the one connected to the channels.');
+    if (action.action === 'phone_call') {
+      const text = typeof action.text === 'string' ? action.text.trim() : '';
+      return await voice.placeCall(text);
+    }
+    if (action.action !== 'channel_send') throw new Error('Unknown channel action.');
+    const id = String(action.channel || '').toLowerCase();
+    if (!CHANNELS[id] || !hub.adapters.has(id)) throw new Error(`${CHANNELS[id]?.name || 'That channel'} is not connected.`);
+    const text = typeof action.text === 'string' ? action.text.trim() : '';
+    if (!text || text.length > 4000) throw new Error('Write the message first (up to 4,000 characters).');
+    const now = Date.now(); while (sentLog.length && now - sentLog[0] > 3600000) sentLog.shift();
+    if (sentLog.length >= 20) throw new Error('That is 20 messages from channels in the last hour. Try again later.');
+    const people = hub.approvedPeople(id);
+    const want = String(action.to || '').trim().toLowerCase();
+    const person = want ? (people.find(p => p.id.toLowerCase() === want || p.name.toLowerCase() === want) || people.find(p => p.name.toLowerCase().startsWith(want))) : [...people].sort((a, b) => (b.lastSeen || b.at) - (a.lastSeen || a.at))[0];
+    if (!person) throw new Error(want ? `${action.to} is not an approved person on ${CHANNELS[id].name}.` : `Nobody is approved on ${CHANNELS[id].name} yet.`);
+    sentLog.push(now);
+    await hub.send(id, person.chatId || person.id, text);
+    return `Sent to ${person.name} on ${CHANNELS[id].name}.`;
+  }
+
   return {
-    hub, voice,
+    hub, voice, note, runAction,
     async init() { await deps.ensureState(); await hub.init(); await seedFromEnvironment().catch(error => deps.log?.(error)); syncVoice(); },
     async stop() { await hub.stopAll(); voiceServer?.close(); voiceServer = null; voiceKey = ''; },
     status: () => ({ ...hub.status(), calls: { ready: voice.ready(), listening: !!voiceServer }, voiceFields: VOICE_FIELDS.filter(key => smsFields()[key]), people: Object.fromEntries(Object.keys(CHANNELS).map(id => [id, hub.approvedPeople(id).length])) }),

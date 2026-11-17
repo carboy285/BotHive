@@ -86,17 +86,17 @@ class VoiceCalls {
   ready() { const c = this.config; return !!(c.accountSid && c.authToken && E164.test(c.number || '') && E164.test(c.ownerNumber || '') && /^https:\/\//.test(c.publicUrl || '')); }
 
   /** Rings the owner. At most 5 calls an hour, and only ever the owner's own number. */
-  async placeCall() {
+  async placeCall(greeting = '') {
     const c = this.config;
     if (!this.ready()) throw new Error('Calls are not set up. Under Settings → Channels → SMS and calls, add your Twilio number, your own number and the public address.');
     this.placed = this.placed.filter(time => this.now() - time < 3600000);
     if (this.placed.length >= 5) throw new Error('That is five calls in the last hour. Try again later.');
-    const token = this.makeToken(); this.outbound.set(token, this.now());
-    for (const [key, time] of this.outbound) if (this.now() - time > 600000) this.outbound.delete(key);
+    const token = this.makeToken(); this.outbound.set(token, { time: this.now(), greeting: String(greeting || '').slice(0, 300) });
+    for (const [key, item] of this.outbound) if (this.now() - item.time > 600000) this.outbound.delete(key);
     try { await new TwilioApi({ accountSid: c.accountSid, authToken: c.authToken, fetchImpl: this.fetch }).call(c.number, c.ownerNumber, `${c.publicUrl.replace(/\/$/, '')}/twilio/voice?t=${token}`); }
     catch (error) { this.outbound.delete(token); throw error; }
     this.placed.push(this.now());
-    return 'Calling you now.';
+    return greeting ? 'Calling you now, and I will tell you why when you pick up.' : 'Calling you now.';
   }
 
   say(text) { const c = this.config; return `<Say voice="Polly.Joanna" language="${xml(c.language || 'en-US')}">${xml(text)}</Say>`; }
@@ -113,14 +113,14 @@ class VoiceCalls {
     if (!this.ready() || params.AccountSid !== c.accountSid) return this.twiml(this.say('This number is not set up. Goodbye.') + '<Hangup/>');
     const callSid = params.CallSid;
     if (pathname === '/twilio/voice') {
-      const outbound = query.t && this.outbound.has(query.t);
-      const call = { id: this.makeToken(), sid: callSid, authed: !!outbound, tries: 0, silent: 0, started: this.now(), job: null };
+      const outbound = query.t && this.outbound.get(query.t);
+      const call = { id: this.makeToken(), sid: callSid, authed: !!outbound, tries: 0, silent: 0, started: this.now(), job: null, greeting: outbound?.greeting || '' };
       if (outbound) this.outbound.delete(query.t);
       else if (!(c.pin && /^\d{4,8}$/.test(c.pin)) || params.From !== c.ownerNumber) return this.twiml(this.say('Sorry, I can only take calls from my owner. Goodbye.') + '<Hangup/>');
       this.calls.set(call.id, call);
       for (const [id, item] of this.calls) if (this.now() - item.started > 3600000) this.calls.delete(id);
       if (!call.authed) return this.twiml(`<Gather input="dtmf" numDigits="${c.pin.length}" action="${xml(this.link('/pin', { c: call.id }))}" method="POST" timeout="8">${this.say('Enter your pin.')}</Gather>${this.say('Goodbye.')}<Hangup/>`);
-      return this.twiml(this.listen(call, `Hi, it is ${c.botName || 'your Bot'}. What can I do for you?`));
+      return this.twiml(this.listen(call, `Hi, it is ${c.botName || 'your Bot'}. ${call.greeting || 'What can I do for you?'}`));
     }
     const call = this.calls.get(query.c);
     if (!call || call.sid !== callSid) return this.twiml(this.say('That call has ended. Goodbye.') + '<Hangup/>');

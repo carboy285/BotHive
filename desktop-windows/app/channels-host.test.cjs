@@ -70,3 +70,58 @@ test('the public phone listener starts only when calls are fully set up, on its 
   await insecure.host.hub.configure('sms', { accountSid: 'AC1', authToken: 'tok', number: '+15550001111', ownerNumber: '+15550009999', publicUrl: 'http://plain.example' });
   assert.equal(insecure.servers.length, 0, 'calls need an https address');
 });
+
+function connectedFixture() {
+  const f = fixture({ env: { OPENGROKBOT_TELEGRAM_TOKEN: '9:zzz', OPENGROKBOT_CHANNELS_APPROVE: 'telegram:555' } });
+  return f;
+}
+
+test('the chosen Bot is told which channels are connected, how messages arrive, and which tools it has; other Bots are not', async () => {
+  const none = fixture(); await none.host.init();
+  assert.equal(none.host.note('hive'), '', 'nothing connected, nothing to say');
+  const f = fixture({ env: { OPENGROKBOT_CHANNEL_BOT: 'hive' } }); await f.host.init();
+  await f.host.hub.configure('sms', { accountSid: 'AC1', authToken: 'tok', number: '+15550001111', ownerNumber: '+15550009999', publicUrl: 'https://box.ts.net' });
+  const note = f.host.note('hive');
+  assert.match(note, /Phone calls: ready/);
+  assert.match(note, /Not connected: .*Telegram.*Discord.*Slack/s);
+  assert.match(note, /\[Telegram · Sam\]/);
+  assert.match(note, /"action":"phone_call"/); assert.match(note, /"action":"channel_send"/);
+  assert.match(note, /cannot treat them as approving purchases/);
+  assert.equal(f.host.note('travel'), '', 'only the connected Bot is told');
+  // A channel that is switched on and working is listed with who is approved.
+  f.host.hub.adapters.set('telegram', { status: () => ({ state: 'on', detail: '@hive_bot' }), async stop() {} });
+  f.host.hub.data.channels.telegram = { enabled: true, fields: { token: 't' } };
+  f.host.hub.data.approved.telegram = [{ id: '1', name: 'Sam', at: 1, chatId: '1' }];
+  assert.match(f.host.note('hive'), /Telegram \(@hive_bot\), 1 approved person/);
+});
+
+test('messages from a channel reach the Bot tagged with where they came from', async () => {
+  const f = fixture(); await f.host.init(); await f.host.hub.setBot('hive');
+  assert.equal(await f.host.hub.deps.ask('hive', 'what is on today?', { channel: 'telegram', senderName: 'Sam' }), 'reply to [Telegram · Sam] what is on today?');
+  assert.deepEqual(f.started.at(-1), ['hive', '[Telegram · Sam] what is on today?']);
+});
+
+test('channel_send reaches only approved people, defaults to whoever wrote last, and is limited; phone_call carries what to say', async () => {
+  const f = fixture({ env: { OPENGROKBOT_CHANNEL_BOT: 'hive' } }); await f.host.init();
+  const sent = [];
+  f.host.hub.adapters.set('telegram', { async send(chat, text) { sent.push([chat, text]); }, status: () => ({ state: 'on', detail: '' }), async stop() {} });
+  f.host.hub.data.approved.telegram = [{ id: '11', name: 'Sam Lee', at: 1, chatId: '111' }, { id: '22', name: 'Ann', at: 2, chatId: '222', lastSeen: 50 }];
+  assert.equal(await f.host.runAction('hive', { action: 'channel_send', channel: 'telegram', to: 'sam', text: 'hello' }), 'Sent to Sam Lee on Telegram.');
+  assert.deepEqual(sent.at(-1), ['111', 'hello']);
+  assert.equal(await f.host.runAction('hive', { action: 'channel_send', channel: 'telegram', text: 'hi again' }), 'Sent to Ann on Telegram.');
+  await assert.rejects(f.host.runAction('hive', { action: 'channel_send', channel: 'telegram', to: 'Mallory', text: 'x' }), /not an approved person/);
+  await assert.rejects(f.host.runAction('hive', { action: 'channel_send', channel: 'discord', text: 'x' }), /not connected/);
+  await assert.rejects(f.host.runAction('hive', { action: 'channel_send', channel: 'telegram', text: '' }), /Write the message/);
+  await assert.rejects(f.host.runAction('travel', { action: 'channel_send', channel: 'telegram', text: 'x' }), /not the one connected/);
+  for (let i = 0; i < 18; i++) await f.host.runAction('hive', { action: 'channel_send', channel: 'telegram', to: 'Ann', text: 'n' + i });
+  await assert.rejects(f.host.runAction('hive', { action: 'channel_send', channel: 'telegram', to: 'Ann', text: 'one too many' }), /20 messages/);
+  // A call the Bot starts opens with what it wanted to say.
+  const placed = [];
+  const g = fixture({ env: { OPENGROKBOT_CHANNEL_BOT: 'hive' } }); await g.host.init();
+  await g.host.hub.configure('sms', { accountSid: 'AC1', authToken: 'tok', number: '+15550001111', ownerNumber: '+15550009999', pin: '4321', publicUrl: 'https://box.ts.net' });
+  g.host.voice.fetch = async (url, options) => { placed.push(Object.fromEntries(new URLSearchParams(options.body))); return { ok: true, status: 200, json: async () => ({}) }; };
+  assert.match(await g.host.runAction('hive', { action: 'phone_call', text: 'Your 3pm moved to 4pm.' }), /Calling you now/);
+  const token = /t=([a-f0-9]+)/.exec(placed[0].Url)[1];
+  const xml = await g.host.voice.handle('/twilio/voice', { AccountSid: 'AC1', CallSid: 'CA1' }, { t: token });
+  assert.match(xml, /Your 3pm moved to 4pm\./);
+});

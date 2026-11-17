@@ -157,6 +157,7 @@ class ChannelHub {
     const times = (this.recent.get(key) || []).filter(time => now - time < WINDOW);
     if (times.length >= MAX_PER_WINDOW) { if (times.length === MAX_PER_WINDOW) { times.push(now); this.recent.set(key, times); await reply('That is a lot of messages. Give it a few minutes.'); } return; }
     times.push(now); this.recent.set(key, times);
+    const person = this.approvedPeople(channel).find(item => item.id === senderId); if (person) { person.lastSeen = now; person.chatId = chatId; }
     if (text.length > MAX_TEXT) { await reply(`That message is too long (the limit is ${MAX_TEXT} characters).`); return; }
     if (CALL_WORDS.test(text)) {
       if (!this.deps.call) { await reply('Phone calls are not set up. Add a Twilio number under Settings → Channels → SMS and calls.'); return; }

@@ -1,4 +1,4 @@
-# Chat channels (10.1.2)
+# Chat channels (10.1.2 Beta)
 
 One Bot you choose answers messages that arrive on Telegram, Discord, Slack, iMessage and SMS, and can phone you. The channels run on a Bothive server: the Docker server, or the Windows app left running. The Mac app does not run them; it sets up a server's channels (open **Settings for \<server\>** while you are viewing it, or use **Settings → Channels** in the Windows app).
 

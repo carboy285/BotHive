@@ -664,7 +664,7 @@ function configureIPC() {
  // Settings → Copy diagnostics (0.9.5): versions, providers, voice settings and recent errors. No chats, keys or names of people.
  handle('diagnostics:get',async()=>{await ensureState();const os=require('node:os'),voiceSettings=await loadJSON('voice-settings.json',{});
   const errors=Object.entries(settings.providerHealth||{}).filter(([,v])=>v?.state&&v.state!=='ready'&&v.state!=='configured').map(([k,v])=>`${k}: ${String(v.detail||'').slice(0,160)}`);
-  return [`Bothive ${app.getVersion()} (Windows ${os.release()}, Electron ${process.versions.electron})`,`${os.cpus()[0]?.model||'CPU'} · ${os.cpus().length} cores · ${Math.round(os.totalmem()/2**30)} GB`,
+  return [`Bothive ${app.getVersion()} Beta (Windows ${os.release()}, Electron ${process.versions.electron})`,`${os.cpus()[0]?.model||'CPU'} · ${os.cpus().length} cores · ${Math.round(os.totalmem()/2**30)} GB`,
    `Providers: ${installed.map(x=>`${x.name} ${x.version||''}`.trim()).join('; ')||'none found'}`,`Bots: ${state.bots.length} · messages: ${state.entries.length}`,
    `Voice: listening ${voiceSettings.transcriber||'default'}, speaking ${voiceSettings.speaker||'default'}, patience ${voiceSettings.patience||'normal'}, quick model ${voiceSettings.fastModel!==false}, layout ${voiceSettings.layout||'card'}, Kokoro ${voiceSettings.kokoroVoice||'af_heart'}`,
    `Local voice models: ${JSON.stringify(voiceSettings.localModels||'recommended')}; voice models: ${JSON.stringify(voiceSettings.voiceModels||{})}; last speed test: ${voiceSettings.lastSpeed||'none'}`,

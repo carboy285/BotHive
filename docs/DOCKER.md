@@ -67,6 +67,6 @@ Set `OPENGROKBOT_WEB_ADMIN=0` and run `docker compose -f docker/compose.yml up -
 
 Signing in to a CLI with a browser link (`claude login`, `codex login`) still has to happen on the server itself. Use an API key from the app when you want to skip that.
 
-## Chat channels (10.1.2)
+## Chat channels (10.1.2 Beta)
 
 The server can answer Telegram, Discord, Slack, iMessage and SMS with one Bot you choose, and phone you. Set them up from the Mac app (Settings for the server) or the Windows app (Settings → Channels), or with the `OPENGROKBOT_*` variables in the compose file. Port 8766 is for Twilio phone calls only, through Tailscale Funnel. See [CHANNELS.md](CHANNELS.md).

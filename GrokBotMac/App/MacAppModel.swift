@@ -458,7 +458,7 @@ final class MacAppModel: ObservableObject {
         let info = Bundle.main.infoDictionary
         let defaults = UserDefaults.standard
         var lines = [
-            "Bothive \(info?["CFBundleShortVersionString"] as? String ?? "?") Beta (build \(info?["CFBundleVersion"] as? String ?? "?"))",
+            "Bothive \(info?["CFBundleShortVersionString"] as? String ?? "?") (build \(info?["CFBundleVersion"] as? String ?? "?"))",
             "macOS \(ProcessInfo.processInfo.operatingSystemVersionString) · \(ProcessInfo.processInfo.activeProcessorCount) cores · \(Int((Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824).rounded())) GB",
             "Providers: " + (installedCLIs.isEmpty ? "none found" : installedCLIs.map { "\($0.provider.name) \($0.version)" }.joined(separator: "; ")),
             "Bots: \(app.workspace.bots.count) · messages: \(app.workspace.entries.count)",

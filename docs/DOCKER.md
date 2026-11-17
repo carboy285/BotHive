@@ -38,7 +38,7 @@ Your sign-in is stored in the container's home folder, not in the image. Keep it
 - No microphone, speakers or GUI: voice, desktop notifications and the local browser window do not apply.
 - A browser only gets the calls Web access allows. Keys, CLI installs and other settings come from the apps (see below), which sign in with the same username and password.
 
-## Using the server from the apps (10.1.1 Beta)
+## Using the server from the apps (10.1.1)
 
 Once it runs, the Mac, Windows and iPhone apps can use it by address instead of through the account relay. Its Bots load in the app itself and you text and talk to them there.
 
@@ -54,7 +54,7 @@ Type the server's address, for example `https://my-box.tailnet-name.ts.net` (fro
 - On **iPhone** the app remembers the server until you choose "Back to my account's computer".
 - Voice (speaking and listening) happens on the device you are holding; only the text goes to the server.
 
-## Changing the server from another device (10.1.1 Beta)
+## Changing the server from another device (10.1.1)
 
 With `OPENGROKBOT_WEB_ADMIN=1` (the default in `docker/compose.yml`), an app connected to the server by its address can do what the server's own settings can, with no terminal:
 

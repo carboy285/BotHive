@@ -8,6 +8,7 @@ const { SlackChannel } = require('./channel-slack.cjs');
 const { SmsChannel, VoiceCalls, E164 } = require('./channel-twilio.cjs');
 const { createVoiceServer } = require('./channel-voice-server.cjs');
 const { InkboxIMessageChannel } = require('./channel-inkbox.cjs');
+const attachments = require('./attachments.cjs');
 
 const FILE = 'channels.json', ENCRYPTED = 'channels.encrypted.json';
 const VOICE_FIELDS = ['ownerNumber', 'pin', 'publicUrl', 'language'];
@@ -15,14 +16,15 @@ const VOICE_FIELDS = ['ownerNumber', 'pin', 'publicUrl', 'language'];
 /**
  * @param {{
  *  loadJSON, atomicJSON, safeStorage, platform?: string, ensureState: () => Promise<void>, getState: () => object,
- *  startChat: (botID: string, text: string) => Promise<void>, isRunning: (botID: string) => boolean,
+ *  startChat: (botID: string, text: string, options?: object) => Promise<void>, stop?: (botID: string) => void, botDirectory?: (botID: string) => string, isRunning: (botID: string) => boolean,
  *  env?: object, fetchImpl?: typeof fetch, WebSocketImpl?: any, createServer?: Function, log?: (e: Error) => void, sleep?: (ms: number) => Promise<void>,
- *  voiceHost?: string, askTimeout?: number
+ *  voiceHost?: string, askTimeout?: number, batchMs?: number, pollMs?: number
  * }} deps
  */
 function createChannelsHost(deps) {
   const env = deps.env || process.env, platform = deps.platform || process.platform, sleep = deps.sleep || (ms => new Promise(r => setTimeout(r, ms)));
-  const askTimeout = deps.askTimeout ?? 15 * 60 * 1000;
+  const askTimeout = deps.askTimeout ?? 15 * 60 * 1000, pollMs = deps.pollMs ?? 150;
+  const turns = new Map(), cancelled = new Set(); let turnCounter = 0;
   let voiceServer = null, voiceKey = '', hub;
 
   // ----- Storage. Tokens are encrypted where the OS can do it (Windows). A Linux server keeps them in a private file (mode 0600). -----
@@ -48,26 +50,60 @@ function createChannelsHost(deps) {
       const f = smsFields(), state = deps.getState?.(), bot = state?.bots?.find(x => x.id === hub?.data.bot);
       return { accountSid: f.accountSid, authToken: f.authToken, number: f.number, ownerNumber: f.ownerNumber, pin: f.pin, publicUrl: f.publicUrl, language: f.language, botName: bot?.name };
     },
-    ask: text => askBot(hub.data.bot, text, { channel: 'phone' }),
+    ask: text => askBot(hub.data.bot, text, { channel: 'phone', senderName: 'phone call' }),
     fetchImpl: deps.fetchImpl,
   });
 
-  /** Sends a message to the chosen Bot like someone typing it, waits for the run to finish, and returns its reply. */
-  async function askBot(botID, text) {
+  const STEER_NOTE = '\n\n(The person sent this while you were still working. Carry on with their original request with this in mind. Do not redo work that is already finished.)';
+
+  /** Downloads the pictures that came with a message into the Bot's Attachments folder. Returns the stored names and what went wrong. */
+  async function saveMedia(botID, media) {
+    const names = [], problems = [];
+    const directory = deps.botDirectory?.(botID);
+    for (const item of (media || []).slice(0, 3)) {
+      try {
+        if (!directory) throw Object.assign(new Error('no folder'), { code: 'unsupported' });
+        const where = item.resolve ? await item.resolve() : item;
+        const response = await (deps.fetchImpl || fetch)(where.url, { headers: where.headers || item.headers || {}, signal: AbortSignal.timeout(30000) });
+        if (!response.ok) throw new Error('download failed');
+        const bytes = Buffer.from(await response.arrayBuffer());
+        names.push(await attachments.saveChannelImage(directory, bytes, item.name || 'Photo'));
+      } catch (error) {
+        problems.push(error.code === 'heic' ? 'a photo arrived in the HEIC format, which cannot be read here. Ask them to send it as a JPEG or a screenshot' : error.code === 'unsupported' ? 'a file that is not a PNG, JPEG, GIF or WebP image was skipped' : 'a picture could not be downloaded');
+      }
+    }
+    return { names, problems };
+  }
+
+  /** Sends a message to the chosen Bot like someone typing it, waits for the run to finish, and returns its reply (null if the turn was stopped). */
+  async function askBot(botID, text, from, options = {}) {
     await deps.ensureState();
     const state = deps.getState(); const before = state.entries.length;
     if (!state.bots.some(x => x.id === botID)) throw new Error('That Bot is gone. Choose another under Settings → Channels.');
-    await deps.startChat(botID, text);
+    let body = String(text || '');
+    if (options.media?.length) {
+      const { names, problems } = await saveMedia(botID, options.media);
+      if (!names.length && !body.trim()) return `I could not use that: ${problems[0] || 'nothing readable came through'}.`;
+      body = attachments.attachmentMessage(body.trim() || '(photo)', names);
+      if (problems.length) body += `\n(Also: ${problems.join('; ')}.)`;
+    }
+    if (from) body = `[${CHANNELS[from.channel]?.name || from.channel} \u00b7 ${String(from.senderName || 'someone').slice(0, 60)}${from.me ? ' \u00b7 the owner' : ''}] ${body}`;
+    if (options.steer) body += STEER_NOTE;
+    const token = ++turnCounter; turns.set(botID, token);
+    await deps.startChat(botID, body, { channelTurn: options.fast !== false && from?.channel !== 'phone' });
     const deadline = Date.now() + askTimeout;
     while (deps.isRunning(botID)) {
       if (Date.now() > deadline) return 'Still working on it, or waiting for your OK in Bothive. I’ll leave the answer in the chat.';
-      await sleep(400);
+      await sleep(pollMs);
     }
+    if (cancelled.delete(token)) return null;
     const reply = deps.getState().entries.slice(before).filter(e => e.botID === botID && e.kind === 'bot').at(-1);
     if (!reply) return 'The Bot did not answer.';
     if (reply.state === 'failed') throw new Error(reply.text || 'The Bot could not finish that.');
     return reply.text;
   }
+  /** Stops the turn that is running for this Bot. Its answer is discarded. */
+  function stopTurn(botID) { const token = turns.get(botID); if (token) cancelled.add(token); deps.stop?.(botID); }
 
   function makeAdapter(id, fields, handlers) {
     const common = { fields, handlers, fetchImpl: deps.fetchImpl, WebSocketImpl: deps.WebSocketImpl };
@@ -81,8 +117,8 @@ function createChannelsHost(deps) {
 
   hub = new ChannelHub({
     load: storage.load, save: async value => { await storage.save(value); syncVoice(); },
-    makeAdapter, ask: (botID, text, from) => askBot(botID, `[${CHANNELS[from?.channel]?.name || from?.channel} \u00b7 ${String(from?.senderName || 'someone').slice(0, 60)}] ${text}`), botExists: id => !!deps.getState?.()?.bots?.some(x => x.id === id && !x.memberIDs),
-    call: async () => voice.placeCall(),
+    makeAdapter, ask: askBot, stop: stopTurn, botExists: id => !!deps.getState?.()?.bots?.some(x => x.id === id && !x.memberIDs),
+    call: async () => voice.placeCall(), batchMs: deps.batchMs,
   });
 
   // ----- The public phone listener: a separate port that only Twilio talks to. -----

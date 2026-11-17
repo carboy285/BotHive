@@ -47,10 +47,14 @@ class SlackChannel {
     const direct = event.type === 'message' && event.channel_type === 'im';
     const mention = event.type === 'app_mention';
     if (!direct && !mention) return;
-    if (event.bot_id || event.subtype || !event.user || event.user === this.userId || typeof event.text !== 'string') return;
+    if (event.bot_id || (event.subtype && event.subtype !== 'file_share') || !event.user || event.user === this.userId) return;
+    if (typeof event.text !== 'string') event.text = '';
     const id = packet.payload.event_id || event.client_msg_id || event.ts; if (id) { if (this.seen.has(id)) return; this.seen.add(id); if (this.seen.size > 500) this.seen.delete(this.seen.values().next().value); }
-    const text = event.text.replace(new RegExp(`<@${this.userId}>`, 'g'), '').trim(); if (!text) return;
-    Promise.resolve(this.onMessage({ senderId: event.user, senderName: event.user, chatId: event.channel, text })).catch(() => {});
+    const text = event.text.replace(new RegExp(`<@${this.userId}>`, 'g'), '').trim();
+    // Pictures need the files:read scope; Slack wants the bot token on the download.
+    const media = (Array.isArray(event.files) ? event.files : []).filter(file => file?.url_private && /^image\//i.test(file.mimetype || '')).map(file => ({ url: file.url_private, contentType: file.mimetype, size: file.size || 0, name: file.name, headers: { Authorization: `Bearer ${this.botToken}` } }));
+    if (!text && !media.length) return;
+    Promise.resolve(this.onMessage({ senderId: event.user, senderName: event.user, chatId: event.channel, text, media })).catch(() => {});
   }
   async send(chatId, text) { await this.api('chat.postMessage', this.botToken, { channel: chatId, text, unfurl_links: false, unfurl_media: false }); }
 }

@@ -116,4 +116,5 @@ function voiceModel(provider,chatModel,custom){
  if(provider==='gemini')return 'gemini-2.5-flash';
  return chatModel||'';
 }
-module.exports={VOICE_STYLE,voiceModel,parse,instructions,connectedAppsNote,apply,begin,finish,group,MAX_STEPS,STEP_LIMIT_MESSAGE,RETRY_HINT,pageSummary};
+const CHANNEL_STYLE='\nCHAT CHANNEL REPLY: this message came from a chat app, so answer fast and short: one to three plain sentences unless the person asked for detail. No headings or tables, few symbols. If the answer needs a long list or a document, say so in one line and offer it.';
+module.exports={CHANNEL_STYLE,VOICE_STYLE,voiceModel,parse,instructions,connectedAppsNote,apply,begin,finish,group,MAX_STEPS,STEP_LIMIT_MESSAGE,RETRY_HINT,pageSummary};

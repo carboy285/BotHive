@@ -11,10 +11,10 @@ const BASE = 'https://inkbox.ai/api/v1/imessage';
 const E164 = /^\+[1-9]\d{6,14}$/;
 
 class InkboxIMessageChannel {
-  constructor({ fields, handlers, fetchImpl = fetch, interval = 4000, setTimer = setTimeout, clearTimer = clearTimeout, uuid = () => crypto.randomUUID() }) {
+  constructor({ fields, handlers, fetchImpl = fetch, interval = 2000, setTimer = setTimeout, clearTimer = clearTimeout, uuid = () => crypto.randomUUID() }) {
     this.key = fields.apiKey; this.onMessage = handlers.onMessage; this.fetch = fetchImpl; this.interval = interval;
     this.setTimer = setTimer; this.clearTimer = clearTimer; this.uuid = uuid;
-    this.running = false; this.seen = new Set(); this.timer = null; this.info = { state: 'starting', detail: '' };
+    this.running = false; this.seen = new Set(); this.unacked = new Map(); this.timer = null; this.info = { state: 'starting', detail: '' };
   }
   status() { return this.info; }
   fail(error) { this.info = { state: 'error', detail: error.message }; }
@@ -57,12 +57,13 @@ class InkboxIMessageChannel {
       for (const message of fresh) {
         this.seen.add(message.id);
         // Messages from an address that is not a phone number cannot be answered, so they are not passed on.
-        if (!message.content || !E164.test(message.remote_number || '')) continue;
-        conversations.add(message.conversation_id);
-        Promise.resolve(this.onMessage({ senderId: message.remote_number, senderName: message.remote_number, chatId: message.conversation_id, text: message.content })).catch(() => {});
+        const media = (Array.isArray(message.media) ? message.media : []).filter(item => item?.url && /^image\//i.test(item.content_type || 'image/')).map(item => ({ url: item.url, contentType: item.content_type || '', size: item.size || 0 }));
+        if ((!message.content && !media.length) || !E164.test(message.remote_number || '')) continue;
+        this.unacked.set(message.conversation_id, Date.now());
+        Promise.resolve(this.onMessage({ senderId: message.remote_number, senderName: message.remote_number, chatId: message.conversation_id, text: message.content || '', media })).catch(() => {});
       }
-      // Marking read shows "Read" to the person and keeps these messages out of the next check.
-      for (const id of conversations) this.api('/mark-read', { method: 'POST', body: { conversation_id: id } }).catch(() => {});
+      // Messages from people nobody approved are marked read too, a little later, so they never clog the unread list.
+      for (const [id, at] of this.unacked) if (Date.now() - at > 30000) { this.unacked.delete(id); this.api('/mark-read', { method: 'POST', body: { conversation_id: id } }).catch(() => {}); }
       if (this.seen.size > 1000) this.seen = new Set([...this.seen].slice(-500));
       if (this.running) this.info = { state: 'on', detail: 'Connected to Inkbox' };
     } catch (error) {
@@ -76,6 +77,8 @@ class InkboxIMessageChannel {
   async send(conversationId, text) {
     await this.api('/messages', { method: 'POST', body: { conversation_id: conversationId, text }, headers: { 'Idempotency-Key': this.uuid(), Prefer: 'idempotency-replay' } });
   }
+  /** Shows "Read" at once. The hub calls this for approved people only. */
+  async acknowledge(message) { this.unacked.delete(message.chatId); await this.api('/mark-read', { method: 'POST', body: { conversation_id: message.chatId } }); }
   async typing(conversationId) { await this.api('/typing', { method: 'POST', body: { conversation_id: conversationId } }); }
 }
 

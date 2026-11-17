@@ -35,6 +35,16 @@ export async function renderChannels({ bridge, result, toast, page }) {
     select.value = status.bot || '';
     select.addEventListener('change', async () => { try { await result(bridge.channelsSetBot(select.value)); toast(select.value ? 'That Bot now answers on your channels.' : 'No Bot answers on channels.'); draw(); } catch (error) { toast(error.message); } });
     who.append(select, el('p', 'muted', 'This Bot is told which channels are connected and gets tools to message approved people and to phone you.'));
+    const fast = el('label', 'channel-field channel-check'); const fastBox = el('input'); fastBox.type = 'checkbox'; fastBox.checked = status.settings?.fast !== false; fastBox.setAttribute('aria-label', 'Fast replies on channels');
+    fastBox.addEventListener('change', async () => { try { await result(bridge.channelsSetSettings({ fast: fastBox.checked })); draw(); } catch (error) { toast(error.message); } });
+    fast.append(fastBox, el('span', '', 'Fast replies on channels (a quicker model, short answers)'));
+    const busy = el('label', 'channel-field'); busy.append(el('span', '', 'When I send another message while the Bot is working'));
+    const busySelect = el('select', 'field'); busySelect.setAttribute('aria-label', 'When I send while it is working');
+    for (const [value, label] of [['steer', 'Steer it: stop and carry on with my new message'], ['queue', 'Queue it: answer after the current one']]) { const option = el('option', '', label); option.value = value; busySelect.append(option); }
+    busySelect.value = status.settings?.whenBusy || 'steer';
+    busySelect.addEventListener('change', async () => { try { await result(bridge.channelsSetSettings({ whenBusy: busySelect.value })); draw(); } catch (error) { toast(error.message); } });
+    busy.append(busySelect);
+    who.append(fast, busy, el('p', 'muted', 'Messages sent a second apart are read together, so a photo and “add these to my reminders” arrive as one request. Texting “stop” only stops the Bot.'));
     root.append(who);
 
     for (const spec of CHANNELS) root.append(card(status, spec));
@@ -75,7 +85,9 @@ export async function renderChannels({ bridge, result, toast, page }) {
       box.append(el('h3', '', 'Waiting for your OK'));
       for (const person of info.pending) {
         const row = el('div', 'channel-person'); row.append(el('span', '', `${person.name} · code ${person.code}`));
-        row.append(pill('Approve', async () => { try { await result(bridge.channelsApprove(spec.id, person.code)); toast(`${person.name} can now message the Bot.`); draw(); } catch (error) { toast(error.message); } }, 'pill primary'));
+        const mine = el('label', 'channel-check'); const mineBox = el('input'); mineBox.type = 'checkbox'; mineBox.setAttribute('aria-label', `This is me: ${person.name}`); mine.append(mineBox, el('span', '', 'This is me'));
+        row.append(mine);
+        row.append(pill('Approve', async () => { try { await result(bridge.channelsApprove(spec.id, person.code, { me: mineBox.checked })); toast(`${person.name} can now message the Bot.`); draw(); } catch (error) { toast(error.message); } }, 'pill primary'));
         box.append(row);
       }
     }
@@ -83,6 +95,10 @@ export async function renderChannels({ bridge, result, toast, page }) {
       box.append(el('h3', '', 'Approved'));
       for (const person of info.approved) {
         const row = el('div', 'channel-person'); row.append(el('span', '', person.name === person.id ? person.id : `${person.name} · ${person.id}`));
+        const mine = el('label', 'channel-check'); const mineBox = el('input'); mineBox.type = 'checkbox'; mineBox.checked = !!person.me; mineBox.setAttribute('aria-label', `This is me: ${person.name}`); mine.append(mineBox, el('span', '', 'Me'));
+        mineBox.addEventListener('change', async () => { try { await result(bridge.channelsSetPerson(spec.id, person.id, { me: mineBox.checked })); toast(mineBox.checked ? 'The Bot can now reach out to this person first.' : 'Saved.'); draw(); } catch (error) { toast(error.message); } });
+        row.append(mine);
+        row.append(pill('Rename', async () => { const next = window.prompt('Name for this person (the same name on two channels is one person to the Bot):', person.name); if (next === null) return; try { await result(bridge.channelsSetPerson(spec.id, person.id, { name: next })); draw(); } catch (error) { toast(error.message); } }));
         row.append(pill('Remove', async () => { try { await result(bridge.channelsRemove(spec.id, person.id)); draw(); } catch (error) { toast(error.message); } }));
         box.append(row);
       }

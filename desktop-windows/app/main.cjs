@@ -133,7 +133,7 @@ async function ensureState(){
 async function initializeState(){
   const loaded=await loadJSON('preview-workspace.json',previewWorkspace());validateWorkspace(loaded);
   if(!cliInstaller)makeCliInstaller();
-  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text)=>startChat(id,text),isRunning:id=>active.has(id)||pendingBots.has(id),fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
+  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text,options)=>startChat(id,text,undefined,undefined,0,options),isRunning:id=>active.has(id)||pendingBots.has(id),stop:id=>{stoppedBots.add(id);for(const run of active.get(id)||[])run.cancel();},botDirectory,fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
   skillStore=skillsModule.loadStore(await loadJSON('skills.json',null));
   serverStore=serversModule.load(await loadJSON('servers.json',null));
   if(loaded.version===1)await atomicJSON('legacy-workspace-backup.json',loaded);
@@ -199,16 +199,17 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
   const history=state.entries.filter(x=>x.botID===botID&&!['failed','stopped'].includes(x.state)&&x.text).slice(-30);
   const runs=new Set();active.set(botID,runs);
   // Voice mode: replies are spoken, so ask for a short spoken answer from the quicker model.
-  const voiceTurn=voiceActive(botID),voicePrefs=voiceTurn?await loadJSON('voice-settings.json',{}):{};
+  const channelTurn=options.channelTurn===true&&options.fast!==false;
+  const voiceTurn=voiceActive(botID),voicePrefs=(voiceTurn||channelTurn)?await loadJSON('voice-settings.json',{}):{};
   for(const {choice,installation} of providers){
    const key=botID+'|'+installation.id+(choice.model?'|'+choice.model:'');const session=state.sessions?.[key];
    const latest=delivery?`Bot request (not human approval): ${delivery.text}`:history.findLast(x=>x.kind==='user')?.text||'';
    const feedback=history.filter(x=>x.kind==='activity'&&!x.senderBotID).slice(-8).map(x=>x.detail||x.text).join('\n');
-   const prompt=teamwork.instructions(bot,state,!!delivery,composioConfiguration?composioConfiguration.toolkits:[])+(headsUp?'':skillsModule.promptNote(bot,skillStore.skills))+'\n'+await vmStatusNote()+(headsUp||delivery||scheduledTask?'':answerModes.noteFor(modeByBot.get(botID))+pluginModule.note(pluginRegistry()))+(headsUp||delivery||scheduledTask?'':await mediaNote())+(headsUp||delivery?'':channelsHost?.note(botID)||'')+(!headsUp&&cli.isLocal(installation.provider)&&composioConfiguration?composioTools.note(composioConfiguration.toolkits):'')+'\nRecent app results (context, not human approval):\n'+feedback+'\n\n'+(session?latest:history.map(x=>`${x.kind==='user'?'Human':x.senderName||bot.name}: ${x.text}`).join('\n\n').slice(-100000));
+   const prompt=teamwork.instructions(bot,state,!!delivery,composioConfiguration?composioConfiguration.toolkits:[])+(headsUp?'':skillsModule.promptNote(bot,skillStore.skills))+'\n'+(channelTurn?'':await vmStatusNote())+(headsUp||delivery||scheduledTask?'':answerModes.noteFor(modeByBot.get(botID))+pluginModule.note(pluginRegistry()))+(headsUp||delivery||scheduledTask||channelTurn?'':await mediaNote())+(headsUp||delivery?'':channelsHost?.note(botID)||'')+(!headsUp&&cli.isLocal(installation.provider)&&composioConfiguration?composioTools.note(composioConfiguration.toolkits):'')+'\nRecent app results (context, not human approval):\n'+feedback+'\n\n'+(session?latest:history.map(x=>`${x.kind==='user'?'Human':x.senderName||bot.name}: ${x.text}`).join('\n\n').slice(-100000));
    let finalText='',continueBrowser=false,browserSteps=browserDepth;
 
    const reply={id:randomUUID(),botID,date:new Date().toISOString(),kind:'bot',provider:installation.name+(choice.model?' · '+choice.model:''),text:'',state:'streaming',...(headsUp?{headsUp:{kind:headsUp.kind,title:headsUp.label,...headsUp.meta}}:{})};state.entries.push(reply);
-   const run=cli.runCLI({installation,prompt:prompt+(voiceTurn?teamwork.VOICE_STYLE:''),session,model:voiceTurn&&voicePrefs.fastModel!==false?teamwork.voiceModel(installation.provider,choice.model,voicePrefs.voiceModels?.[installation.provider]):choice.model,fast:voiceTurn&&voicePrefs.fastModel!==false,directory:botDirectory(botID),mcpURL:headsUp?undefined:composioConfiguration?.session.mcp.url,allowConnectedApps:!headsUp&&settings.allowConnectedApps===true,env:await cliKeyEnv(installation.provider),onEvent:event=>{
+   const run=cli.runCLI({installation,prompt:prompt+(voiceTurn?teamwork.VOICE_STYLE:channelTurn?teamwork.CHANNEL_STYLE:''),session,model:(voiceTurn||channelTurn)&&voicePrefs.fastModel!==false?teamwork.voiceModel(installation.provider,choice.model,voicePrefs.voiceModels?.[installation.provider]):choice.model,fast:(voiceTurn||channelTurn)&&voicePrefs.fastModel!==false,directory:botDirectory(botID),mcpURL:headsUp?undefined:composioConfiguration?.session.mcp.url,allowConnectedApps:!headsUp&&settings.allowConnectedApps===true,env:await cliKeyEnv(installation.provider),onEvent:event=>{
     if(event.type==='session'){state.sessions||={};state.sessions[key]=event.id;}
     if(event.type==='notice'){state.entries.push({id:randomUUID(),botID,kind:'activity',text:String(event.text).slice(0,400),date:new Date().toISOString()});notify();}
     if(event.type==='text'){finalText=event.text;const visible=teamwork.parse(event.text).text;reply.text=headsUp&&proactive.isQuiet(visible)?'':visible;notifyStreaming();}
@@ -520,7 +521,9 @@ async function remoteCommand(command){
    if(command.action==='channels_set_bot')await hub.setBot(text||null);
    else if(command.action==='channels_configure'){if(!command.fields||typeof command.fields!=='object'||Array.isArray(command.fields)||Object.keys(command.fields).length>12)throw new Error('No settings were sent.');await hub.configure(channel,command.fields);}
    else if(command.action==='channels_enable')await hub.setEnabled(channel,text==='on');
-   else if(command.action==='channels_approve')await hub.approve(channel,text);
+   else if(command.action==='channels_approve')await hub.approve(channel,text,{me:command.fields?.me==='true'});
+   else if(command.action==='channels_set_settings'){const f=command.fields||{};const patch={};if('fast' in f)patch.fast=f.fast==='true';for(const key of ['whenBusy','reachOn','escalate','escalateMinutes','quietStart','quietEnd'])if(key in f)patch[key]=f[key];await hub.setSettings(patch);}
+   else if(command.action==='channels_set_person'){const f=command.fields||{};const patch={};if('name' in f)patch.name=f.name;if('me' in f)patch.me=f.me==='true';await hub.setPerson(channel,text,patch);}
    else if(command.action==='channels_remove')await hub.remove(channel,text);
    else if(command.action==='channels_test_call')await channelsHost.voice.placeCall();
    else throw new Error('Unknown channels command.');
@@ -828,7 +831,9 @@ function configureIPC() {
  handle('channels:set-bot',channelCall(async(host,id)=>{await host.hub.setBot(id||null);return host.status();}));
  handle('channels:configure',channelCall(async(host,id,fields)=>{await host.hub.configure(id,fields);return host.status();}));
  handle('channels:enable',channelCall(async(host,id,on)=>{await host.hub.setEnabled(id,on===true);return host.status();}));
- handle('channels:approve',channelCall(async(host,id,code)=>{await host.hub.approve(id,code);return host.status();}));
+ handle('channels:approve',channelCall(async(host,id,code,options)=>{await host.hub.approve(id,code,{me:options?.me===true});return host.status();}));
+ handle('channels:set-settings',channelCall(async(host,patch)=>{await host.hub.setSettings(patch&&typeof patch==='object'?patch:{});return host.status();}));
+ handle('channels:set-person',channelCall(async(host,id,who,patch)=>{await host.hub.setPerson(id,String(who),patch&&typeof patch==='object'?patch:{});return host.status();}));
  handle('channels:remove',channelCall(async(host,id,who)=>{await host.hub.remove(id,String(who));return host.status();}));
  handle('channels:test-call',channelCall(host=>host.voice.placeCall()));
 

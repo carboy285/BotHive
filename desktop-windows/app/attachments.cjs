@@ -143,4 +143,27 @@ function attachmentMessage(base, names) {
   return `${lead}\n\nAttached files in this Bot’s working folder:\n${names.map(name => `- Attachments/${name}`).join('\n')}\nUse your available tools to read these files; do not assume an image was viewed.`;
 }
 
-module.exports = { expandDropped, savePageScreenshot, saveRemoteImages, copyLocalFiles, saveDataFile, existingNames, attachmentMessage, MAX_COUNT, MAX_TOTAL_BYTES };
+/** What kind of image these bytes are, from the bytes themselves (never from what the sender claims). */
+function sniffImage(bytes) {
+  if (bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return { extension: 'png' };
+  if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { extension: 'jpg' };
+  if (bytes.length > 6 && bytes.subarray(0, 4).toString('latin1') === 'GIF8') return { extension: 'gif' };
+  if (bytes.length > 12 && bytes.subarray(0, 4).toString('latin1') === 'RIFF' && bytes.subarray(8, 12).toString('latin1') === 'WEBP') return { extension: 'webp' };
+  if (bytes.length > 12 && bytes.subarray(4, 8).toString('latin1') === 'ftyp' && /^(heic|heix|hevc|hevx|mif1|msf1|heim|heis)/.test(bytes.subarray(8, 12).toString('latin1'))) return { heic: true };
+  return null;
+}
+
+/** Stores an image that arrived on a chat channel in <directory>/Attachments. Returns the stored name. Throws an Error with .code 'heic' or 'unsupported'. */
+async function saveChannelImage(directory, bytes, label = 'Photo') {
+  if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > LOCAL_MAX_BYTES) { const error = new Error('That image is too large or empty.'); error.code = 'unsupported'; throw error; }
+  const kind = sniffImage(bytes);
+  if (kind?.heic) { const error = new Error('HEIC photos cannot be read here.'); error.code = 'heic'; throw error; }
+  if (!kind) { const error = new Error('That is not a PNG, JPEG, GIF or WebP image.'); error.code = 'unsupported'; throw error; }
+  const folder = path.join(directory, 'Attachments');
+  await mkdir(folder, { recursive: true, mode: 0o700 });
+  const name = `${randomUUID()}-${cleanName(label).replace(/\.[A-Za-z0-9]+$/, '') || 'Photo'}.${kind.extension}`;
+  await writeFile(path.join(folder, name), bytes, { mode: 0o600 });
+  return name;
+}
+
+module.exports = { saveChannelImage, sniffImage, expandDropped, savePageScreenshot, saveRemoteImages, copyLocalFiles, saveDataFile, existingNames, attachmentMessage, MAX_COUNT, MAX_TOTAL_BYTES };

@@ -15,6 +15,7 @@ function validateWorkspace(value) {
     if(bot.lastUsedAt!=null&&(typeof bot.lastUsedAt!=='string'||!Number.isFinite(Date.parse(bot.lastUsedAt))))throw new Error('Invalid recent use');
     if(bot.skills!=null&&(!Array.isArray(bot.skills)||bot.skills.length>50||bot.skills.some(x=>typeof x!=='string'||x.length>64)))throw new Error('Invalid skills');
     if(bot.schedules!=null&&(!Array.isArray(bot.schedules)||bot.schedules.length>100||bot.schedules.some(x=>!require('./schedules.cjs').valid(x))))throw new Error('Invalid scheduled tasks');
+    if(bot.summary!=null&&(typeof bot.summary!=='string'||bot.summary.length>6000)||bot.summaryAt!=null&&typeof bot.summaryAt!=='string')throw new Error('Invalid Bot summary');
     if(bot.isPinned!=null&&typeof bot.isPinned!=='boolean'||bot.folder!=null&&(typeof bot.folder!=='string'||bot.folder.length>80)||bot.sortOrder!=null&&(!Number.isInteger(bot.sortOrder)||bot.sortOrder<0||bot.sortOrder>10000))throw new Error('Invalid Bot organization');
     if(bot.appearance!=null){const a=bot.appearance;if(!COLORS.has(a.color)||!['circle','cloud','square','sparkle','flower','heart','clover','droplet','capsule','triangle','pebble','star','hexagon','fruit'].includes(a.shape)||a.imageData!=null&&(typeof a.imageData!=='string'||!/^[A-Za-z0-9+/]*={0,2}$/.test(a.imageData)||a.imageData.length>32768||Buffer.from(a.imageData,'base64').length>24576))throw new Error('Invalid Bot avatar');}
     if(bot.aiConfiguration!==undefined&&bot.aiConfiguration!==null){const config=bot.aiConfiguration;

@@ -25,6 +25,9 @@ const attachments=require('./attachments.cjs');
 const voice=require('./voice.cjs');
 const providerKeys=require('./provider-keys.cjs');
 const deviceActions=require('./device-actions.cjs');
+const memoryModule=require('./memory.cjs');
+const memory=memoryModule.createMemory({getState:()=>state,persist:()=>atomicJSON('preview-workspace.json',state),archivePath:id=>file(path.join('Archive',id+'.jsonl')),onChange:()=>{try{notify();}catch{}},log:error=>console.error('memory:',error.message),
+ quickTurn:(botID,prompt)=>quickTurn(botID,prompt)});
 const botPackages=require('./bot-package.cjs');
 const settingsBundles=require('./settings-bundle.cjs');
 const backup=require('./backup.cjs');
@@ -166,6 +169,14 @@ function configuredProviders(bot){
  const choices=[config.providers.find(x=>x.provider===config.activeProvider)||config.providers[0]].filter(Boolean);
  return choices.map(choice=>({choice,installation:installed.find(x=>x.provider===choice.provider)}));
 }
+// One quick, silent request to the Bot's own CLI on the faster model: used to keep the Bot's summary and notes up to date.
+async function quickTurn(botID,prompt){
+ const bot=state.bots.find(x=>x.id===botID);if(!bot)throw new Error('That Bot is gone.');
+ const {choice,installation}=configuredProviders(bot)[0]||{};if(!installation)throw new Error('No provider is set up for this Bot.');
+ const prefs=await loadJSON('voice-settings.json',{}),fast=prefs.fastModel!==false;
+ const run=cli.runCLI({installation,prompt,session:undefined,model:fast?teamwork.voiceModel(installation.provider,choice.model,prefs.voiceModels?.[installation.provider]):choice.model,fast,directory:botDirectory(botID),env:await cliKeyEnv(installation.provider),onEvent(){},timeout:120000});
+ return await run.done;
+}
 // Shows a Windows notification when a Bot finishes while the app is in the background.
 function notifyFinished(botID,reply){
  try{
@@ -253,7 +264,7 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
    });
   }
   notify();
- }finally{pendingBots.delete(botID);}
+ }finally{pendingBots.delete(botID);if(!headsUp&&!scheduledTask&&!delivery)setImmediate(()=>{memory.archiveIfNeeded().catch(()=>{});memory.noteActivity(botID).catch(()=>{});});}
 }
 
 
@@ -422,7 +433,7 @@ async function readOnePassword(item){
 }
 let approvalRules=null;
 const getApprovalRules=async()=>approvalRules??=ruleSet.sanitize(await loadJSON('approval-rules.json',{}));
-const devices=deviceActions.create({composioSearch:async query=>{if(!composioConfiguration)return null;const hits=await require('./composio-search.cjs').search({key:composioConfiguration.key,userID:settings.composioUserID,query});return hits;},rules:async(tool,target)=>ruleSet.decide(await getApprovalRules(),tool,target),browsers:localBrowsers,approve:(title,detail)=>requestApproval(title,detail),logins:loginStore,directory:botDirectory,pdfPages:require('./pdf-text.cjs').pdfPages,onePassword:readOnePassword,plugins:()=>pluginRegistry()});
+const devices=deviceActions.create({composioSearch:async query=>{if(!composioConfiguration)return null;const hits=await require('./composio-search.cjs').search({key:composioConfiguration.key,userID:settings.composioUserID,query});return hits;},rules:async(tool,target)=>ruleSet.decide(await getApprovalRules(),tool,target),browsers:localBrowsers,approve:(title,detail)=>requestApproval(title,detail),logins:loginStore,directory:botDirectory,pdfPages:require('./pdf-text.cjs').pdfPages,onePassword:readOnePassword,plugins:()=>pluginRegistry(),recall:(botID,query)=>memory.recall(botID,query)});
 // Plugins load only when their name is listed in settings.json under plugins.allowed; see docs/PLUGINS.md.
 const pluginModule=require('./plugins.cjs');
 function pluginRegistry(){return pluginModule.load(path.join(app.getPath('userData'),'plugins'),settings?.plugins?.allowed);}

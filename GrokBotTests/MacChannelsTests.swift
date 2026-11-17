@@ -150,18 +150,22 @@ final class MacChannelsTests: XCTestCase {
         let r = try rig(me: false)
         var from: MacChannels.Sender?
         r.channels.askOverride = { _, sender, _, _, _ in from = sender; return "ok" }
-        XCTAssertNil(await r.channels.execute("channels_set_person", channel: "telegram", text: "7", fields: ["me": "true", "name": "Sam Rivera"]))
+        let problem1 = await r.channels.execute("channels_set_person", channel: "telegram", text: "7", fields: ["me": "true", "name": "Sam Rivera"])
+        XCTAssertNil(problem1)
         XCTAssertEqual(r.channels.owner(preferred: "telegram")?.person.id, "7")
         XCTAssertEqual(r.channels.status().channels["telegram"]?.approved.first?.name, "Sam Rivera")
         XCTAssertEqual(r.channels.status().channels["telegram"]?.approved.first?.me, true)
         await r.channels.inbound("telegram", message("hello"))
         XCTAssertEqual(from?.name, "Sam Rivera"); XCTAssertEqual(from?.me, true)
-        XCTAssertEqual(await r.channels.execute("channels_set_person", channel: "telegram", text: "nobody", fields: ["me": "true"]), "That person is not approved.")
+        let problem3 = await r.channels.execute("channels_set_person", channel: "telegram", text: "nobody", fields: ["me": "true"])
+        XCTAssertEqual(problem3, "That person is not approved.")
         XCTAssertEqual(r.channels.status().settings?.fast, true)
-        XCTAssertNil(await r.channels.execute("channels_set_settings", channel: nil, text: nil, fields: ["fast": "false", "quietStart": "23", "escalateMinutes": "999", "whenBusy": "queue"]))
+        let problem2 = await r.channels.execute("channels_set_settings", channel: nil, text: nil, fields: ["fast": "false", "quietStart": "23", "escalateMinutes": "999", "whenBusy": "queue"])
+        XCTAssertNil(problem2)
         let settings = try XCTUnwrap(r.channels.status().settings)
         XCTAssertEqual([settings.fast, settings.whenBusy == "queue"], [false, true]); XCTAssertEqual(settings.quietStart, 23); XCTAssertEqual(settings.escalateMinutes, 120)
-        XCTAssertEqual(await r.channels.execute("channels_set_settings", channel: nil, text: nil, fields: ["whenBusy": "later"]), "Choose Steer or Queue.")
+        let problem4 = await r.channels.execute("channels_set_settings", channel: nil, text: nil, fields: ["whenBusy": "later"])
+        XCTAssertEqual(problem4, "Choose Steer or Queue.")
     }
 
     func testTheBotAsksTheOwnerFirstAndTheNextReplyIsTheAnswer() async throws {

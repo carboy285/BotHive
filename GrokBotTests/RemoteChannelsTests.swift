@@ -36,6 +36,21 @@ final class RemoteChannelsTests: XCTestCase {
         XCTAssertEqual(sms.fields["authToken"]?.set, false)
     }
 
+    func testNewerServersReportSettingsOwnersAndPhoneVoices() throws {
+        let json = #"""
+        {"bot":null,"bots":[],"calls":{"ready":true,"listening":false},
+         "settings":{"fast":false,"whenBusy":"queue","reachOn":"imessage","escalate":"text","escalateMinutes":15,"quietStart":23,"quietEnd":7},
+         "inkbox":{"ready":true,"state":{"state":"on","detail":"Phone calls ready"},"ownerNumber":"+15551234567","voices":[{"id":"ara","name":"Ara","available":true}],"pendingAsk":{"question":"Book 3pm?","askedAt":1700000000000}},
+         "channels":{"imessage":{"name":"iMessage","enabled":true,"configured":true,"fields":{"apiKey":true,"ownerNumber":"+15551234567"},"state":{"state":"on","detail":""},"approved":[{"id":"+15551234567","name":"Sam","me":true,"at":1}],"pending":[]}}}
+        """#
+        let channels = try CloudCoding.decoder().decode(RemoteChannels.self, from: Data(json.utf8))
+        XCTAssertEqual(channels.settings?.whenBusy, "queue"); XCTAssertEqual(channels.settings?.reachOn, "imessage"); XCTAssertEqual(channels.settings?.escalateMinutes, 15)
+        XCTAssertEqual(channels.inkbox?.voices.map(\.id), ["ara"]); XCTAssertEqual(channels.inkbox?.pendingAsk?.question, "Book 3pm?")
+        XCTAssertEqual(channels.channels["imessage"]?.approved.first?.me, true)
+        let plain = try CloudCoding.decoder().decode(RemoteChannels.self, from: Data(#"{"bot":null,"bots":[],"calls":{"ready":false,"listening":false},"channels":{}}"#.utf8))
+        XCTAssertNil(plain.settings, "older servers send no settings")
+    }
+
     func testOlderServersWithoutChannelsStillDecode() throws {
         let old = #"{"hostName":"box","platform":"windows","appVersion":"10.1.1","providers":[],"apiKeys":{},"voiceKeys":{},"connectors":{"configured":false,"toolkits":[]},"sharing":false}"#
         XCTAssertNil(try CloudCoding.decoder().decode(RemoteHostSettings.self, from: Data(old.utf8)).channels)

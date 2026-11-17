@@ -35,6 +35,15 @@ struct GrokBotMacApp: App {
                     desktop.remote.attach(app: app, desktop: desktop)
                     MacIntentHub.shared.attach(app: app, desktop: desktop)
                     desktop.localApp = app
+                    desktop.memory.app = app
+                    desktop.memory.quickTurn = { [weak desktop] bot, prompt in
+                        guard let desktop else { throw ChannelError(message: "Not ready.") }
+                        return try await desktop.quickTurn(bot: bot, prompt: prompt)
+                    }
+                    desktop.memory.archiveURL = { id in
+                        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/OpenGrokBot/Archive/\(id.uuidString).jsonl")
+                    }
+                    desktop.memory.onChange = { [weak desktop] _ in desktop?.channels.voiceInstructionsChanged() }
                     desktop.channels.attach(desktop: desktop, app: app)
                     desktop.selectFirst(in: app)
                     desktop.startScheduler(app: app)

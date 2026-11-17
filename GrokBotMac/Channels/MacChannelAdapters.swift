@@ -6,6 +6,7 @@ struct ChannelMessage: Sendable {
     let senderName: String
     let chatID: String
     let text: String
+    var media: [ChannelMedia] = []
 }
 
 struct ChannelError: LocalizedError {
@@ -23,6 +24,12 @@ protocol ChannelAdapter: AnyObject {
     func stop()
     func send(chat: String, text: String) async throws
     func typing(chat: String) async
+    /// Shows that a message was read. Called for approved people only, before anything slow happens.
+    func acknowledge(_ message: ChannelMessage) async
+}
+
+extension ChannelAdapter {
+    func acknowledge(_ message: ChannelMessage) async {}
 }
 
 @MainActor
@@ -90,12 +97,15 @@ final class TelegramAdapter: ChannelAdapter {
                 delay = 1; state = .init(state: "on", detail: "@" + username)
                 for update in result {
                     offset = max(offset, ((update["update_id"] as? Int) ?? 0) + 1)
-                    guard let message = update["message"] as? [String: Any], let text = message["text"] as? String,
+                    guard let message = update["message"] as? [String: Any],
                           let chat = message["chat"] as? [String: Any], chat["type"] as? String == "private",
                           let from = message["from"] as? [String: Any], from["is_bot"] as? Bool != true,
                           let sender = from["id"] as? Int, let chatID = chat["id"] as? Int else { continue }
+                    let text = (message["text"] as? String) ?? (message["caption"] as? String) ?? ""
+                    let media = await pictures(in: message)
+                    guard !text.isEmpty || !media.isEmpty else { continue }
                     let name = [from["first_name"] as? String, from["last_name"] as? String].compactMap { $0 }.joined(separator: " ")
-                    onMessage(ChannelMessage(senderID: String(sender), senderName: name.isEmpty ? ((from["username"] as? String) ?? String(sender)) : name, chatID: String(chatID), text: text))
+                    onMessage(ChannelMessage(senderID: String(sender), senderName: name.isEmpty ? ((from["username"] as? String) ?? String(sender)) : name, chatID: String(chatID), text: text, media: media))
                 }
             } catch let error as ChannelError {
                 if Task.isCancelled { return }
@@ -108,6 +118,22 @@ final class TelegramAdapter: ChannelAdapter {
                 try? await Task.sleep(nanoseconds: delay * 1_000_000_000); delay = min(delay * 2, 30)
             }
         }
+    }
+
+    /// The picture on a message (the largest size), or an image sent as a file. Telegram needs a lookup to get the download address.
+    private func pictures(in message: [String: Any]) async -> [ChannelMedia] {
+        var ids: [(String, String, String)] = []
+        if let sizes = message["photo"] as? [[String: Any]], let best = sizes.last, let id = best["file_id"] as? String { ids.append((id, "image/jpeg", "Photo")) }
+        if let document = message["document"] as? [String: Any], let id = document["file_id"] as? String, let type = document["mime_type"] as? String, type.hasPrefix("image/") {
+            ids.append((id, type, (document["file_name"] as? String) ?? "Image"))
+        }
+        var out: [ChannelMedia] = []
+        for (id, type, name) in ids {
+            if let file = try? await call("getFile", ["file_id": id]) as? [String: Any], let path = file["file_path"] as? String {
+                out.append(ChannelMedia(url: "https://api.telegram.org/file/bot\(token)/\(path)", contentType: type, name: name))
+            }
+        }
+        return out
     }
 
     func send(chat: String, text: String) async throws { _ = try await call("sendMessage", ["chat_id": chat, "text": text, "disable_web_page_preview": true]) }
@@ -226,8 +252,12 @@ final class DiscordAdapter: ChannelAdapter {
             guard mentioned || text.contains(tag1) || text.contains(tag2) else { return }
             text = text.replacingOccurrences(of: tag1, with: "").replacingOccurrences(of: tag2, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        guard !text.isEmpty else { return }
-        onMessage(ChannelMessage(senderID: authorID, senderName: (author["global_name"] as? String) ?? (author["username"] as? String) ?? authorID, chatID: channel, text: text))
+        let media = ((data["attachments"] as? [[String: Any]]) ?? []).compactMap { item -> ChannelMedia? in
+            guard let url = item["url"] as? String, let type = item["content_type"] as? String, type.hasPrefix("image/") else { return nil }
+            return ChannelMedia(url: url, contentType: type, name: (item["filename"] as? String) ?? "Image")
+        }
+        guard !text.isEmpty || !media.isEmpty else { return }
+        onMessage(ChannelMessage(senderID: authorID, senderName: (author["global_name"] as? String) ?? (author["username"] as? String) ?? authorID, chatID: channel, text: text, media: media))
     }
 
     func send(chat: String, text: String) async throws { _ = try await rest("/channels/\(chat)/messages", method: "POST", json: ["content": text, "allowed_mentions": ["parse": [String]()]]) }
@@ -320,15 +350,21 @@ final class SlackAdapter: ChannelAdapter {
         let eventType = event["type"] as? String
         let direct = eventType == "message" && event["channel_type"] as? String == "im"
         guard direct || eventType == "app_mention" else { return }
-        guard event["bot_id"] == nil, event["subtype"] == nil, let user = event["user"] as? String, user != userID,
-              var text = event["text"] as? String, let channel = event["channel"] as? String else { return }
+        guard event["bot_id"] == nil, event["subtype"] == nil || event["subtype"] as? String == "file_share", let user = event["user"] as? String, user != userID,
+              let channel = event["channel"] as? String else { return }
+        var text = (event["text"] as? String) ?? ""
         if let id = (payload["event_id"] as? String) ?? (event["client_msg_id"] as? String) ?? (event["ts"] as? String) {
             if seen.contains(id) { return }
             seen.append(id); if seen.count > 500 { seen.removeFirst() }
         }
         text = text.replacingOccurrences(of: "<@\(userID)>", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        onMessage(ChannelMessage(senderID: user, senderName: user, chatID: channel, text: text))
+        // Pictures need the files:read scope; Slack wants the bot token on the download.
+        let media = ((event["files"] as? [[String: Any]]) ?? []).compactMap { file -> ChannelMedia? in
+            guard let url = file["url_private"] as? String, let type = file["mimetype"] as? String, type.hasPrefix("image/") else { return nil }
+            return ChannelMedia(url: url, contentType: type, name: (file["name"] as? String) ?? "Image", headers: ["Authorization": "Bearer " + botToken])
+        }
+        guard !text.isEmpty || !media.isEmpty else { return }
+        onMessage(ChannelMessage(senderID: user, senderName: user, chatID: channel, text: text, media: media))
     }
 
     func send(chat: String, text: String) async throws { _ = try await api("chat.postMessage", token: botToken, ["channel": chat, "text": text, "unfurl_links": false, "unfurl_media": false]) }
@@ -346,6 +382,8 @@ final class InkboxIMessageAdapter: ChannelAdapter {
     private let onMessage: (ChannelMessage) -> Void
     private var task: Task<Void, Never>?
     private var seen = Set<String>()
+    /// Conversations whose messages were passed on but not yet marked read. Approved people are marked read at once by `acknowledge`; the rest a little later.
+    private var unacked: [String: Date] = [:]
     private static let base = "https://inkbox.ai/api/v1/imessage"
 
     init(apiKey: String, onMessage: @escaping (ChannelMessage) -> Void) { self.apiKey = apiKey; self.onMessage = onMessage }
@@ -388,33 +426,46 @@ final class InkboxIMessageAdapter: ChannelAdapter {
 
     private func loop() async {
         while !Task.isCancelled {
-            var wait: UInt64 = 4
+            var wait: UInt64 = 2
             do {
-                var conversations = Set<String>()
                 for message in try await unread() {
                     guard let id = message["id"] as? String, !seen.contains(id) else { continue }
                     seen.insert(id)
+                    let media = ((message["media"] as? [[String: Any]]) ?? []).compactMap { item -> ChannelMedia? in
+                        guard let url = item["url"] as? String else { return nil }
+                        let type = (item["content_type"] as? String) ?? ""
+                        return (type.isEmpty || type.hasPrefix("image/")) ? ChannelMedia(url: url, contentType: type, name: "Photo") : nil
+                    }
                     // A sender that is not a phone number cannot be answered, so it is not passed on.
-                    guard let text = message["content"] as? String, !text.isEmpty, let number = message["remote_number"] as? String,
+                    let text = (message["content"] as? String) ?? ""
+                    guard !text.isEmpty || !media.isEmpty, let number = message["remote_number"] as? String,
                           number.range(of: #"^\+[1-9]\d{6,14}$"#, options: .regularExpression) != nil, let conversation = message["conversation_id"] as? String else { continue }
-                    conversations.insert(conversation)
-                    onMessage(ChannelMessage(senderID: number, senderName: number, chatID: conversation, text: text))
+                    unacked[conversation] = Date()
+                    onMessage(ChannelMessage(senderID: number, senderName: number, chatID: conversation, text: text, media: media))
                 }
-                // Marking read shows "Read" to the person and keeps these messages out of the next check.
-                for conversation in conversations { _ = try? await api("/mark-read", method: "POST", json: ["conversation_id": conversation]) }
+                // Messages from people nobody approved are marked read too, a little later, so they never clog the unread list.
+                for (conversation, at) in unacked where Date().timeIntervalSince(at) > 30 {
+                    unacked[conversation] = nil
+                    _ = try? await api("/mark-read", method: "POST", json: ["conversation_id": conversation])
+                }
                 if seen.count > 1000 { seen = Set(seen.suffix(500)) }
                 state = .init(state: "on", detail: "Connected to Inkbox")
             } catch let error as ChannelError {
                 if Task.isCancelled { return }
                 if error.code == 401 || error.code == 400 { state = .init(state: "error", detail: error.message); return }
                 state = .init(state: "error", detail: error.code == 429 ? error.message : "Reconnecting: \(error.message)")
-                wait = error.retryAfter.map { UInt64(min($0, 300)) } ?? 16
+                wait = error.retryAfter.map { UInt64(min($0, 300)) } ?? 8
             } catch {
                 if Task.isCancelled { return }
-                state = .init(state: "error", detail: "Reconnecting: \(error.localizedDescription)"); wait = 16
+                state = .init(state: "error", detail: "Reconnecting: \(error.localizedDescription)"); wait = 8
             }
             try? await Task.sleep(nanoseconds: wait * 1_000_000_000)
         }
+    }
+
+    func acknowledge(_ message: ChannelMessage) async {
+        unacked[message.chatID] = nil
+        _ = try? await api("/mark-read", method: "POST", json: ["conversation_id": message.chatID])
     }
 
     func send(chat: String, text: String) async throws {

@@ -271,14 +271,14 @@ struct MacConversationView: View {
                     .popover(isPresented: Binding(get: { dictation.note != nil }, set: { if !$0 { dictation.note = nil } })) {
                         Text(dictation.note ?? "").font(.callout).padding(14).frame(width: 280)
                     }
-                    if desktop.runningBots.contains(bot.id) {
+                    if desktop.runningBots.contains(bot.id), desktop.gateway != nil || (draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (desktop.attachments[bot.id] ?? []).isEmpty) {
                         Button { desktop.stop(botID: bot.id) } label: { Image(systemName: "stop.fill").foregroundStyle(ink).frame(width: 36, height: 36).background(tint, in: Circle()) }.buttonStyle(.plain).help("Stop response")
                     } else if !draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(desktop.attachments[bot.id] ?? []).isEmpty {
                         Button { sendMessage() } label: {
                             Image(systemName: "arrow.up").font(.system(size: 18, weight: .semibold)).foregroundStyle(ink)
                                 .frame(width: 36, height: 36).background(tint, in: Circle())
                         }.buttonStyle(.plain).disabled(desktop.needsProvider(bot))
-                            .help("Send message").accessibilityLabel("Send message")
+                            .help(desktop.runningBots.contains(bot.id) ? "Send (steers the Bot)" : "Send message").accessibilityLabel(desktop.runningBots.contains(bot.id) ? "Steer the Bot" : "Send message")
                     } else {
                         Button { startVoice() } label: {
                             Image(systemName: "waveform").font(.system(size: 17, weight: .semibold)).foregroundStyle(ink)
@@ -470,6 +470,12 @@ struct MacConversationView: View {
         let base = draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !base.isEmpty || !files.isEmpty else { return }
         let message = MacAppModel.attachmentMessage(base: base, names: files)
+        if desktop.runningBots.contains(bot.id), desktop.gateway == nil {
+            // Sending while the Bot works steers it: the running turn stops and the new message carries on from it.
+            desktop.steer(message, to: bot, app: app)
+            draft.wrappedValue = ""; desktop.attachments[bot.id] = []; desktop.flushDrafts(); composing = true
+            return
+        }
         if desktop.send(message, to: bot, app: app) {
             desktop.outgoingDrafts[bot.id] = RecoverableDraft(text: draft.wrappedValue, files: files)
             draft.wrappedValue = ""; desktop.attachments[bot.id] = []; desktop.flushDrafts(); composing = true

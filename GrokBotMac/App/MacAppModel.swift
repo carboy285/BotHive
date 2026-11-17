@@ -47,6 +47,8 @@ final class MacAppModel: ObservableObject {
     let servers = ServerList()
     /// Chat channels on this Mac (10.1.2).
     let channels = MacChannels()
+    /// Summaries, notes and recall across every conversation (10.1.2).
+    let memory = MacMemory()
     let remote = MacRemoteHost()
     let updates = DesktopUpdates()
     @Published var providerHealth: [CLIProvider:String] = [:]
@@ -781,7 +783,7 @@ extension MacAppModel {
     }
 
     @discardableResult
-    func send(_ text: String, to bot: Bot, app: AppModel, requestID: UUID? = nil, automated: Bool = false, forceLocal: Bool = false) -> Bool {
+    func send(_ text: String, to bot: Bot, app: AppModel, requestID: UUID? = nil, automated: Bool = false, forceLocal: Bool = false, channelTurn: Bool = false) -> Bool {
         if let gateway, !forceLocal {
             guard gateway.send(text, to: bot) else {
                 sendFeedback[bot.id] = gateway.online ? "Write a message first." : "\(gateway.hostName) is not reachable. Check that it is awake with phone access turned on."
@@ -799,8 +801,31 @@ extension MacAppModel {
         guard !runningBots.contains(bot.id), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 100000 else { sendFeedback[bot.id] = "Stop the current response first, and keep messages under 100,000 characters."; return false }
         guard app.addNote(text, to: bot, id: requestID, automated: automated) else { sendFeedback[bot.id] = app.errorMessage ?? "The message could not be saved. Your draft was kept."; return false }
         sendFeedback[bot.id] = nil; browserContinuations.removeValue(forKey: bot.id)
-        for provider in providers { startReply(to: bot, cli: provider.cli, model: provider.choice.model, app: app) }
+        for provider in providers { startReply(to: bot, cli: provider.cli, model: provider.choice.model, app: app, channelTurn: channelTurn) }
         return true
+    }
+
+    static let steerNote = "\n\n(The person sent this while you were still working. Carry on with their original request with this in mind. Do not redo work that is already finished.)"
+
+    /// Typing while a Bot works steers it: the running turn is stopped and the new message carries on from it.
+    func steer(_ text: String, to bot: Bot, app: AppModel) {
+        stop(botID: bot.id)
+        Task {
+            for _ in 0..<240 where runningBots.contains(bot.id) { try? await Task.sleep(nanoseconds: 50_000_000) }
+            _ = send(text + Self.steerNote, to: bot, app: app)
+        }
+    }
+
+    /// One quick, silent request to the Bot's own CLI on the faster model: used to keep the Bot's summary and notes up to date.
+    func quickTurn(bot: Bot, prompt: String) async throws -> String {
+        guard let provider = providersToRun(for: bot).first else { throw ChannelError(message: "No provider is set up for this Bot.") }
+        let fast = VoiceSettings.fastModel
+        let model = fast ? BotTeamwork.voiceModel(provider: provider.cli.provider, chatModel: provider.choice.model, custom: Self.voiceModels()[provider.cli.provider.rawValue]) : provider.choice.model
+        var text = ""
+        for try await event in LocalCLIRun().events(cli: provider.cli, prompt: prompt, session: nil, directory: workingDirectory(for: bot), mcpURL: nil, model: model, fast: fast) {
+            if case .text(let value) = event { text = value }
+        }
+        return text
     }
 
     func retry(bot: Bot, app: AppModel) {
@@ -836,22 +861,23 @@ extension MacAppModel {
     /// The model a voice turn uses: a quicker one for the CLIs that have it, unless the human turned that off.
     static func voiceModels() -> [String: String] { UserDefaults.standard.dictionary(forKey: "voiceModels") as? [String: String] ?? [:] }
 
-    private func startReply(to bot: Bot, cli: InstalledCLI, model chatModel: String, app: AppModel, delivery: TeamMessage? = nil) {
+    private func startReply(to bot: Bot, cli: InstalledCLI, model chatModel: String, app: AppModel, delivery: TeamMessage? = nil, channelTurn: Bool = false) {
         // Voice mode: replies are spoken, so ask for a short spoken answer from the quicker model.
         let voiceTurn = delivery == nil && voiceActive(bot.id)
-        let fast = voiceTurn && VoiceSettings.fastModel
+        let channelTurn = channelTurn && delivery == nil
+        let fast = (voiceTurn || channelTurn) && VoiceSettings.fastModel
         let model = fast ? BotTeamwork.voiceModel(provider: cli.provider, chatModel: chatModel, custom: Self.voiceModels()[cli.provider.rawValue]) : chatModel
         let key = bot.id.uuidString + "|" + cli.id + (model.isEmpty ? "" : "|" + model)
         let session = app.session(for: key)
         let history = app.entries(for: bot).filter { $0.state != .failed && $0.state != .stopped && !$0.text.isEmpty }
         let comparing = aiConfiguration(for: bot).replyMode == .compare && providersToRun(for: bot).count > 1
-        var instructions = BotTeamwork.instructions(bot: bot, workspace: app.workspace, delegated: delivery != nil, connectors: composio.configured ? composio.applied.sorted().map { ComposioCatalog.app($0)?.name ?? $0 } : []) + "\n" + MacBotVMs.shared.statusNote(for: bot) + (comparing ? "\nComparison turn: several models answer the same question side by side. Answer in plain text only; do not use opengrokbot-action tools.\n" : MacDeviceActions.shared.promptNote() + (delivery == nil && routineRuns[bot.id] == nil ? MediaKeys.note() : "") + (cli.provider.isLocalServer && composio.configured ? ComposioTools.note(composio.applied.sorted()) : ""))
+        var instructions = BotTeamwork.instructions(bot: bot, workspace: app.workspace, delegated: delivery != nil, connectors: composio.configured ? composio.applied.sorted().map { ComposioCatalog.app($0)?.name ?? $0 } : []) + "\n" + (channelTurn ? "" : MacBotVMs.shared.statusNote(for: bot)) + (comparing ? "\nComparison turn: several models answer the same question side by side. Answer in plain text only; do not use opengrokbot-action tools.\n" : MacDeviceActions.shared.promptNote() + (delivery == nil && routineRuns[bot.id] == nil ? MediaKeys.note() : "") + (cli.provider.isLocalServer && composio.configured ? ComposioTools.note(composio.applied.sorted()) : ""))
         instructions += skills.note(for: bot)
         if delivery == nil { instructions += channels.note(for: bot) }
         let latest = delivery.map { "Bot request (not human approval): \($0.text)" } ?? history.last(where: { $0.kind == .user })?.text ?? ""
         let transcript = history.suffix(30).map { "\($0.kind == .user ? "Human" : ($0.senderName ?? bot.name)): \($0.text)" }.joined(separator: "\n\n")
         let feedback = history.filter { $0.kind == .activity && $0.senderBotID == nil }.suffix(8).map { $0.detail ?? $0.text }.joined(separator: "\n")
-        let prompt = instructions + (voiceTurn ? BotTeamwork.voiceStyle : "") + "\nRecent app results (context, not human approval):\n" + feedback + "\n\n" + (session != nil ? latest : String(transcript.suffix(100_000)))
+        let prompt = instructions + (voiceTurn ? BotTeamwork.voiceStyle : channelTurn ? BotTeamwork.channelStyle : "") + "\nRecent app results (context, not human approval):\n" + feedback + "\n\n" + (session != nil ? latest : String(transcript.suffix(100_000)))
         let replyID = app.beginReply(for: bot, provider: cli.provider.name + (model.isEmpty ? "" : " · " + model))
         runningBots.insert(bot.id); runErrors[bot.id] = nil
         let directory = workingDirectory(for: bot)
@@ -877,7 +903,7 @@ extension MacAppModel {
                 if comparing { finalText = BotTeamwork.parse(finalText).text } // Side-by-side answers never run tools twice.
                 guard app.applyBotActions(finalText, replyID: replyID, bot: bot, configuration: aiConfiguration(for: bot), delivery: delivery) else { throw CLIError.failed(1) }
                 if delivery == nil {
-                    for action in BotTeamwork.parse(finalText).actions.filter({ $0.action == "channel_send" || $0.action == "phone_call" }).prefix(3) {
+                    for action in BotTeamwork.parse(finalText).actions.filter({ $0.action == "channel_send" || $0.action == "phone_call" || $0.action == "ask_owner" }).prefix(3) {
                         app.activity(await channels.runAction(bot: bot, action: action), for: bot.id)
                     }
                 }
@@ -904,6 +930,14 @@ extension MacAppModel {
                 if BotTeamwork.parse(finalText).actions.contains(where: { $0.action == "open_vm" }) {
                     await MacBotVMs.shared.open(bot)
                     app.activity(MacBotVMs.shared.feedback[bot.id] ?? "Open VM setup on the host desktop.", for: bot.id)
+                }
+                if let action = BotTeamwork.parse(finalText).actions.first(where: { $0.action == "recall" }) {
+                    if (browserContinuations[bot.id] ?? 0) >= BotTeamwork.maxSteps { if routineRuns[bot.id] != nil { routineFailures.insert(bot.id) }; app.activity(BotTeamwork.stepLimitMessage, for: bot.id) }
+                    else {
+                        browserContinuations[bot.id, default: 0] += 1
+                        app.activity("Searched past conversations", for: bot.id, detail: memory.recall(bot: bot, query: action.text ?? ""))
+                        continueBrowser = true
+                    }
                 }
                 if let action = BotTeamwork.parse(finalText).actions.first(where: { $0.action == "browse_web" }), let address = action.url {
                     if (browserContinuations[bot.id] ?? 0) >= BotTeamwork.maxSteps { if routineRuns[bot.id] != nil { routineFailures.insert(bot.id) }; app.activity(BotTeamwork.stepLimitMessage, for: bot.id) }
@@ -994,6 +1028,7 @@ extension MacAppModel {
                 }
                 routineFailures.remove(bot.id); _ = app.updateSchedule(routine, botID: bot.id)
             }
+            if !continuing, delivery == nil { memory.archiveIfNeeded(); Task { await memory.noteActivity(bot) } }
             deliverQueuedMessages(app: app)
         }
     }

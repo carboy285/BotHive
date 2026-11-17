@@ -170,7 +170,7 @@ struct RemoteChannels: Codable, Sendable, Equatable {
         var set: Bool { switch self { case .isSet(let value): return value; case .text(let value): return !value.isEmpty } }
     }
     struct State: Codable, Sendable, Equatable { var state: String; var detail: String? }
-    struct Approved: Codable, Sendable, Equatable, Identifiable { var id: String; var name: String }
+    struct Approved: Codable, Sendable, Equatable, Identifiable { var id: String; var name: String; var me: Bool? = nil }
     struct Waiting: Codable, Sendable, Equatable, Identifiable { var name: String; var code: String; var id: String { code } }
     struct Channel: Codable, Sendable, Equatable {
         var name: String
@@ -183,8 +183,28 @@ struct RemoteChannels: Codable, Sendable, Equatable {
     }
     struct BotChoice: Codable, Sendable, Equatable, Identifiable { var id: String; var name: String }
     struct Calls: Codable, Sendable, Equatable { var ready: Bool; var listening: Bool }
+    struct Settings: Codable, Sendable, Equatable {
+        var fast: Bool = true
+        var whenBusy: String = "steer"
+        var reachOn: String? = nil
+        var escalate: String = "call"
+        var escalateMinutes: Int = 10
+        var quietStart: Int = 22
+        var quietEnd: Int = 8
+    }
+    struct Voice: Codable, Sendable, Equatable, Identifiable { var id: String; var name: String; var available: Bool = true }
+    struct Question: Codable, Sendable, Equatable { var question: String }
+    struct Inkbox: Codable, Sendable, Equatable {
+        var ready: Bool = false
+        var state: State? = nil
+        var ownerNumber: String? = nil
+        var voices: [Voice] = []
+        var pendingAsk: Question? = nil
+    }
     var bot: String?
     var bots: [BotChoice]
     var channels: [String: Channel]
     var calls: Calls
+    var settings: Settings? = nil
+    var inkbox: Inkbox? = nil
 }

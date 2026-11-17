@@ -588,6 +588,7 @@
 				"89F3741D57D4DEE682D6D059",
 				"694E3235C23291CE5F8226AE",
 				"9A9D47169B7DABBA8CA9C4C7",
+				"9EC540AE20D1760BE2297E6C",
 			);
 			"name" = "GrokBotTests";
 			"sourceTree" = "<group>";
@@ -787,6 +788,9 @@
 				"D42190AB321F4E1303BCF0FF",
 				"1BC4BA355E16ACC96C4605D6",
 				"5B1865B379D5FA54681B5596",
+				"0BBB82474AFCB7A563BAE28F",
+				"B4EAA9C61A473DFC32E5DD2C",
+				"4597711323964635755C6348",
 				"F27D5222E8BB0FB1CB09860D",
 				"10844AF1F3A791297CC2033B",
 				"4EAE415170749847F2A6B68C",
@@ -1041,6 +1045,36 @@
 		"5A7C5FBC54E845C9F3F0A30A" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "5B1865B379D5FA54681B5596";
+		};
+		"0BBB82474AFCB7A563BAE28F" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Channels/MacInkboxVoice.swift";
+			"sourceTree" = "<group>";
+		};
+		"CF7DDAEEAAD2B000A5D51968" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "0BBB82474AFCB7A563BAE28F";
+		};
+		"B4EAA9C61A473DFC32E5DD2C" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Channels/ChannelMedia.swift";
+			"sourceTree" = "<group>";
+		};
+		"AA746DF0FEC992FE4C8B5DA4" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "B4EAA9C61A473DFC32E5DD2C";
+		};
+		"4597711323964635755C6348" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Channels/MacMemory.swift";
+			"sourceTree" = "<group>";
+		};
+		"EE4D44C4EC6FD2F495BB5D93" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "4597711323964635755C6348";
 		};
 		"F27D5222E8BB0FB1CB09860D" = {
 			"isa" = "PBXFileReference";
@@ -1413,6 +1447,9 @@
 				"A00D89FA4A8867714FD4EA32",
 				"11C6327260FC7C9DA9A9039B",
 				"5A7C5FBC54E845C9F3F0A30A",
+				"CF7DDAEEAAD2B000A5D51968",
+				"AA746DF0FEC992FE4C8B5DA4",
+				"EE4D44C4EC6FD2F495BB5D93",
 				"DC96C4F48B2BA02149FAE6E8",
 				"D7D1AD66ED2AF34B713E3484",
 				"F094F7C77B5D7483E96598F6",
@@ -1577,6 +1614,7 @@
 				"3DA38813C42021601353A57A",
 				"BAD8D631543D3EB58EEFD1D8",
 				"75D6EE2DF233A1F1A84D4AB6",
+				"F09873ACA7CD423A140EB73D",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -2761,6 +2799,16 @@
 		"75D6EE2DF233A1F1A84D4AB6" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "9A9D47169B7DABBA8CA9C4C7";
+		};
+		"9EC540AE20D1760BE2297E6C" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotTests/MacMemoryTests.swift";
+			"sourceTree" = "<group>";
+		};
+		"F09873ACA7CD423A140EB73D" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "9EC540AE20D1760BE2297E6C";
 		};
 	};
 	"rootObject" = "244210E48437B6556980A702";

@@ -44,6 +44,7 @@ struct MacSettingsView: View {
                         case .headsUps: MacHeadsUpsSettings()
                         case .routines: MacRoutinesSettings()
                         case .skills: MacSkillsSettings()
+                        case .servers: MacServersSettings()
                         case .computer: computer
                         case .permissions: unavailable(title: "Your CLI keeps its permissions", detail: "Codex runs with read-only workspace access. Other CLIs keep their own configured permissions. This app does not add approval-bypass flags or auto-approve tools.", icon: "shield")
                         case .apiKeys: VStack(alignment: .leading, spacing: 28) { MacAPIKeysView(); MacMediaKeysView() }

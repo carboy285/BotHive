@@ -15,7 +15,7 @@ enum MacPanel: String, Identifiable {
 }
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general = "General", headsUps = "Heads-ups", routines = "Routines", skills = "Skills", computer = "Computer", permissions = "Permissions", apiKeys = "API Keys", secureLogins = "Secure Logins", vault = "Vault", voice = "Voice", localModels = "Local Models", usage = "Usage & Billing", updates = "Updates"
+    case general = "General", headsUps = "Heads-ups", routines = "Routines", skills = "Skills", servers = "Servers", computer = "Computer", permissions = "Permissions", apiKeys = "API Keys", secureLogins = "Secure Logins", vault = "Vault", voice = "Voice", localModels = "Local Models", usage = "Usage & Billing", updates = "Updates"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -23,6 +23,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .headsUps: "sparkles"
         case .routines: "clock.arrow.circlepath"
         case .skills: "text.book.closed"
+        case .servers: "network"
         case .computer: "desktopcomputer"
         case .permissions: "shield"
         case .apiKeys: "key"
@@ -41,6 +42,8 @@ final class MacAppModel: ObservableObject {
     let composio = ComposioModel()
     /// Skills (10.1): instruction packs Bots can follow.
     let skills = MacSkillLibrary()
+    /// Other Bothive servers to open by address (10.1.1).
+    let servers = ServerList()
     let remote = MacRemoteHost()
     let updates = DesktopUpdates()
     @Published var providerHealth: [CLIProvider:String] = [:]
@@ -49,6 +52,8 @@ final class MacAppModel: ObservableObject {
     /// A message to scroll to and highlight (search results and pinned messages, 0.9.5).
     @Published var jumpTo: UUID?
     @Published var panel: MacPanel?
+    /// A Bot to start the New group chat screen with (set from a Bot's own panel).
+    var groupSeed: UUID?
     @Published var settingsTab = SettingsTab.general
     @Published var showSearch = false
     let teach = MacTeachRecorder()
@@ -386,6 +391,17 @@ final class MacAppModel: ObservableObject {
             runningBots = Set(runOwners.values)
             selectedID = nil; selectFirst(in: localApp ?? app)
         }
+    }
+
+    /// Shows a server used by its address in the main window, exactly like another computer on this account (10.1.1).
+    func openServer(_ client: DirectServerClient, app: AppModel) {
+        gatewayRunning = nil
+        localApp?.search = ""; gateway?.model.search = ""; showSearch = false
+        let next = gateway ?? MacGateway(source: remote.account)
+        gateway = next; next.connectServer(client)
+        selectedID = nil; showBotInspector = false; panel = nil
+        runningBots = next.running
+        gatewayRunning = next.remote.$running.sink { [weak self] value in Task { @MainActor [weak self] in if self?.gateway != nil { self?.runningBots = value } } }
     }
 
     func selectFirst(in app: AppModel) {

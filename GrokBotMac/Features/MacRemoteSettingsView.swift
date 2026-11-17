@@ -8,10 +8,15 @@ struct MacRemoteSettingsView: View {
     @State private var problem: String?
     @State private var drafts: [String: String] = [:]
     @State private var feedback: String?
+    @State private var installFeedback: String?
+    @State private var copying = false
 
     private let keyProviders: [CLIProvider] = CLIProvider.allCases.filter { ProviderAPIKeys.info(for: $0) != nil }
 
     private var name: String { desktop.gateway?.hostName ?? "the other computer" }
+
+    /// Keys, CLIs and settings can be changed here when that computer shares them, or when the server's owner turned on remote administration.
+    private func canChange(_ s: RemoteHostSettings) -> Bool { s.sharing || (s.admin == true && desktop.gateway?.usingServer == true) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -50,12 +55,36 @@ struct MacRemoteSettingsView: View {
             row("System", s.platform == "windows" ? "Windows" : "Mac")
             row("Bothive version", s.appVersion)
             row("Share keys and connectors", s.sharing ? "On" : "Off")
-            if !s.sharing { Text("Turn it on at \(s.hostName) (Settings → Computer on Windows, the Computers screen on Mac) before keys can be changed from here.").font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
+            if s.admin == true { row("Remote administration", "On") }
+            if !canChange(s) { Text("Turn on \u{201C}Let apps change settings\u{201D} in Web access at \(s.hostName) (Docker: OPENGROKBOT_WEB_ADMIN=1), or the sharing switch on a computer in your account, before keys and CLIs can be changed from here.").font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
         }
         card {
             Text("AI CLIs on \(s.hostName)").font(.system(size: 16, weight: .medium))
-            if s.providers.isEmpty { Text("No AI CLI is installed there yet. Install one on \(s.hostName).").font(.system(size: 13)).foregroundStyle(MacTheme.secondary) }
-            ForEach(s.providers) { provider in row(provider.provider.name + (provider.provider == s.defaultProvider ? " · default" : ""), "version " + provider.version) }
+            let installable = s.installable ?? []
+            if installable.isEmpty {
+                if s.providers.isEmpty { Text("No AI CLI is installed there yet.").font(.system(size: 13)).foregroundStyle(MacTheme.secondary) }
+                ForEach(s.providers) { provider in row(provider.provider.name + (provider.provider == s.defaultProvider ? " \u{00B7} default" : ""), "version " + provider.version) }
+            }
+            ForEach(installable) { item in
+                let installed = s.providers.first { $0.provider.rawValue == item.id }
+                let isDefault = s.defaultProvider?.rawValue == item.id
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name + (isDefault ? " \u{00B7} default" : "")).font(.system(size: 14))
+                        Text(cliStatus(item, installed: installed)).font(.system(size: 12)).foregroundStyle(item.state == "failed" ? Color.orange : MacTheme.secondary).lineLimit(3)
+                    }
+                    Spacer()
+                    if installed == nil && item.state != "installing" {
+                        MacPillButton(title: item.state == "failed" ? "Try again" : "Install", prominent: true) { Task { await install(item) } }.disabled(!canChange(s))
+                    } else if item.state == "installing" {
+                        ProgressView().controlSize(.small)
+                    } else if installed != nil && !isDefault {
+                        MacPillButton(title: "Make default") { Task { await makeDefault(item) } }.disabled(!canChange(s))
+                    }
+                }
+            }
+            if let installFeedback { Text(installFeedback).font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
+            Text("Install downloads the CLI onto \(s.hostName) for you, so there are no commands to type there. To use an account instead of an API key, sign in to that CLI once on \(s.hostName); keys work from here.").font(.system(size: 12)).lineSpacing(3).foregroundStyle(MacTheme.secondary)
         }
         card {
             Text("API keys on \(s.hostName)").font(.system(size: 16, weight: .medium))
@@ -66,8 +95,8 @@ struct MacRemoteSettingsView: View {
                     Text(provider.name).frame(width: 110, alignment: .leading)
                     Text(isSet ? "Key saved" : "Not set").font(.system(size: 12)).foregroundStyle(isSet ? Color.green : MacTheme.secondary).frame(width: 70, alignment: .leading)
                     SecureField("Paste a key", text: Binding(get: { drafts[provider.rawValue] ?? "" }, set: { drafts[provider.rawValue] = $0 })).textFieldStyle(.roundedBorder)
-                    MacPillButton(title: "Save") { Task { await save(provider, key: drafts[provider.rawValue] ?? "") } }.disabled(!s.sharing || (drafts[provider.rawValue] ?? "").isEmpty)
-                    if isSet { MacPillButton(title: "Remove") { Task { await save(provider, key: "") } }.disabled(!s.sharing) }
+                    MacPillButton(title: "Save") { Task { await save(provider, key: drafts[provider.rawValue] ?? "") } }.disabled(!canChange(s) || (drafts[provider.rawValue] ?? "").isEmpty)
+                    if isSet { MacPillButton(title: "Remove") { Task { await save(provider, key: "") } }.disabled(!canChange(s)) }
                 }
             }
             if let feedback { Text(feedback).font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
@@ -83,6 +112,12 @@ struct MacRemoteSettingsView: View {
             Text("To change connectors, use Connect apps on \(s.hostName), or copy yours with the Computers screen.").font(.system(size: 12)).foregroundStyle(MacTheme.secondary)
         }
         card {
+            Text("Copy from this Mac").font(.system(size: 16, weight: .medium))
+            Text("Sends this Mac\u{2019}s API keys, voice keys and connector project to \(s.hostName) in one step, so it uses the same accounts.").font(.system(size: 12)).lineSpacing(3).foregroundStyle(MacTheme.secondary)
+            MacPillButton(title: copying ? "Copying\u{2026}" : "Copy keys and connectors here") { Task { await copyAll() } }.disabled(copying || !canChange(s))
+            if !SettingsBundle.sharingAllowed { Text("Turn on \u{201C}Share keys and connectors\u{201D} in the Computers screen on this Mac first.").font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
+        }
+        card {
             Text("Usage").font(.system(size: 16, weight: .medium))
             Text("\(s.hostName) doesn’t report usage to other computers yet. Open it directly to see its usage.").font(.system(size: 13)).foregroundStyle(MacTheme.secondary)
         }
@@ -90,6 +125,45 @@ struct MacRemoteSettingsView: View {
 
     private func row(_ label: String, _ value: String) -> some View {
         HStack { Text(label).foregroundStyle(MacTheme.secondary); Spacer(); Text(value).textSelection(.enabled) }.font(.system(size: 13))
+    }
+
+    private func cliStatus(_ item: RemoteHostSettings.Installable, installed: RemoteProvider?) -> String {
+        if let installed { return "Installed \u{00B7} version " + installed.version }
+        switch item.state {
+        case "installing": return item.message ?? "Installing\u{2026}"
+        case "failed": return item.message ?? "The install failed."
+        default: return "Not installed"
+        }
+    }
+
+    private func install(_ item: RemoteHostSettings.Installable) async {
+        guard let gateway = desktop.gateway else { return }
+        installFeedback = nil
+        if await gateway.installCLI(item.id) {
+            for _ in 0..<200 {
+                settings = try? await gateway.hostSettings()
+                let current = settings?.installable?.first { $0.id == item.id }
+                if current?.state != "installing" && current?.state != nil { break }
+                if settings?.providers.contains(where: { $0.provider.rawValue == item.id }) == true { break }
+                try? await Task.sleep(for: .seconds(2))
+            }
+        } else { installFeedback = gateway.remote.error ?? "The server did not start the install." }
+    }
+
+    private func makeDefault(_ item: RemoteHostSettings.Installable) async {
+        guard let gateway = desktop.gateway else { return }
+        if await gateway.chooseCLI(item.id) { settings = try? await gateway.hostSettings() } else { installFeedback = gateway.remote.error }
+    }
+
+    private func copyAll() async {
+        guard let gateway = desktop.gateway else { return }
+        guard SettingsBundle.sharingAllowed else { feedback = SettingsBundle.sharingOffMessage; return }
+        copying = true; defer { copying = false }
+        do {
+            try await gateway.deliverSettingsHere(try desktop.makeSettingsBundle().encoded())
+            feedback = "Copied this Mac\u{2019}s keys and connectors to \(name)."
+            settings = try? await gateway.hostSettings()
+        } catch { feedback = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
     }
 
     private func load() async {

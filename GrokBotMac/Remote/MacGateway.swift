@@ -18,9 +18,16 @@ final class MacGateway: ObservableObject {
             account: CloudAccount(kind: "controller", secrets: KeychainSecretStore(service: "org.opengrokbot.mac.mirror-identity")),
             secrets: KeychainSecretStore(service: "org.opengrokbot.mac.mirror-selection"))
         remote.account.useAccount(from: source)
+        remote.autoSelectsHost = false
         remote.attach(model)
         remote.setActive(true)
         remote.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
+    }
+
+    /// Views a server by its address instead of a computer on this account (10.1.1). Not remembered across launches.
+    func connectServer(_ client: DirectServerClient) {
+        remote.persistsServer = false
+        remote.connectServer(client)
     }
 
     func close() { remote.setActive(false) }
@@ -75,6 +82,11 @@ final class MacGateway: ObservableObject {
     /// The Bot as a package, from the computer being viewed.
     func package(_ bot: Bot) async throws -> Data { try await remote.botPackage(bot) }
     func settingsBundle() async throws -> Data { try await remote.settingsBundle() }
+    func installCLI(_ provider: String) async -> Bool { await remote.installCLI(provider) }
+    func chooseCLI(_ provider: String) async -> Bool { await remote.chooseCLI(provider) }
+    /// "Copy all": sends this Mac's keys and connectors to the server being used by its address.
+    func deliverSettingsHere(_ data: Data) async throws { try await remote.importSettings(data) }
+    var usingServer: Bool { remote.usingServer }
     func deliverSettings(_ data: Data, to host: CloudDevice) async throws { try await remote.importSettings(data, to: host) }
     /// Sends a package to a computer on this account.
     func deliver(_ data: Data, to host: CloudDevice) async throws { try await remote.importPackage(data, to: host) }

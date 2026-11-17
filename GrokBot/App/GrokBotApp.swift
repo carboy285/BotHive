@@ -13,11 +13,11 @@ struct GrokBotApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model).environmentObject(remote)
-                .onAppear { remote.attach(model); UNUserNotificationCenter.current().delegate = NotificationPresenter.shared }
+                .onAppear { remote.attach(model); UNUserNotificationCenter.current().delegate = NotificationPresenter.shared; BackgroundCheck.prepare() }
                 .onOpenURL { remote.receive($0) }
                 .onChange(of: phase) { _, phase in
                     if phase == .active { remote.setActive(true) }
-                    else if phase == .background { remote.setActive(false) }
+                    else if phase == .background { remote.setActive(false); BackgroundCheck.schedule() }
                 }
                 .sheet(isPresented: $remote.showConnection) { ConnectDesktopView().environmentObject(remote) }
                 .alert("Desktop request failed", isPresented: Binding(get: { remote.error != nil && !remote.showConnection }, set: { if !$0 { remote.error = nil } })) { Button("OK") { remote.error = nil } } message: { Text(remote.error ?? "") }
@@ -27,6 +27,7 @@ struct GrokBotApp: App {
                     Button("OK") { model.errorMessage = nil }
                 } message: { Text(model.errorMessage ?? "") }
         }
+        .backgroundTask(.appRefresh(BackgroundCheck.identifier)) { await BackgroundCheck.handle() }
     }
 }
 

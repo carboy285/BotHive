@@ -11,6 +11,7 @@ struct RootView: View {
     @StateObject private var voiceHub = PhoneVoiceHub()
     @State private var settings = false
     @State private var createBot = false
+    @State private var showServers = false
     @State private var filter = RosterFilter.all
     @State private var deleting: Bot?
     @FocusState private var searching: Bool
@@ -148,6 +149,8 @@ struct RootView: View {
             .onChange(of: phase) { _, new in if new == .active { sendPendingAsk() } }
             .fullScreenCover(isPresented: Binding(get: { !seenWelcome }, set: { if !$0 { seenWelcome = true } })) { OnboardingFlow(account: remote.account) { seenWelcome = true }.environmentObject(remote) }
             .sheet(isPresented: $createBot) { CreateBotView() }
+            .onChange(of: remote.serverName) { _, name in if name != nil { showServers = false } }
+            .sheet(isPresented: $showServers) { NavigationStack { ServersPage().toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { showServers = false } } } } }
             .sheet(item: $inspectedBot) { bot in
                 NavigationStack {
                     RemoteBotDetailView(botID: bot.id)
@@ -363,6 +366,9 @@ struct RootView: View {
                             .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 22).padding(.vertical, 14).glassChrome(in: Capsule())
                     }.buttonStyle(.plain)
+                    Button { showServers = true } label: {
+                        Text("Use a server by address").font(.subheadline.weight(.medium)).padding(.vertical, 8)
+                    }.buttonStyle(.plain).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                     Text("Your computer runs the work. Your iPhone keeps you connected.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)

@@ -118,7 +118,8 @@ class CloudHost {
     this.devices = devices; this.lastHeartbeat = new Date().toISOString(); this.changed(this.status());
   }
   async ack(packet) { await this.request('/rest/v1/rpc/opengrok_ack', { device_id: this.local.id, packet_id: packet.id, packet_kind: packet.kind }); }
-  async respond(request) {
+  /** @param {{method:string,target:string,body?:string}} request @param {{direct?:boolean}} [options] direct: a request that came straight from an app by address, with no account or relay (10.1.1). */
+  async respond(request, { direct = false } = {}) {
     if (!request || !['GET', 'POST'].includes(request.method) || typeof request.target !== 'string' || request.target.length > 2048 || !request.target.startsWith('/') || request.target.startsWith('//')) throw new Error('Invalid phone request.');
     const url = new URL(request.target, BASE);
     if (request.method === 'GET') {
@@ -137,6 +138,13 @@ class CloudHost {
     if (typeof request.body !== 'string' || request.body.length > 4700000) throw new Error('Invalid command size.');
     const bytes = Buffer.from(request.body, 'base64'); if (bytes.length > 3500000) throw new Error('Command too large.');
     const command = JSON.parse(bytes.toString('utf8')); if (!uuid(command.requestID)) throw new Error('Invalid command.');
+    command.direct = direct === true; // set here, never taken from the request: only a signed-in app talking straight to this server is 'direct'
+    if (direct) {
+      // Direct requests are sent once over a connection that reports its own failures, so a short in-memory list is enough to ignore a repeat.
+      const seen = (this.directReceipts ||= []), id = lower(command.requestID);
+      if (!seen.includes(id)) { await this.execute(command); this.directReceipts = [...seen.slice(-255), id]; }
+      return this.response(200, { accepted: true });
+    }
     const key = lower(this.data.session.user.id) + '|' + lower(command.requestID);
     if (!this.data.receipts.includes(key)) { await this.execute(command); this.data.receipts = [...this.data.receipts.slice(-255), key]; await this.persist(); }
     return this.response(200, { accepted: true });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Tray, Menu, Notification, protocol, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Tray, Menu, Notification, protocol, globalShortcut, net } = require('electron');
 // 0.9.3: the local voice engine loads models and its runtime through this scheme (see local-voice.cjs).
 protocol.registerSchemesAsPrivileged([{ scheme: 'ogb-models', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 const { readFile, writeFile, mkdir, rename, readdir, lstat, stat, copyFile } = require('node:fs/promises');
@@ -8,7 +8,9 @@ const { randomUUID } = require('node:crypto');
 const { validateWorkspace, previewWorkspace, migrateWorkspace } = require('./workspace.cjs');
 const ruleSet = require('./approval-rules.cjs');
 const skillsModule = require('./skills.cjs');
-const shareCode = require('./share-code.cjs'); // 10.1: instruction packs a Bot can follow
+const shareCode = require('./share-code.cjs');
+const serversModule = require('./servers.cjs');
+let serverStore = serversModule.load(null); // 10.1: instruction packs a Bot can follow
 let skillStore = skillsModule.loadStore(null);
 
 if (process.env.OPENGROKBOT_DATA_DIR) app.setPath('userData', process.env.OPENGROKBOT_DATA_DIR); // where to keep chats and settings, e.g. a Docker volume
@@ -32,16 +34,32 @@ const proactive = require('./proactive.cjs');
 const media = require('./media.cjs');
 const composioTools = require('./composio-tools.cjs');
 const webAccessModule = require('./web-access.cjs');
+// ---------- Servers (10.1.1): this window can use a Bothive that runs somewhere else ----------
+const cliInstallModule = require('./cli-install.cjs');
+let cliInstaller;
+function makeCliInstaller(){
+  const base=app.getPath('userData');
+  process.env.OPENGROKBOT_CLI_BIN=cliInstallModule.binDirectory(base);
+  cliInstaller=new cliInstallModule.Installer({base,onDone:async()=>{installed=await cli.discover(settings.overrides);if(!installed.some(x=>x.id===settings.selected))settings.selected=installed[0]?.id||'';await saveSettings();notify();}});
+}
+const remoteBackendModule = require('./remote-backend.cjs');
+const remoteBackend = new remoteBackendModule.RemoteBackend({
+  fetchImpl: (url, options) => net.fetch(url, options),
+  onEvent: (channel, value) => { if (window && !window.isDestroyed()) window.webContents.send(channel, value); },
+  onChange: () => { if (window && !window.isDestroyed()) window.webContents.reload(); },
+});
 // ---------- Web access (0.9.7): this app from another device's browser ----------
 const webAccess = new webAccessModule.WebAccess({
- invoke:async(channel,args)=>{const callback=webAccessModule.INVOKE.has(channel)&&channelHandlers.get(channel);return callback?runHandler(callback,args):{ok:false,error:'Not available over web access.'};},
- config:()=>({username:settings?.webAccess?.username,passwordHash:settings?.webAccess?.passwordHash}),
+ invoke:async(channel,args,context={})=>{const callback=(webAccessModule.INVOKE.has(channel)||(context.admin===true&&webAccessModule.ADMIN_INVOKE.has(channel)))&&channelHandlers.get(channel);return callback?runHandler(callback,args):{ok:false,error:'Not available over web access.'};},
+ config:()=>({username:settings?.webAccess?.username,passwordHash:settings?.webAccess?.passwordHash,admin:settings?.webAccess?.admin===true}),
+ hostName:()=>require('node:os').hostname(),
+ appRequest:request=>cloud.respond(request,{direct:true}),
  rendererDir:path.resolve(__dirname,'../renderer'),preloadFile:path.join(__dirname,'preload.cjs')
 });
 let webState={address:null,urls:[],error:null};
 const WEB_PORT=8765;
 function lanAddresses(port){return Object.values(require('node:os').networkInterfaces()).flat().filter(x=>x&&x.family==='IPv4'&&!x.internal&&require('./remote-host.cjs').localHost(x.address)).map(x=>`http://${x.address}:${port}`);}
-function webStatus(){const config=settings?.webAccess||{};return {enabled:!!config.enabled&&webAccess.active,configured:!!config.passwordHash,username:config.username||'',mode:config.mode==='tailscale'?'tailscale':'wifi',urls:webState.urls,error:webState.error};}
+function webStatus(){const config=settings?.webAccess||{};return {admin:config.admin===true,enabled:!!config.enabled&&webAccess.active,configured:!!config.passwordHash,username:config.username||'',mode:config.mode==='tailscale'?'tailscale':'wifi',urls:webState.urls,error:webState.error};}
 async function applyWebAccess(){
  const config=settings?.webAccess||{};
  if(webState.address){await require('./tailscale.cjs').remove(WEB_PORT,webState.address,false).catch(()=>{});webState.address=null;}
@@ -82,6 +100,7 @@ function handle(name, callback) {
   channelHandlers.set(name,callback);
   ipcMain.handle(name, async (event, ...args) => {
     if (!authorized(event) || event.sender === mirrorWindow?.webContents && !name.startsWith('mirror:')) return { ok: false, error: 'Untrusted request' };
+    if (remoteBackend.active && (webAccessModule.INVOKE.has(name) || webAccessModule.ADMIN_INVOKE.has(name))) return remoteBackend.invoke(name, args);
     return runHandler(callback,args);
   });
 }
@@ -110,7 +129,9 @@ async function ensureState(){
 }
 async function initializeState(){
   const loaded=await loadJSON('preview-workspace.json',previewWorkspace());validateWorkspace(loaded);
+  if(!cliInstaller)makeCliInstaller();
   skillStore=skillsModule.loadStore(await loadJSON('skills.json',null));
+  serverStore=serversModule.load(await loadJSON('servers.json',null));
   if(loaded.version===1)await atomicJSON('legacy-workspace-backup.json',loaded);
   const migrated=migrateWorkspace(loaded);
   for(const entry of migrated.entries)if(entry.state==='streaming')entry.state='stopped';
@@ -129,7 +150,7 @@ function composioStatus(){return {configured:!!composioConfiguration,toolkits:co
 // Every change is sent at once, except streamed reply text: that changes many times a second and each message carries the whole
 // workspace, so streamed text is sent at most about twelve times a second. Any other change sends immediately and includes the latest text.
 let notifyTimer=null,lastNotify=0;
-function sendNotify(){clearTimeout(notifyTimer);notifyTimer=null;lastNotify=Date.now();if(window&&!window.isDestroyed())window.webContents.send('workspace:changed',{workspace:state,running:[...active.keys()]});}
+function sendNotify(){clearTimeout(notifyTimer);notifyTimer=null;if(remoteBackend.active)return;lastNotify=Date.now();if(window&&!window.isDestroyed())window.webContents.send('workspace:changed',{workspace:state,running:[...active.keys()]});}
 function notify(){revision=randomUUID();sendNotify();}
 function notifyStreaming(){revision=randomUUID();if(notifyTimer)return;const wait=80-(Date.now()-lastNotify);if(wait<=0)sendNotify();else notifyTimer=setTimeout(sendNotify,wait);}
 async function cliKeyEnv(provider){
@@ -435,7 +456,8 @@ async function hostSettings(){
  const defaultProvider=selectedCLI()?.provider;
  return {hostName:require('node:os').hostname(),platform:'windows',appVersion:app.getVersion(),providers:installed.map(x=>({provider:x.provider,version:x.version})),...(defaultProvider?{defaultProvider}:{}),
   apiKeys:Object.fromEntries([...providerKeys.PROVIDERS].map(p=>[p,!!cli[p]])),voiceKeys:Object.fromEntries([...settingsBundles.VOICE_PROVIDERS].map(p=>[p,!!voiceK[p]])),
-  connectors:{configured:!!composioConfiguration,toolkits:composioConfiguration?.toolkits||[]},sharing:!!settings.shareKeys};
+  connectors:{configured:!!composioConfiguration,toolkits:composioConfiguration?.toolkits||[]},sharing:!!settings.shareKeys,admin:settings.webAccess?.admin===true,
+  installable:cliInstallModule.catalog().map(item=>({id:item.id,name:item.name,guide:item.guide,installed:installed.some(x=>x.provider===item.id),...(cliInstaller.status()[item.id]||{})}))};
 }
 /** This computer's keys and connector settings, for copying to another computer on the account (only while sharing is on). */
 async function exportBundle(){
@@ -472,15 +494,27 @@ async function applyBundle(raw){
 async function remoteCommand(command){
  if(state.entries.some(x=>x.id.toLowerCase()===command.requestID.toLowerCase()))return;
  const bot=state.bots.find(x=>x.id.toLowerCase()===String(command.botID).toLowerCase());
+ // Changing keys, settings or installed software from another device needs the owner's say-so: the old sharing switch for phones on the
+ // account, or remote administration for an app signed in straight to this server (10.1.1).
+ const remoteChangesAllowed=Boolean(settings?.shareKeys||(command.direct===true&&settings?.webAccess?.admin===true));
+ if(command.action==='install_cli'){
+  if(!remoteChangesAllowed)throw new PublicError('Turn on remote administration for this server first (Settings → Web access → Let apps change settings).');
+  try{cliInstaller.start(command.name);}catch(error){throw new PublicError(error.message);}return;
+ }
+ if(command.action==='choose_cli'){
+  if(!remoteChangesAllowed)throw new PublicError('Turn on remote administration for this server first (Settings → Web access → Let apps change settings).');
+  const found=installed.find(x=>x.provider===command.name);if(!found)throw new PublicError('Install that CLI first.');
+  settings.selected=found.id;await saveSettings();notify();return;
+ }
  if(command.action==='set_api_key'){
-  if(!settings?.shareKeys)throw new PublicError('Turn on “Share keys and connectors” on this computer first (Settings → Computer).');
+  if(!remoteChangesAllowed)throw new PublicError('Turn on “Share keys and connectors” on this computer first (Settings → Computer).');
   if(!providerKeys.PROVIDERS.has(command.name))throw new PublicError('Choose a provider that uses an API key.');
   requireVault();const keys=await loadJSON('cli-keys.encrypted.json',{});const text=String(command.text??'').trim();
   if(!text)delete keys[command.name];else{const key=providerKeys.normalized(text);if(!key)throw new PublicError('That key does not look right (no spaces, 8 to 512 characters).');keys[command.name]=safeStorage.encryptString(key).toString('base64');}
   await atomicJSON('cli-keys.encrypted.json',keys);return;
  }
  if(command.action==='import_settings'){
-  if(!settings?.shareKeys)throw new PublicError(settingsBundles.SHARING_OFF);
+  if(!remoteChangesAllowed)throw new PublicError(settingsBundles.SHARING_OFF);
   if(typeof command.package!=='string'||command.package.length>400000)throw new PublicError('No settings were sent.');
   let raw;try{raw=JSON.parse(Buffer.from(command.package,'base64').toString('utf8'));}catch{throw new PublicError('That settings bundle could not be read.');}
   await applyBundle(raw);notify();return;
@@ -746,6 +780,29 @@ function configureIPC() {
   if(added.length)await saveSkills();
   await atomicJSON('preview-workspace.json',state);notify();return {id:bot.id,name:bot.name,skills:added.length};});
 
+ handle('cli:install',async id=>{await ensureState();try{return cliInstaller.start(id);}catch(error){throw new PublicError(error.message);}});
+ handle('cli:install-status',async()=>{await ensureState();return {catalog:cliInstallModule.catalog().map(x=>({...x,installed:installed.some(i=>i.provider===x.id)})),status:cliInstaller.status()};});
+ // ---- Servers (10.1.1): use a Bothive that runs somewhere else, by its Tailscale or IP address ----
+ const serverError=error=>{throw error instanceof PublicError?error:new PublicError(error?.message||'That server could not be used.');};
+ const saveServers=()=>atomicJSON('servers.json',serverStore);
+ const serverFailed=(host)=>'Could not reach '+host+'. Check the address, that Bothive is running there with Web access on, and that Tailscale is on if you use it.';
+ handle('servers:list',async()=>serverStore.servers.map(x=>({id:x.id,name:x.name,url:x.url})));
+ handle('servers:test',async address=>{let found;try{found=serversModule.normalize(address);}catch(error){serverError(error);}
+  try{const response=await net.fetch(found.origin+'/login',{signal:AbortSignal.timeout(8000),redirect:'manual'});const text=await response.text();
+   if(response.status===200&&text.includes('Bothive')&&text.includes('name="password"'))return {url:found.origin,message:'Found a Bothive server. You sign in on its own page when it opens.'};
+   throw new PublicError('That address answered, but it is not a Bothive server with Web access turned on.');}catch(error){if(error instanceof PublicError)throw error;throw new PublicError(serverFailed(found.host));}});
+ handle('servers:add',async(name,address)=>{let found;try{found=serversModule.normalize(address);}catch(error){serverError(error);}
+  if(serverStore.servers.length>=serversModule.MAX_SERVERS)throw new PublicError('You have the most servers this app keeps ('+serversModule.MAX_SERVERS+'). Remove one first.');
+  if(serverStore.servers.some(x=>x.url===found.origin))throw new PublicError('That server is already in your list.');
+  const entry={id:randomUUID(),name:serversModule.cleanName(name,found.host),url:found.origin};serverStore.servers.push(entry);await saveServers();return entry;});
+ handle('servers:remove',async id=>{const entry=serverStore.servers.find(x=>x.id===id);if(!entry)throw new PublicError('Unknown server');
+  if(remoteBackend.active&&remoteBackend.status().url===entry.url)remoteBackend.disconnect();
+  serverStore.servers=serverStore.servers.filter(x=>x.id!==id);await saveServers();return true;});
+ handle('servers:connect',async(id,username,password)=>{const entry=serverStore.servers.find(x=>x.id===id);if(!entry)throw new PublicError('Unknown server');
+  try{return await remoteBackend.connect(entry.url,username,password,entry.name);}catch(error){throw new PublicError(error.message);}});
+ handle('servers:status',async()=>remoteBackend.status());
+ handle('servers:disconnect',async()=>{remoteBackend.disconnect();return remoteBackend.status();});
+
  // ---- Routines screen (10.1): create, edit and run now. Pause and delete are the handlers below. ----
  const routineBot=botID=>{const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Routines belong to an individual Bot.');return bot;};
  const routineTime=at=>{if(typeof at!=='string'||!/(Z|[+-]\d\d:\d\d)$/.test(at)||!Number.isFinite(Date.parse(at)))throw new PublicError('Choose a date and time.');return at;};
@@ -816,6 +873,7 @@ function configureIPC() {
   if(typeof value?.password==='string'&&value.password){const problem=webAccessModule.passwordProblem(value.password);if(problem)throw new PublicError(problem);next.passwordHash=webAccessModule.hashPassword(value.password);webAccess.signOutEverywhere();}
   if(['wifi','tailscale'].includes(value?.mode))next.mode=value.mode;
   if(typeof value?.enabled==='boolean')next.enabled=value.enabled;
+  if(typeof value?.admin==='boolean')next.admin=value.admin;
   if(next.enabled&&(!next.username||!next.passwordHash))throw new PublicError('Choose a username and password first.');
   settings.webAccess=next;await saveSettings();return applyWebAccess();
  });
@@ -858,6 +916,9 @@ function configureIPC() {
   validateWorkspace({...state,bots:state.bots.map(x=>x.id===id?next:x)});state.bots=state.bots.map(x=>x.id===id?next:x);await atomicJSON('preview-workspace.json',state);notify();if(Object.hasOwn(changes,'isPinned'))await cloud.queuePin(id,changes.isPinned);return state;
  });
  handle('bots:reorder',async ids=>{await ensureState();if(!Array.isArray(ids)||ids.length!==state.bots.length||new Set(ids).size!==ids.length||ids.some(id=>!state.bots.some(x=>x.id===id)))throw new PublicError('Use the current Bot list.');for(const bot of state.bots)bot.sortOrder=ids.indexOf(bot.id);await atomicJSON('preview-workspace.json',state);notify();return state;});
+ const groupMembers=(members,except)=>{if(!Array.isArray(members))throw new PublicError('Choose 2 to 8 Bots.');const ids=[...new Set(members.filter(id=>typeof id==='string'))].filter(id=>id!==except&&state.bots.some(x=>x.id===id&&!x.memberIDs));if(ids.length<2||ids.length>8)throw new PublicError('A group chat needs 2 to 8 Bots.');return ids;};
+ handle('group:create',async(name,members)=>{await ensureState();const clean=String(name??'').trim();if(!clean||clean.length>200||state.bots.length>=100||state.bots.some(x=>x.name.toLowerCase()===clean.toLowerCase()))throw new PublicError('Use a name no other Bot has, and pick 2 to 8 Bots.');const ids=groupMembers(members);state.bots.push({id:randomUUID(),name:clean,purpose:'Group conversation',color:'ochre',memberIDs:ids});validateWorkspace(state);await atomicJSON('preview-workspace.json',state);notify();return state;});
+ handle('group:members',async(id,members)=>{await ensureState();const group=state.bots.find(x=>x.id===id&&x.memberIDs);if(!group)throw new PublicError('Choose a group chat.');group.memberIDs=groupMembers(members,id);validateWorkspace(state);await atomicJSON('preview-workspace.json',state);notify();return state;});
  handle('drafts:load',async()=>{await ensureState();const drafts=await loadJSON('drafts.json',{});return Object.fromEntries(Object.entries(drafts).filter(([id,text])=>state.bots.some(x=>x.id===id)&&typeof text==='string'));});
  handle('drafts:save',async drafts=>{await ensureState();if(!drafts||typeof drafts!=='object'||Array.isArray(drafts)||Object.keys(drafts).length>100||Object.values(drafts).some(text=>typeof text!=='string'||text.length>100000))throw new PublicError('Drafts are too large.');const retained=Object.fromEntries(Object.entries(drafts).filter(([id])=>state.bots.some(bot=>bot.id===id)));await atomicJSON('drafts.json',retained);});
   handle('workspace:load', async () => {await ensureState();return state;});
@@ -1130,7 +1191,7 @@ app.whenReady().then(() => {
   const nativeTitleBar = process.platform === 'win32' ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#0a0a0b', symbolColor: '#ececee', height: 40 } } : { frame: false };
   const background = process.argv.includes('--background');
   window = new BrowserWindow({ show: !background, width: 1370, height: 940, minWidth: 860, minHeight: 620, ...nativeTitleBar, backgroundColor: '#0f0f10', title: 'Bothive', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
-  {const send=window.webContents.send.bind(window.webContents);window.webContents.send=(channel,...args)=>{send(channel,...args);webAccess.broadcast(channel,args[0]);};}
+  {const send=window.webContents.send.bind(window.webContents);window.webContents.send=(channel,...args)=>{send(channel,...args);if(!remoteBackend.active)webAccess.broadcast(channel,args[0]);};}
   window.on('close',event=>{if(keepRunning()&&!quitting){event.preventDefault();window.hide();if(!cloud.active&&settings&&!settings.trayHintShown){settings.trayHintShown=true;saveSettings().catch(()=>{});headsUpBanner(mainBot()?.id,'Still watching for you','Bothive keeps running in the tray so heads-ups keep coming. Quit from the tray icon.',true);}}});
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('render-process-gone',()=>denyAllApprovals());window.on('closed',()=>{denyAllApprovals();voiceEngine?.destroy();voiceEngine=null;});

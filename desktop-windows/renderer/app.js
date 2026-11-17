@@ -3,12 +3,14 @@ import { createVoice } from './voice.js';
 import { renderApiKeys } from './api-keys.js';
 import { renderSecureLogins } from './secure-logins.js';
 import { renderSkills, renderBotSkills } from './skills-ui.js';
+import { renderBotGroups } from './groups-ui.js';
 import { renderShareBot, renderAddFromCode } from './share-ui.js';
 import { installDrop } from './drop-ui.js';
 import { openAccountMenu } from './account-menu.js';
 import { connectorIcon } from './connector-icon.js';
 import { installSidebarResize, installChatTools } from './layout-ui.js';
 import { renderRoutines } from './routines-ui.js';
+import { renderServers, installServerBanner } from './servers-ui.js';
 import { encodeWav, splitSuggestions, starters } from './voice-core.mjs';
 import { renderMarkdown } from './markdown.js';
 import * as catalog from './catalog.js';
@@ -243,7 +245,10 @@ async function renderWebAccess(page){
    const option=button('',()=>save({mode:value}),`web-mode ${status.mode===value?'selected':''}`);option.setAttribute('role','radio');option.setAttribute('aria-checked',String(status.mode===value));
    append(option,node('strong','',title),node('small','muted',detail));where.append(option);
   }
-  append(body,append(node('div','settings-card'),master,append(node('div','web-signin'),user,pass,keep)),node('p','settings-label','Where'),where);
+  const adminRow=node('label','setting-row toggle-row');const adminCheck=node('input','switch');adminCheck.type='checkbox';adminCheck.setAttribute('role','switch');adminCheck.setAttribute('aria-label','Let apps change settings');adminCheck.checked=status.admin===true;
+  adminCheck.addEventListener('change',()=>save({admin:adminCheck.checked}));
+  append(adminRow,append(node('span','toggle-text'),node('strong','','Let apps change settings'),node('small','muted','Lets the Mac, Windows and iPhone apps signed in with this password change settings, API keys and installed CLIs here, and install a CLI for you. Leave it off if they should only chat.')),adminCheck);
+  append(body,append(node('div','settings-card'),master,append(node('div','web-signin'),user,pass,keep),adminRow),node('p','settings-label','Where'),where);
   if(status.error)body.append(node('p','heads-up-error',status.error));
   if(status.enabled&&status.urls.length){
    const list=node('div','settings-card web-urls');
@@ -513,7 +518,8 @@ function renderInspector(){
   for(const task of bot.schedules||[]){const history=node('details'),summary=node('summary','','Run history');history.append(summary);for(const run of task.history||[])history.append(node('p','muted',`${run.date} · ${run.status}`));if(task.history?.length)body.append(history);append(body,node('p','',`${task.name} · ${task.enabled?(task.nextRun||'Incoming Bot message'):'Paused'} · ${task.recurrence} · ${task.timezone}${task.lastRun?' · Last run: '+task.lastRun+' · '+(task.lastResult||'outcome unavailable'):''}`),append(node('div','row-actions'),...(bridge.pauseTask?[button(task.enabled?'Pause':'Resume',async()=>{try{await result(bridge.pauseTask(bot.id,task.id,!task.enabled));}catch(error){toast(error.message);}})]:[]),button('Delete',async()=>{try{await result(bridge.cancelTask(bot.id,task.id));}catch(error){toast(error.message);}})));}
   if(!(bot.schedules||[]).length)body.append(node('p','muted','No routines yet. You can also ask in chat to add one.'));
   append(body,node('h3','','Voice chat'),voiceCard(bot));
-  if(bot.memberIDs){body.append(node('h3','','Group members'));for(const member of workspace.bots.filter(x=>bot.memberIDs.includes(x.id)))body.append(button(member.name,()=>selectBot(member.id)));body.append(node('p','muted','Each member answers with its own provider and model.'));}
+  {const groupsBox=node('div','bot-groups');body.append(groupsBox);renderBotGroups({bridge,result,toast,workspace,bot,container:groupsBox,open:selectBot,changed:(next,openID)=>{workspace=next;if(openID)selectBot(openID);else render();}});}
+  if(bot.memberIDs){}
   else{
    providersMark=body.childNodes.length;
    append(body,node('h3','','Providers & models'),node('p','muted','Pick the provider and model that answer for this Bot. Access follows each CLI’s account.'));
@@ -586,6 +592,19 @@ async function showConnection(detail='') {
       const definition=setup.providers.find(x=>x.id===provider),found=setup.installed.find(x=>x.provider===provider);
       append(body,node('h2','',`Install ${definition?.name||'a CLI'}`),node('p','',found?`Already installed: ${found.path}`:'Follow the official install guide, then return and scan again.'));
       if(definition?.install){const code=node('pre','',definition.install);append(body,code,button('Copy install command',()=>navigator.clipboard.writeText(definition.install)),button('Get Node.js ↗',()=>bridge.openDocs('https://nodejs.org/en/download')));}
+      if(definition?.install&&!found&&bridge.cliInstall){
+       const progress=node('p','muted');
+       const install=button('Install it for me',async()=>{
+        install.disabled=true;progress.textContent='Starting\u2026';
+        try{await result(bridge.cliInstall(provider));}catch(error){progress.textContent=error.message;install.disabled=false;return;}
+        for(;;){await new Promise(resolve=>setTimeout(resolve,1500));if(!progress.isConnected)return;
+         let report;try{report=await result(bridge.cliInstallStatus());}catch(error){progress.textContent=error.message;install.disabled=false;return;}
+         const entry=report.status?.[provider];if(entry)progress.textContent=entry.message;
+         if(entry?.state==='done'){try{setup=await result(bridge.scanCLIs());}catch{}draw();return;}
+         if(entry?.state==='failed'){install.disabled=false;return;}}
+       },'pill primary');
+       append(body,install,progress);
+      }
       if(definition)body.append(button('Official install guide ↗',()=>bridge.openDocs(definition.guide)));
       append(body,button('Scan again',async()=>{setup=await result(bridge.scanCLIs());draw();}),button('Choose executable…',async()=>{await result(bridge.choosePath(provider));setup=await result(bridge.scanCLIs());draw();}));
     }else if(step===3){
@@ -636,7 +655,7 @@ function unavailable(title, detail) { return append(node('div', 'unavailable'), 
 function showSettings(tab = 'General') {
   dialog.replaceChildren();
   const layout = node('div', 'settings-layout'); const nav = node('nav', 'settings-nav'); const page = node('section', 'settings-page');
-  for (const [name, glyph] of [['General','⚙'],['Heads-ups','✦'],['Routines','↻'],['Skills','✎'],['Computer','▣'],['Web access','⌂'],['Permissions','♧'],['API Keys','⚷'],['Secure Logins','⚿'],['Vault','⚿'],['Voice','♫'],['Local models','◫'],['Backup','⛁'],['Usage & Billing','▥'],['Updates','⇩']]) {const icon=node('span','',glyph);icon.setAttribute('aria-hidden','true');nav.append(append(button('', () => showSettings(name), name === tab ? 'active' : ''), icon, node('div','',name)));}
+  for (const [name, glyph] of [['General','⚙'],['Heads-ups','✦'],['Routines','↻'],['Skills','✎'],['Servers','⌁'],['Computer','▣'],['Web access','⌂'],['Permissions','♧'],['API Keys','⚷'],['Secure Logins','⚿'],['Vault','⚿'],['Voice','♫'],['Local models','◫'],['Backup','⛁'],['Usage & Billing','▥'],['Updates','⇩']]) {const icon=node('span','',glyph);icon.setAttribute('aria-hidden','true');nav.append(append(button('', () => showSettings(name), name === tab ? 'active' : ''), icon, node('div','',name)));}
   append(page, append(node('header','panel-head'), node('h1','',tab), button('×', () => dialog.close(), 'close-panel')));
   append(layout, nav, page); dialog.append(layout); if (!dialog.open) dialog.showModal();
   if (tab === 'General') {
@@ -659,6 +678,7 @@ function showSettings(tab = 'General') {
   else if (tab === 'API Keys') renderApiKeys({ bridge, result, toast, page });
   else if (tab === 'Secure Logins') renderSecureLogins({ bridge, result, toast, page });
   else if (tab === 'Skills') renderSkills({ bridge, result, toast, page });
+  else if (tab === 'Servers') renderServers({ bridge, result, toast, page });
   else if (tab === 'Routines') renderRoutines({ bridge, result, toast, page, workspace: () => workspace, refresh: () => showSettings('Routines') });
   else if (tab === 'Voice') voice.renderSettings(page);
   else if (tab === 'Backup') renderBackup(page);
@@ -751,6 +771,7 @@ function renderChips(){
 function addFiles(bot,names){if(!bot||!names?.length)return;const list=[...(pendingFiles.get(bot.id)||[]),...names];if(list.length>10){toast('Attach up to 10 files per message.');return;}pendingFiles.set(bot.id,list);renderChips();}
 async function attachFiles(bot=currentBot()){if(!bot)return;if(!window.desktop){toast('Attachments are available in the installed app.');return;}try{addFiles(bot,await result(bridge.attachFiles(bot.id)));}catch(error){toast(error.message);}}
 installSidebarResize();
+installServerBanner({bridge,result,toast});
 installChatTools({copyText:()=>{const bot=currentBot();return bot?workspace.entries.filter(x=>x.botID===bot.id&&x.kind!=='activity').map(x=>`${x.kind==='user'?'You':bot.name}: ${x.text}`).join('\n\n'):'';},exportAs:kind=>exportConversation(currentBot(),kind),toast});
 installDrop({target:document.querySelector('main.conversation'),bridge,result,toast,currentBot:()=>currentBot(),pendingCount:bot=>(pendingFiles.get(bot.id)||[]).length,addFiles});
 $('#draft').addEventListener('paste',async event=>{

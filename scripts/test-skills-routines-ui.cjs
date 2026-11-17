@@ -24,6 +24,8 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
       { id: '33333333-3333-4333-8333-333333333333', occurrence: '44444444-4444-4444-8444-444444444444', name: 'Reply helper', text: 'Draft replies.', recurrence: 'none', timezone: 'UTC', enabled: true },
     ];
 
+    for (const [name, color] of [['Travel', 'teal'], ['School', 'green']]) seed.bots.push({ id: crypto.randomUUID(), name, purpose: name + ' helper', color });
+
     await page.addInitScript(seedWorkspace => {
       let workspace = structuredClone(seedWorkspace);
       const calls = []; window.__calls = calls;
@@ -36,6 +38,8 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
         load: async () => ok(workspace), save: async value => { workspace = value; return ok(value); }, setupStatus: async () => ok(status), scanCLIs: async () => ok(status), chooseCLI: async () => ok(status),
         checkLogin: async () => ok('Fixture signed in'), completeSetup: async () => ({ ok: true }), openDocs: async () => ({ ok: true }), onChange: () => {}, listModels: async () => ok([]), listFiles: async () => ok([]),
         composioStatus: async () => ok({ configured: false, toolkits: [] }), vaultList: async () => ok([]),
+        createGroup: async (name, members) => { calls.push(['createGroup', name, members]); workspace.bots.push({ id: crypto.randomUUID(), name, purpose: 'Group conversation', color: 'ochre', memberIDs: members }); return ok(workspace); },
+        setGroupMembers: async (id, members) => { calls.push(['setGroupMembers', id, members]); workspace.bots.find(x => x.id === id).memberIDs = members; return ok(workspace); },
         skillsList: async () => ok(skills.map(summary)),
         skillsGet: async id => { const skill = skills.find(x => x.id === id); return skill ? ok({ ...summary(skill), text: skill.text }) : fail('Unknown skill'); },
         skillsSave: async input => {
@@ -62,6 +66,13 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
         cloudStatus: async () => ok({ signedIn: true, email: 'ben@example.com' }),
         cloudSignOut: async () => { calls.push(['cloudSignOut']); return ok(true); },
         openLink: async url => { calls.push(['openLink', url]); return ok(true); },
+        serversList: async () => ok(window.__servers || (window.__servers = [])),
+        serversTest: async address => { calls.push(['serversTest', address]); return address.includes('bad') ? fail('Could not reach bad. Check the address.') : ok({ url: address, message: 'Found a Bothive server. You sign in on its own page when it opens.' }); },
+        serversAdd: async (name, address) => { calls.push(['serversAdd', name, address]); if (address.startsWith('ftp')) return fail('Use an address that starts with https:// or http://.'); const entry = { id: crypto.randomUUID(), name: name || address, url: address }; (window.__servers ||= []).push(entry); return ok(entry); },
+        serversRemove: async id => { calls.push(['serversRemove', id]); window.__servers = window.__servers.filter(x => x.id !== id); return ok(true); },
+        serversStatus: async () => ok(window.__serverStatus || { active: false }),
+        serversConnect: async (id, user, pass) => { calls.push(['serversConnect', id, user, pass]); if (pass === 'wrong-password') return fail('That username and password don\u2019t match.'); const entry = window.__servers.find(x => x.id === id); window.__serverStatus = { active: true, name: entry.name, url: entry.url }; return ok(window.__serverStatus); },
+        serversDisconnect: async () => { calls.push(['serversDisconnect']); window.__serverStatus = { active: false }; return ok({ active: false }); },
         pauseTask: async (botID, id, enabled) => { calls.push(['pauseTask', id, enabled]); task(botID, id).enabled = enabled; return ok(true); },
         runTask: async (botID, id) => { calls.push(['runTask', id]); const t = task(botID, id); t.lastRun = new Date().toISOString(); t.lastResult = 'running'; return ok(true); },
         editTask: async (botID, id, input) => { calls.push(['editTask', id, input]); const t = task(botID, id); Object.assign(t, { name: input.name, text: input.text }); if (input.recurrence) t.recurrence = input.recurrence; if (input.at) t.nextRun = input.at; return ok(true); },
@@ -127,6 +138,35 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
     await page.waitForFunction(() => window.__calls.some(x => x[0] === 'skillsSetBot' && x[2].length === 1));
     await page.locator('.bot-skills .skill-pick', { hasText: 'Cite sources' }).locator('input').uncheck();
     await page.waitForFunction(() => window.__calls.filter(x => x[0] === 'skillsSetBot').at(-1)[2].length === 0);
+
+    // ---------- Group chats from a Bot's panel ----------
+    await page.keyboard.press('Escape');
+    await page.locator('#chat-heading').click();
+    await page.getByRole('heading', { name: 'Providers & models' }).waitFor();
+    await page.getByRole('button', { name: 'Details', exact: true }).first().click();
+    await page.getByRole('heading', { name: 'Group chats', exact: true }).waitFor();
+    await page.locator('.new-group summary').click();
+    await page.getByPlaceholder('Group name').fill('Trip crew');
+    await page.getByRole('button', { name: 'Create group', exact: true }).click();
+    assert.ok((await page.locator('.bot-groups').innerText()).includes('Choose 2 to 8 Bots.'), 'one Bot is not a group');
+    await page.locator('.group-pick', { hasText: 'Travel' }).locator('input').check();
+    await page.getByRole('button', { name: 'Create group', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'createGroup'));
+    const made = (await calls()).find(x => x[0] === 'createGroup');
+    assert.equal(made[1], 'Trip crew'); assert.equal(made[2].length, 2);
+    await page.locator('#chat-heading', { hasText: 'Trip crew' }).waitFor();
+    if (!(await page.locator('.inspector-tabs').count())) await page.locator('#chat-heading').click();
+    await page.getByRole('button', { name: 'Details', exact: true }).first().click();
+    await page.getByRole('heading', { name: 'Group members', exact: true }).waitFor();
+    assert.ok(await page.locator('.group-remove').first().isDisabled(), 'a two-Bot group cannot lose a member');
+    await page.getByLabel('Add a Bot to this group').selectOption({ label: 'School' });
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'setGroupMembers'));
+    assert.equal((await calls()).find(x => x[0] === 'setGroupMembers')[2].length, 3);
+    await page.locator('.group-row', { hasText: 'Travel' }).locator('.group-remove').click();
+    await page.waitForFunction(() => window.__calls.filter(x => x[0] === 'setGroupMembers').length === 2);
+    assert.equal((await calls()).filter(x => x[0] === 'setGroupMembers').at(-1)[2].length, 2);
+    await page.locator('.group-row .group-open', { hasText: 'Hive' }).click();
+    await page.locator('#chat-heading', { hasText: 'Hive' }).waitFor();
 
     // ---------- Routines ----------
     await page.keyboard.press('Escape');
@@ -217,6 +257,34 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
     assert.equal(await page.locator('.app-initial').count(), 0, 'no letter tiles are left');
     const gmailFill = await page.locator('.app-card', { hasText: 'Gmail' }).first().locator('svg path').getAttribute('fill');
     assert.equal(gmailFill.toLowerCase(), '#ea4335', 'Gmail uses its own colour');
+    await page.keyboard.press('Escape');
+
+    // ---------- Servers ----------
+    await openTab('Servers');
+    await page.getByText('No servers yet.', { exact: false }).waitFor();
+    await page.getByLabel('Address').fill('http://100.101.102.103:8765');
+    await page.getByRole('button', { name: 'Test', exact: true }).click();
+    await page.getByText('Found a Bothive server', { exact: false }).waitFor();
+    await page.getByLabel('Address').fill('ftp://nope.example.com');
+    await page.getByRole('button', { name: 'Add server', exact: true }).click();
+    await page.getByText('Use an address that starts with', { exact: false }).waitFor();
+    await page.getByLabel('Address').fill('http://100.101.102.103:8765'); await page.getByLabel('Name').fill('Home <b>box</b>');
+    await page.getByRole('button', { name: 'Add server', exact: true }).click();
+    await page.locator('.skill-row', { hasText: 'http://100.101.102.103:8765' }).waitFor();
+    assert.equal(await page.locator('.servers-page b').count(), 0, 'a server name stays text');
+    await page.locator('.skill-row').getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.getByLabel('Server password').fill('wrong-password'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.getByText('don\u2019t match', { exact: false }).waitFor();
+    await page.getByLabel('Server password').fill('right-password-1'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'serversConnect' && x[3] === 'right-password-1'));
+    assert.equal((await calls()).find(x => x[0] === 'serversConnect')[2], 'admin', 'the username starts as admin');
+    await page.evaluate(() => { window.__serverStatus = { active: true, name: 'Home <b>box</b>', url: 'http://100.101.102.103:8765' }; });
+    await page.keyboard.press('Escape'); await openTab('Servers');
+    await page.getByText('Using Home', { exact: false }).waitFor();
+    await page.getByRole('button', { name: 'Back to this computer', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'serversDisconnect'));
+    await page.locator('.skill-row').getByRole('button', { name: 'Remove', exact: true }).click();
+    await page.getByText('No servers yet.', { exact: false }).waitFor();
     await page.keyboard.press('Escape');
 
     // ---------- Sidebar resize, Share menu, chat width ----------

@@ -34,7 +34,7 @@ export function openAccountMenu({ anchor, bridge, result, toast, openSettings })
     button.append(mark, el('span', 'account-label', label));
     button.addEventListener('click', action); items.push(button); return button;
   };
-  const open = url => async () => { close(); try { await result(bridge.openLink(url)); } catch (error) { toast(error.message); } };
+  const open = url => async () => { close(); try { if (bridge.openLink) await result(bridge.openLink(url)); else window.open(url, '_blank', 'noopener,noreferrer'); } catch (error) { toast(error.message); } };
 
   const who = el('div', 'account-who'); const line = el('span', 'account-email', 'Checking account…'); who.append(line); menu.append(who);
   menu.append(el('hr'));

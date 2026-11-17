@@ -13,10 +13,23 @@ const { localHost } = require('./remote-host.cjs');
 // backups and web access settings themselves are deliberately absent.
 const INVOKE = new Set([
   'workspace:load', 'workspace:save', 'chat:send', 'chat:retry', 'chat:stop', 'chat:pin', 'entry:delete', 'entry:react',
-  'bot:touch', 'bot:organize', 'bots:reorder', 'bot:configure', 'bot:image', 'models:list', 'files:list', 'drafts:load', 'drafts:save',
+  'bot:touch', 'bot:organize', 'bots:reorder', 'group:create', 'group:members', 'bot:configure', 'bot:image', 'models:list', 'files:list', 'drafts:load', 'drafts:save',
   'setup:status', 'setup:scan', 'composio:status', 'proactive:status', 'proactive:configure', 'proactive:check', 'headsup:snooze', 'headsup:dismiss',
   'headsup:mute', 'tasks:cancel', 'tasks:pause', 'approval:answer', 'approval:pending', 'media-keys:status', 'cloud:status', 'rules:get',
-  'connected-apps:allow-get', 'ollama:models', 'canvas:save'
+  'connected-apps:allow-get', 'ollama:models', 'canvas:save',
+  // 10.1: skills (text only, fetched by the computer that runs Bothive), routines and Bot share codes. File pickers and the servers list stay host-only.
+  'skills:list', 'skills:get', 'skills:save', 'skills:delete', 'skills:set-bot', 'skills:find', 'skills:fetch',
+  'tasks:create', 'tasks:edit', 'tasks:run', 'share:make', 'share:read', 'share:add'
+]);
+// 10.1.1: what an app signed in to this server may also do when the owner has turned on remote administration (Web access settings, or
+// OPENGROKBOT_WEB_ADMIN=1 in Docker): the settings, API keys, CLI install and sign-in a person would otherwise need the server's own screen for.
+// Only app tokens count; a browser signed in with the same password still gets the list above. File pickers and the web access settings
+// themselves (including its password) are left out on purpose.
+const ADMIN_INVOKE = new Set([
+  'cli:install', 'cli:install-status', 'cli-keys:set', 'cli-keys:status', 'setup:choose', 'setup:scan', 'setup:login', 'setup:server', 'setup:complete',
+  'composio:connect', 'composio:refresh', 'composio:remove', 'media-keys:set', 'media-settings:set', 'voice:key', 'voice:save', 'voice:settings',
+  'sharing:get', 'sharing:set', 'rules:set', 'connected-apps:allow-set', 'logins:add', 'logins:list', 'logins:remove', 'vault:list', 'vault:read', 'vault:save', 'vault:delete',
+  'ollama:pull', 'ollama:delete', 'cloud:sign-in', 'cloud:sign-out', 'cloud:enabled', 'cloud:approve', 'cloud:reconnect', 'diagnostics:get'
 ]);
 // Events another device receives.
 const EVENTS = new Set(['workspace:changed', 'proactive:changed', 'approval:request', 'bot:open']);
@@ -177,7 +190,11 @@ class WebAccess {
       const token = /(?:^|;\s*)ogb_session=([A-Za-z0-9_-]{43})/.exec(req.headers.cookie || '')?.[1]; if (token) this.sessions.delete(token);
       return this.send(res, 303, 'text/plain', '', { Location: '/login', 'Set-Cookie': this.cookie('', 0) });
     }
-    if (!this.session(req)) {
+    // 10.1.1: the Mac, Windows and iPhone apps connect straight to this server by its address: sign in once, then send the same requests they would send through the account relay.
+    if (url.pathname === '/api/app/login') return this.appLogin(req, res, remote);
+    if (url.pathname === '/api/app/request') return this.appRequest(req, res);
+    // The same app token that opens /api/app/* also works for the calls the web page makes, so the Windows app can use this server for its whole window.
+    if (!this.session(req) && !this.bearer(req)) {
       if (url.pathname.startsWith('/api/')) return this.send(res, 401, 'application/json', '{"ok":false,"error":"Sign in again."}');
       return this.send(res, 303, 'text/plain', '', { Location: '/login' });
     }
@@ -212,11 +229,58 @@ class WebAccess {
     return this.send(res, 303, 'text/plain', '', { Location: '/', 'Set-Cookie': this.cookie(token, SESSION_DAYS * 86400) });
   }
 
+  bearer(req) {
+    const token = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(req.headers.authorization || '')?.[1];
+    const found = token && this.sessions.get(token);
+    if (!found || found.expires < Date.now()) { if (token) this.sessions.delete(token); return null; }
+    return found;
+  }
+
+  /** An app signs in with the Web access username and password and gets a token it keeps for SESSION_DAYS days. */
+  async appLogin(req, res, remote) {
+    const json = (status, value) => this.send(res, status, 'application/json', JSON.stringify(value));
+    if (req.method !== 'POST') return json(405, { ok: false, error: 'Not allowed.' });
+    const failure = this.failures.get(remote) || { count: 0, until: 0 };
+    if (failure.until > Date.now()) return json(429, { ok: false, code: 'rate_limited', error: `Too many tries. Wait ${Math.ceil((failure.until - Date.now()) / 1000)} seconds.` });
+    let input; try { input = JSON.parse(await this.body(req, 4096)); } catch { return json(400, { ok: false, error: 'Try again.' }); }
+    const { username, passwordHash } = this.deps.config();
+    const nameOK = typeof username === 'string' && username.length > 0 && crypto.timingSafeEqual(crypto.createHash('sha256').update(String(input?.username ?? '')).digest(), crypto.createHash('sha256').update(username).digest());
+    const passwordOK = checkPassword(String(input?.password ?? ''), passwordHash);
+    if (!nameOK || !passwordOK) {
+      failure.count++; if (failure.count >= 5) failure.until = Date.now() + Math.min(3600000, 30000 * 2 ** (failure.count - 5));
+      this.failures.set(remote, failure);
+      return json(401, { ok: false, code: 'bad_credentials', error: 'That username and password don\u2019t match.' });
+    }
+    this.failures.delete(remote);
+    const token = crypto.randomBytes(32).toString('base64url');
+    this.sessions.set(token, { expires: Date.now() + SESSION_DAYS * 86400000, user: username, app: true });
+    if (this.sessions.size > 200) this.sessions.delete(this.sessions.keys().next().value);
+    return json(200, { ok: true, token, name: String(this.deps.hostName?.() || 'Bothive').slice(0, 80), days: SESSION_DAYS });
+  }
+
+  /** The body is a relay request ({method, target, body}); the answer is the relay response ({status, body}). */
+  async appRequest(req, res) {
+    const json = (status, value) => this.send(res, status, 'application/json', JSON.stringify(value));
+    if (req.method !== 'POST') return json(405, { ok: false, error: 'Not allowed.' });
+    if (!this.bearer(req)) return json(401, { ok: false, error: 'Sign in again.' });
+    let request; try { request = JSON.parse(await this.body(req, 6 * 1024 * 1024)); } catch (error) { return json(error.status || 400, { ok: false, error: 'Invalid request.' }); }
+    try { return json(200, await this.deps.appRequest(request)); }
+    catch (error) { return json(409, { ok: false, error: error?.publicMessage || error?.message || 'The server could not complete this request.' }); }
+  }
+
   async invoke(req, res) {
     if (req.method !== 'POST' || req.headers['x-ogb-request'] !== '1' || !this.sameOrigin(req)) return this.send(res, 403, 'application/json', '{"ok":false,"error":"Not allowed."}');
     let request; try { request = JSON.parse(await this.body(req, 32 * 1024 * 1024)); } catch (error) { return this.send(res, error.status || 400, 'application/json', '{"ok":false,"error":"Invalid request."}'); }
-    if (!request || typeof request.channel !== 'string' || !INVOKE.has(request.channel) || !Array.isArray(request.args) || request.args.length > 8) return this.send(res, 403, 'application/json', '{"ok":false,"error":"Open Bothive on the computer that runs it to do this."}');
-    const result = await this.deps.invoke(request.channel, request.args);
+    if (!request || typeof request.channel !== 'string' || !Array.isArray(request.args) || request.args.length > 8) return this.send(res, 403, 'application/json', '{"ok":false,"error":"Invalid request."}');
+    // Remote administration: only an app token (not a browser cookie), and only while the owner has it turned on.
+    const admin = !this.session(req) && !!this.bearer(req) && this.deps.config().admin === true;
+    if (!INVOKE.has(request.channel) && !(admin && ADMIN_INVOKE.has(request.channel))) {
+      const needsAdmin = ADMIN_INVOKE.has(request.channel);
+      return this.send(res, 403, 'application/json', JSON.stringify({ ok: false, error: needsAdmin
+        ? 'Remote administration is off on this server. Turn on \u201cLet apps change settings\u201d in its Web access settings (Docker: OPENGROKBOT_WEB_ADMIN=1).'
+        : 'Open Bothive on the computer that runs it to do this.' }));
+    }
+    const result = await this.deps.invoke(request.channel, request.args, { admin });
     return this.send(res, 200, 'application/json', JSON.stringify(result));
   }
 
@@ -249,4 +313,4 @@ class WebAccess {
   }
 }
 
-module.exports = { WebAccess, INVOKE, EVENTS, hashPassword, checkPassword, passwordProblem, bridgeTable, bridgeScript, USER };
+module.exports = { WebAccess, INVOKE, ADMIN_INVOKE, EVENTS, hashPassword, checkPassword, passwordProblem, bridgeTable, bridgeScript, USER };

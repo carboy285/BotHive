@@ -9,6 +9,7 @@ const { SmsChannel, VoiceCalls, E164 } = require('./channel-twilio.cjs');
 const { createVoiceServer } = require('./channel-voice-server.cjs');
 const { InkboxIMessageChannel } = require('./channel-inkbox.cjs');
 const attachments = require('./attachments.cjs');
+const { InkboxVoice } = require('./channel-inkbox-voice.cjs');
 
 const FILE = 'channels.json', ENCRYPTED = 'channels.encrypted.json';
 const VOICE_FIELDS = ['ownerNumber', 'pin', 'publicUrl', 'language'];
@@ -16,6 +17,7 @@ const VOICE_FIELDS = ['ownerNumber', 'pin', 'publicUrl', 'language'];
 /**
  * @param {{
  *  loadJSON, atomicJSON, safeStorage, platform?: string, ensureState: () => Promise<void>, getState: () => object,
+ *  record?: (botID: string, text: string) => Promise<void>, afterTurn?: (botID: string) => void, settleApproval?: (id: string, yes: boolean) => boolean, now?: () => number,
  *  startChat: (botID: string, text: string, options?: object) => Promise<void>, stop?: (botID: string) => void, botDirectory?: (botID: string) => string, isRunning: (botID: string) => boolean,
  *  env?: object, fetchImpl?: typeof fetch, WebSocketImpl?: any, createServer?: Function, log?: (e: Error) => void, sleep?: (ms: number) => Promise<void>,
  *  voiceHost?: string, askTimeout?: number, batchMs?: number, pollMs?: number
@@ -25,6 +27,9 @@ function createChannelsHost(deps) {
   const env = deps.env || process.env, platform = deps.platform || process.platform, sleep = deps.sleep || (ms => new Promise(r => setTimeout(r, ms)));
   const askTimeout = deps.askTimeout ?? 15 * 60 * 1000, pollMs = deps.pollMs ?? 150;
   const turns = new Map(), cancelled = new Set(); let turnCounter = 0;
+  const now = () => (deps.now ? deps.now() : Date.now());
+  const turnFrom = new Map(), approvalAsks = new Map(), outreachLog = [];
+  let inkboxVoice = null, inkboxKey = '', voicesCache = [], askTimer = null, syncTimer = null;
   let voiceServer = null, voiceKey = '', hub;
 
   // ----- Storage. Tokens are encrypted where the OS can do it (Windows). A Linux server keeps them in a private file (mode 0600). -----
@@ -87,15 +92,17 @@ function createChannelsHost(deps) {
       body = attachments.attachmentMessage(body.trim() || '(photo)', names);
       if (problems.length) body += `\n(Also: ${problems.join('; ')}.)`;
     }
+    if (from?.replyTo) body = `(This answers the question you asked them: \u201c${String(from.replyTo).slice(0, 300)}\u201d. Carry on with what you were doing.)\n${body}`;
     if (from) body = `[${CHANNELS[from.channel]?.name || from.channel} \u00b7 ${String(from.senderName || 'someone').slice(0, 60)}${from.me ? ' \u00b7 the owner' : ''}] ${body}`;
     if (options.steer) body += STEER_NOTE;
-    const token = ++turnCounter; turns.set(botID, token);
+    const token = ++turnCounter; turns.set(botID, token); if (from?.channel && from.channel !== 'phone') turnFrom.set(botID, from);
     await deps.startChat(botID, body, { channelTurn: options.fast !== false && from?.channel !== 'phone' });
     const deadline = Date.now() + askTimeout;
     while (deps.isRunning(botID)) {
       if (Date.now() > deadline) return 'Still working on it, or waiting for your OK in Bothive. I’ll leave the answer in the chat.';
       await sleep(pollMs);
     }
+    if (turnFrom.get(botID) === from) turnFrom.delete(botID);
     if (cancelled.delete(token)) return null;
     const reply = deps.getState().entries.slice(before).filter(e => e.botID === botID && e.kind === 'bot').at(-1);
     if (!reply) return 'The Bot did not answer.';
@@ -116,10 +123,140 @@ function createChannelsHost(deps) {
   }
 
   hub = new ChannelHub({
-    load: storage.load, save: async value => { await storage.save(value); syncVoice(); },
+    load: storage.load, save: async value => { await storage.save(value); syncVoice(); syncInkbox(); },
     makeAdapter, ask: askBot, stop: stopTurn, botExists: id => !!deps.getState?.()?.bots?.some(x => x.id === id && !x.memberIDs),
-    call: async () => voice.placeCall(), batchMs: deps.batchMs,
+    call: from => callOwner(from), answerApproval: (from, yes) => answerApproval(from, yes), batchMs: deps.batchMs,
   });
+
+  // ----- Phone calls through Inkbox Voice AI -----
+  const ownerNumber = () => {
+    const mine = hub.owner('imessage')?.person; if (mine && E164.test(mine.id)) return mine.id;
+    const typed = hub.data.channels.imessage?.fields?.ownerNumber; return typed && E164.test(typed) ? typed : '';
+  };
+  const quiet = () => { const hour = new Date(now()).getHours(), { quietStart: a, quietEnd: b } = hub.settings; return a === b ? false : a < b ? hour >= a && hour < b : hour >= a || hour < b; };
+
+  function syncInkbox() {
+    const config = hub?.data.channels.imessage, want = config?.enabled && config.fields?.apiKey ? [config.fields.apiKey, config.fields.voice || '', config.fields.voiceLine || ''].join('|') : '';
+    if (want === inkboxKey) return;
+    inkboxVoice?.stop(); inkboxVoice = null; inkboxKey = want;
+    if (!want) return;
+    const voiceBot = () => { const state = deps.getState?.(); return state?.bots?.find(x => x.id === hub.data.bot); };
+    inkboxVoice = new InkboxVoice({
+      fields: config.fields, fetchImpl: deps.fetchImpl, now, log: deps.log,
+      context: () => { const bot = voiceBot(); const owner = hub.owner('imessage')?.person; return { botName: bot?.name, purpose: bot?.purpose, summary: bot?.summary, memory: bot?.memory, ownerName: owner?.display || owner?.name }; },
+      onCall: importCall,
+    });
+    inkboxVoice.start().then(() => inkboxVoice.voices().then(list => { voicesCache = list; }).catch(() => {})).catch(error => { if (inkboxVoice) inkboxVoice.info = { state: 'error', detail: error.message }; });
+  }
+  /** Tell the voice agent about new memory. Waits a little so a burst of changes is one update. */
+  function voiceInstructionsChanged() {
+    if (!inkboxVoice) return; clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => inkboxVoice?.syncInstructions().catch(() => {}), deps.syncDelay ?? 30000); syncTimer.unref?.();
+  }
+
+  /** A finished call: its transcript goes into the Bot's chat and memory, and whatever it needs done is handed to the Bot. */
+  async function importCall(call) {
+    const botID = hub.data.bot; if (!botID || !deps.record) return;
+    const owner = hub.owner('imessage')?.person, name = owner?.display || owner?.name || call.number || 'someone';
+    const lines = call.transcript.map(x => `${x.party === 'person' ? name : 'You'}: ${x.text}`).join('\n').slice(0, 6000);
+    const minutes = call.seconds >= 60 ? `${Math.round(call.seconds / 60)} min` : `${call.seconds} s`;
+    await deps.record(botID, `[Phone call · ${name}] ${call.direction === 'outbound' ? 'You phoned them' : 'They phoned you'}${call.reason ? ` (${call.reason.slice(0, 200)})` : ''}, ${minutes}${call.outcome && call.status !== 'completed' ? ', ' + call.outcome : ''}.\n${lines || '(no speech was recorded)'}`);
+    deps.afterTurn?.(botID);
+    const ask = hub.pendingAsk, spoke = call.transcript.filter(x => x.party === 'person').map(x => x.text).join(' ').trim();
+    const target = hub.owner('imessage') || hub.owner();
+    const answer = text => target && hub.send(target.channel, target.person.chatId || target.person.id, text).catch(() => {});
+    try {
+      if (ask && spoke && call.number && call.number === ownerNumber()) {
+        await hub.clearAsk();
+        const reply = await askBot(botID, spoke, { channel: 'phone', senderName: name, me: true, replyTo: ask.question }, { fast: false });
+        if (reply) await answer(reply);
+      } else if (call.items.length) {
+        const todo = call.items.map(x => `- ${x.action}${x.details ? ': ' + x.details : ''}`).join('\n');
+        const reply = await askBot(botID, `You were just on a phone call with ${name}. These were left to do:\n${todo}\nDo what you safely can. Anything that sends, buys, posts or deletes still needs the human’s OK. Reply with one or two sentences about what you did or what you need from them.`, { channel: 'phone', senderName: name, me: true }, { fast: false });
+        if (reply) await answer(reply);
+      }
+    } catch (error) { deps.log?.(error); }
+  }
+
+  /** "Call me" from a chat, or the Call me now button. */
+  async function callOwner(from) {
+    if (inkboxVoice?.ready()) {
+      const number = ownerNumber();
+      if (from && !from.me && !(from.channel === 'imessage' && E164.test(from.senderId) && from.senderId === number)) throw new Error('Only the owner can ask for a call.');
+      if (!number) throw new Error('Add your own phone number under Settings → Channels → iMessage, or mark yourself as Me.');
+      await inkboxVoice.placeCall(number, 'The owner asked you to phone them. Greet them by name, say you are ready, and ask how you can help.');
+      return 'Calling you now.';
+    }
+    return voice.placeCall();
+  }
+  const callsReady = () => voice.ready() || !!inkboxVoice?.ready();
+
+  // ----- The Bot asks the owner something, or needs an OK -----
+  function approvalFrom(ask) { return `Needs your OK: ${ask.title}${ask.detail ? ' — ' + ask.detail.slice(0, 600) : ''}\nReply yes or no.`; }
+  /** Sends an approval prompt to the owner's chat. Returns true when it was sent. The window prompt stays; the first answer wins. */
+  async function routeApproval({ id, title, detail }) {
+    const target = hub?.owner(hub.settings.reachOn); if (!target || !hub.adapters.has(target.channel)) return false;
+    try { await hub.send(target.channel, target.person.chatId || target.person.id, approvalFrom({ title, detail })); } catch { return false; }
+    approvalAsks.set(id, { channel: target.channel, senderId: target.person.id, at: now() });
+    return true;
+  }
+  function answerApproval(from, yes) {
+    for (const [id, ask] of approvalAsks) {
+      if (now() - ask.at > 3600000) { approvalAsks.delete(id); continue; }
+      if (ask.channel === from.channel && ask.senderId === from.senderId) { approvalAsks.delete(id); return deps.settleApproval?.(id, yes) !== false; }
+    }
+    return false;
+  }
+  function approvalSettled(id) { approvalAsks.delete(id); }
+
+  const OUTREACH_HOUR = 5, OUTREACH_DAY = 20;
+  /** Text that is safe as the first message of a conversation: Inkbox wants under 160 characters, no links and no phone numbers until the person replies. */
+  function openingText(text) {
+    const clean = String(text).replace(/https?:\/\/\S+|www\.\S+/gi, '').replace(/\+?\d[\d\s().-]{7,}\d/g, '').replace(/\s+/g, ' ').trim();
+    return clean.length <= 159 ? clean : clean.slice(0, 156).replace(/\s+\S*$/, '') + '…';
+  }
+  async function askOwner(botID, action) {
+    const question = typeof action.text === 'string' ? action.text.trim() : '';
+    if (!question || question.length > 1500) throw new Error('Write the question first (up to 1,500 characters).');
+    const target = hub.owner(hub.settings.reachOn);
+    if (!target) throw new Error('Nobody is marked Me yet. Open Settings → Channels and tick Me next to your own name, so the Bot knows who to reach out to.');
+    const t = now(); while (outreachLog.length && t - outreachLog[0] > 86400000) outreachLog.shift();
+    if (outreachLog.length >= OUTREACH_DAY || outreachLog.filter(x => t - x < 3600000).length >= OUTREACH_HOUR) throw new Error('That is as many messages to the owner as allowed for now. Try again later.');
+    const { channel, person } = target, label = person.display || person.name;
+    const talking = turnFrom.get(botID); const alreadyThere = talking && talking.channel === channel && talking.senderId === person.id;
+    const ask = { botID, channel, senderId: person.id, chatId: person.chatId || person.id, question, askedAt: t, urgent: action.urgent === true, escalated: false };
+    if (!alreadyThere) {
+      let how = 'text';
+      try {
+        if (!hub.adapters.has(channel)) throw new Error(`${CHANNELS[channel].name} is not connected.`);
+        const fresh = channel === 'imessage' && (!person.lastSeen || t - person.lastSeen > 12 * 3600000);
+        await hub.send(channel, ask.chatId, fresh ? openingText(question) : question);
+      } catch (error) {
+        const number = ownerNumber();
+        if (ask.urgent && inkboxVoice?.ready() && number && !quiet()) { await inkboxVoice.placeCall(number, `Ask the owner this and record the answer: ${question}`); how = 'call'; }
+        else throw new Error(`Could not reach ${label} on ${CHANNELS[channel].name}${channel === 'imessage' ? ' (they need to text the Bot once first, or Inkbox’s link has lapsed)' : ''}: ${error.message}`);
+      }
+      outreachLog.push(t);
+      await hub.setPendingAsk(ask);
+      return how === 'call' ? `Phoned ${label} to ask. Their answer comes back to you after the call.` : `Asked ${label} on ${CHANNELS[channel].name}. Their reply comes back to you.`;
+    }
+    await hub.setPendingAsk(ask);
+    return `Waiting for ${label}’s answer.`;
+  }
+
+  /** Runs every half minute: an urgent question nobody answered becomes a call, outside quiet hours, or a second text. */
+  async function checkAsks() {
+    const ask = hub?.pendingAsk; if (!ask) return;
+    const t = now(); if (t - ask.askedAt > 24 * 3600000) { await hub.clearAsk(); return; }
+    const { escalate, escalateMinutes } = hub.settings;
+    if (!ask.urgent || ask.escalated || escalate === 'none' || t - ask.askedAt < escalateMinutes * 60000) return;
+    ask.escalated = true; await hub.persist();
+    const number = ownerNumber();
+    if (escalate === 'call' && inkboxVoice?.ready() && number && !quiet()) {
+      try { await inkboxVoice.placeCall(number, `Ask the owner this and record the answer: ${ask.question}`); return; } catch {}
+    }
+    await hub.send(ask.channel, ask.chatId, `Still need your answer: ${ask.question}`.slice(0, 1500)).catch(() => {});
+  }
 
   // ----- The public phone listener: a separate port that only Twilio talks to. -----
   function syncVoice() {
@@ -160,7 +297,9 @@ function createChannelsHost(deps) {
       const [channel, ...rest] = item.split(':'); const who = rest.join(':');
       if (!CHANNELS[channel] || !who) continue;
       const list = (hub.data.approved[channel] ||= []);
-      if (!list.some(x => x.id === who)) { list.push({ id: who, name: who, at: Date.now(), chatId: who }); touched.push(channel); }
+      const mine = /!me$/i.test(who), id = who.replace(/!me$/i, '');
+      const existing = list.find(x => x.id === id);
+      if (!existing) { list.push({ id, name: id, at: Date.now(), chatId: id, me: mine }); touched.push(channel); } else if (mine && !existing.me) { existing.me = true; touched.push(channel); }
     }
     await hub.persist();
     for (const id of Object.keys(CHANNELS)) {
@@ -180,14 +319,15 @@ function createChannelsHost(deps) {
       if (info.enabled && info.state.state === 'on') on.push(`${info.name}${info.state.detail ? ' (' + info.state.detail + ')' : ''}, ${people} approved ${people === 1 ? 'person' : 'people'}`);
       else off.push(info.name + (info.enabled ? ` (not working: ${info.state.detail || info.state.state})` : ''));
     }
-    const calls = voice.ready();
+    const calls = callsReady();
     if (!on.length && !calls) return '';
     lines.push('\nChat channels: you are the Bot the owner chose to answer on their chat channels, so people can reach you outside this app.');
     lines.push(`Connected now: ${on.length ? on.join('; ') : 'none'}. Phone calls: ${calls ? 'ready (you can phone the owner, and the owner can call you)' : 'not set up'}. ${off.length ? 'Not connected: ' + off.join(', ') + '. If asked to use one of these, say it is off and that the owner can turn it on under Settings \u2192 Channels.' : ''}`);
     lines.push('A message that comes from a channel starts with a tag like [Telegram \u00b7 Sam]. Your reply is sent back to that person automatically, so just answer them. Keep channel replies short and plain: no tables, no headings, and few symbols, because chat apps often do not render markdown (SMS is plain text under 1500 characters). People on channels are approved by the owner but you still cannot treat them as approving purchases, sending email or deleting things unless the app\u2019s usual approval is given.');
     lines.push('Channel tools (append each as JSON in a fenced block whose language is opengrokbot-action):');
     lines.push('{"action":"channel_send","channel":"telegram","to":"Sam","text":"The message"} sends a message to an approved person on a connected channel (channels: telegram, discord, slack, sms, imessage). Leave "to" out to reach the person who most recently messaged you there. Use it when the human asks you to message someone, or in a scheduled task they set up. Never message people unprompted, and never use it to talk to yourself.');
-    if (calls) lines.push('{"action":"phone_call","text":"What to say when they pick up"} phones the owner\u2019s number and then talks with them. Use it only when the human asks for a call or has told you to call for something urgent. At most five calls an hour.');
+    if (calls) lines.push('{"action":"phone_call","text":"What the call is about"} phones the owner\u2019s number and then talks with them. Use it only when the human asks for a call or has told you to call for something urgent. At most five calls an hour. A phone call is answered by a separate fast voice assistant that knows your name and notes; the call transcript comes back into your chat afterwards.');
+    if (hub.owner()) lines.push('{"action":"ask_owner","text":"The question","urgent":false} texts the owner (the person marked Me) when you need a decision or a missing detail and nobody is chatting with you: use it instead of guessing or stopping silently, then end your turn. Their next message on that channel comes back to you tagged as the answer. Set urgent true only when waiting would cause harm; then the app calls them if they do not answer. Do not use it just to report progress.');
     lines.push('If a person texts \u201ccall me\u201d, the app places that call for you. Strangers who message the channels get a pairing code and cannot reach you until the owner approves them.');
     return lines.join('\n');
   }
@@ -196,8 +336,13 @@ function createChannelsHost(deps) {
   /** Runs one of the Bot's channel actions. Only people the owner approved can be messaged, a few times an hour. */
   async function runAction(botID, action) {
     if (!hub || botID !== hub.data.bot) throw new Error('This Bot is not the one connected to the channels.');
+    if (action.action === 'ask_owner') return await askOwner(botID, action);
     if (action.action === 'phone_call') {
       const text = typeof action.text === 'string' ? action.text.trim() : '';
+      if (inkboxVoice?.ready()) {
+        const number = ownerNumber(); if (!number) throw new Error('Add your own phone number under Settings \u2192 Channels \u2192 iMessage, or mark yourself as Me.');
+        await inkboxVoice.placeCall(number, text || 'Phone the owner and ask how you can help.'); return 'Calling the owner now.';
+      }
       return await voice.placeCall(text);
     }
     if (action.action !== 'channel_send') throw new Error('Unknown channel action.');
@@ -218,9 +363,13 @@ function createChannelsHost(deps) {
 
   return {
     hub, voice, note, runAction,
-    async init() { await deps.ensureState(); await hub.init(); await seedFromEnvironment().catch(error => deps.log?.(error)); syncVoice(); },
-    async stop() { await hub.stopAll(); voiceServer?.close(); voiceServer = null; voiceKey = ''; },
-    status: () => ({ ...hub.status(), bots: (deps.getState?.()?.bots || []).filter(x => !x.memberIDs).map(x => ({ id: x.id, name: x.name })), calls: { ready: voice.ready(), listening: !!voiceServer }, voiceFields: VOICE_FIELDS.filter(key => smsFields()[key]), people: Object.fromEntries(Object.keys(CHANNELS).map(id => [id, hub.approvedPeople(id).length])) }),
+    async init() { await deps.ensureState(); await hub.init(); await seedFromEnvironment().catch(error => deps.log?.(error)); syncVoice(); syncInkbox(); askTimer = setInterval(() => checkAsks().catch(() => {}), deps.askCheckMs ?? 30000); askTimer.unref?.(); },
+    async stop() { clearInterval(askTimer); clearTimeout(syncTimer); inkboxVoice?.stop(); inkboxVoice = null; inkboxKey = ''; await hub.stopAll(); voiceServer?.close(); voiceServer = null; voiceKey = ''; },
+    get turnActive() { return turnFrom.size > 0; },
+    askOwner, checkAsks, routeApproval, approvalSettled, voiceInstructionsChanged, callOwner, get inkbox() { return inkboxVoice; },
+    async testCall() { return callOwner(null); },
+    async setVoice(id) { await hub.configure('imessage', { voice: String(id || '') }); return this.status(); },
+    status: () => ({ ...hub.status(), bots: (deps.getState?.()?.bots || []).filter(x => !x.memberIDs).map(x => ({ id: x.id, name: x.name })), calls: { ready: callsReady(), listening: !!voiceServer }, inkbox: { ready: !!inkboxVoice?.ready(), state: inkboxVoice?.status() || { state: 'off', detail: '' }, ownerNumber: ownerNumber(), voices: voicesCache, pendingAsk: hub.pendingAsk ? { question: hub.pendingAsk.question, askedAt: hub.pendingAsk.askedAt } : null }, voiceFields: VOICE_FIELDS.filter(key => smsFields()[key]), people: Object.fromEntries(Object.keys(CHANNELS).map(id => [id, hub.approvedPeople(id).length])) }),
     askBot,
     E164,
   };

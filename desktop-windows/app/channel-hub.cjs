@@ -18,6 +18,7 @@ const CHANNELS = {
 };
 const PAIR_TTL = 60 * 60 * 1000, MAX_PENDING = 20, WINDOW = 10 * 60 * 1000, MAX_PER_WINDOW = 30, MAX_TEXT = 4000, NOTICE_GAP = 10 * 60 * 1000;
 const STOP_WORDS = /^\s*(?:\/stop|stop|cancel|abort|never\s*mind|nevermind)(?:\s+(?:it|that|please))?[.!]*\s*$/i;
+const YES = /^\s*(?:yes|y|yep|yeah|approve|approved|ok|okay|go ahead|do it|sure)[.!]*\s*$/i, NO = /^\s*(?:no|n|nope|deny|denied|don'?t|do not)[.!]*\s*$/i;
 const BATCH_QUIET = 1200, BATCH_MAX = 4000, MAX_MEDIA = 3;
 const DEFAULT_SETTINGS = { fast: true, whenBusy: 'steer', reachOn: null, escalate: 'call', escalateMinutes: 10, quietStart: 22, quietEnd: 8 };
 const CALL_WORDS = /^\s*(?:\/call|(?:hey\s+)?(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?(?:give\s+me\s+a\s+)?(?:call|phone|ring)(?:\s+me)?(?:\s+now|\s+please)?[.!?]*)\s*$/i;
@@ -40,13 +41,13 @@ class ChannelHub {
     this.adapters = new Map(); this.bots = new Map(); this.batches = new Map(); this.recent = new Map(); this.notices = new Map();
     this.setTimer = deps.setTimer || setTimeout; this.clearTimer = deps.clearTimer || clearTimeout;
     this.batchMs = deps.batchMs ?? BATCH_QUIET; this.batchMaxMs = deps.batchMaxMs ?? BATCH_MAX;
-    this.data = { bot: null, channels: {}, approved: {}, pending: {}, settings: { ...DEFAULT_SETTINGS } };
+    this.data = { bot: null, channels: {}, approved: {}, pending: {}, pendingAsk: null, settings: { ...DEFAULT_SETTINGS } };
     this.saving = Promise.resolve();
   }
 
   async init() {
     const saved = await this.deps.load().catch(() => null);
-    if (saved && typeof saved === 'object') this.data = { bot: saved.bot ?? null, channels: saved.channels || {}, approved: saved.approved || {}, pending: saved.pending || {}, settings: { ...DEFAULT_SETTINGS, ...(saved.settings || {}) } };
+    if (saved && typeof saved === 'object') this.data = { bot: saved.bot ?? null, channels: saved.channels || {}, approved: saved.approved || {}, pending: saved.pending || {}, pendingAsk: saved.pendingAsk || null, settings: { ...DEFAULT_SETTINGS, ...(saved.settings || {}) } };
     for (const id of Object.keys(CHANNELS)) if (this.data.channels[id]?.enabled) await this.start(id).catch(() => {});
   }
 
@@ -81,6 +82,11 @@ class ChannelHub {
     this.data.settings = next; await this.persist(); return next;
   }
   get settings() { return this.data.settings; }
+
+  /** A question the Bot asked the owner. The owner's next message on that channel is the answer. */
+  async setPendingAsk(ask) { this.data.pendingAsk = ask; await this.persist(); }
+  get pendingAsk() { return this.data.pendingAsk; }
+  async clearAsk() { if (this.data.pendingAsk) { this.data.pendingAsk = null; await this.persist(); } }
   secretField(id, key) { return /token|secret|password|key|pin/i.test(key); }
   configured(id) { return this.requirements(id).every(key => this.data.channels[id]?.fields?.[key]); }
   requirements(id) { return { telegram: ['token'], discord: ['token'], slack: ['botToken', 'appToken'], sms: ['accountSid', 'authToken', 'number'], imessage: ['apiKey'] }[id] || []; }
@@ -200,6 +206,11 @@ class ChannelHub {
     if (times.length >= MAX_PER_WINDOW) { if (times.length === MAX_PER_WINDOW) { times.push(now); this.recent.set(key, times); await reply('That is a lot of messages. Give it a few minutes.'); } return; }
     times.push(now); this.recent.set(key, times);
     const person = this.approvedPeople(channel).find(item => item.id === senderId); if (person) { person.lastSeen = now; person.chatId = chatId; }
+    // The owner can answer an approval prompt that was sent to the chat with a plain yes or no.
+    if (person?.me && !media.length && this.deps.answerApproval) {
+      const verdict = YES.test(text) ? true : NO.test(text) ? false : null;
+      if (verdict !== null && this.deps.answerApproval({ channel, senderId }, verdict)) { await reply(verdict ? 'Approved.' : 'Denied.'); return; }
+    }
     if (text.length > MAX_TEXT) { await reply(`That message is too long (the limit is ${MAX_TEXT} characters).`); return; }
     if (STOP_WORDS.test(text) && !media.length) {
       const state = this.bots.get(this.data.bot);
@@ -212,6 +223,8 @@ class ChannelHub {
       return;
     }
     const from = { channel, senderId, senderName: person?.display || message.senderName || person?.name || senderId, me: !!person?.me, chatId };
+    const ask = this.data.pendingAsk;
+    if (ask && person?.me && ask.channel === channel && ask.senderId === senderId) { from.replyTo = ask.question; this.clearAsk().catch(() => {}); }
     return this.collect(key, from, text, media);
   }
 

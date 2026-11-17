@@ -26,7 +26,7 @@ const voice=require('./voice.cjs');
 const providerKeys=require('./provider-keys.cjs');
 const deviceActions=require('./device-actions.cjs');
 const memoryModule=require('./memory.cjs');
-const memory=memoryModule.createMemory({getState:()=>state,persist:()=>atomicJSON('preview-workspace.json',state),archivePath:id=>file(path.join('Archive',id+'.jsonl')),onChange:()=>{try{notify();}catch{}},log:error=>console.error('memory:',error.message),
+const memory=memoryModule.createMemory({getState:()=>state,persist:()=>atomicJSON('preview-workspace.json',state),archivePath:id=>file(path.join('Archive',id+'.jsonl')),onChange:id=>{try{notify();}catch{}try{channelsHost?.voiceInstructionsChanged(id);}catch{}},log:error=>console.error('memory:',error.message),
  quickTurn:(botID,prompt)=>quickTurn(botID,prompt)});
 const botPackages=require('./bot-package.cjs');
 const settingsBundles=require('./settings-bundle.cjs');
@@ -136,7 +136,7 @@ async function ensureState(){
 async function initializeState(){
   const loaded=await loadJSON('preview-workspace.json',previewWorkspace());validateWorkspace(loaded);
   if(!cliInstaller)makeCliInstaller();
-  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text,options)=>startChat(id,text,undefined,undefined,0,options),isRunning:id=>active.has(id)||pendingBots.has(id),stop:id=>{stoppedBots.add(id);for(const run of active.get(id)||[])run.cancel();},botDirectory,fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
+  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text,options)=>startChat(id,text,undefined,undefined,0,options),isRunning:id=>active.has(id)||pendingBots.has(id),stop:id=>{stoppedBots.add(id);for(const run of active.get(id)||[])run.cancel();},botDirectory,record:async(botID,text)=>{state.entries.push({id:randomUUID(),botID,kind:'user',text:String(text).slice(0,100000),date:new Date().toISOString(),delivery:'delivered'});await atomicJSON('preview-workspace.json',state);notify();},afterTurn:id=>{memory.noteActivity(id).catch(()=>{});},settleApproval:(id,yes)=>settleApproval(id,yes),fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
   skillStore=skillsModule.loadStore(await loadJSON('skills.json',null));
   serverStore=serversModule.load(await loadJSON('servers.json',null));
   if(loaded.version===1)await atomicJSON('legacy-workspace-backup.json',loaded);
@@ -228,7 +228,7 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
    runs.add(run);
    run.done.then(async()=>{if(scheduledTask&&!routineRuns.has(botID))routineRuns.set(botID,{id:scheduledTask.id,runID:requestID,failed:false});settings.providerHealth||={};settings.providerHealth[installation.provider]={state:'ready',detail:'Last message succeeded',at:new Date().toISOString()};teamwork.apply(state,bot,reply,finalText,bot.aiConfiguration||{providers:[choice],activeProvider:choice.provider,replyMode:'one'},delivery);if(delivery)teamwork.finish(state,delivery,'complete');
     if(headsUp)return; // heads-up turns are read-only: no VM, browser or device steps
-    if(!delivery&&channelsHost){for(const channelAction of teamwork.parse(finalText).actions.filter(x=>x.action==='channel_send'||x.action==='phone_call').slice(0,3)){let text;try{text=await channelsHost.runAction(botID,channelAction);}catch(error){text=error.message;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});notify();}}
+    if(!delivery&&channelsHost){for(const channelAction of teamwork.parse(finalText).actions.filter(x=>x.action==='channel_send'||x.action==='phone_call'||x.action==='ask_owner').slice(0,3)){let text;try{text=await channelsHost.runAction(botID,channelAction);}catch(error){text=error.message;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});notify();}}
     const make=!delivery&&!scheduledTask&&teamwork.parse(finalText).actions.find(x=>x.action==='generate_image'||x.action==='generate_video');if(make)makeMedia(bot,make);
     if(teamwork.parse(finalText).actions.some(x=>x.action==='open_vm')){let text;try{await localVMs.open(botID);text='Opened this Bot’s VM console on the host. AI CLI still runs on the host; guest automation is separate.';}catch(error){text=error.message;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});}
     const guest=teamwork.parse(finalText).actions.find(x=>x.action==='vm_exec');if(guest){let text;if(browserSteps>=teamwork.MAX_STEPS){text=teamwork.STEP_LIMIT_MESSAGE;if(scheduledTask&&routineRuns.has(botID))routineRuns.get(botID).failed=true;}else{browserSteps++;try{const link=(await vmLinks()).shared;text='Linux VM result (untrusted context):\n'+(link?`Linux guest on ${link.hostName} (${link.vmName}):\n`+await remoteVMExec(link,guest.argv):await localVMs.execute(homeBotID(botID),guest.argv));}catch(error){text=error.message;if(scheduledTask&&routineRuns.has(botID))routineRuns.get(botID).failed=true;}continueBrowser=!delivery;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});}
@@ -536,7 +536,7 @@ async function remoteCommand(command){
    else if(command.action==='channels_set_settings'){const f=command.fields||{};const patch={};if('fast' in f)patch.fast=f.fast==='true';for(const key of ['whenBusy','reachOn','escalate','escalateMinutes','quietStart','quietEnd'])if(key in f)patch[key]=f[key];await hub.setSettings(patch);}
    else if(command.action==='channels_set_person'){const f=command.fields||{};const patch={};if('name' in f)patch.name=f.name;if('me' in f)patch.me=f.me==='true';await hub.setPerson(channel,text,patch);}
    else if(command.action==='channels_remove')await hub.remove(channel,text);
-   else if(command.action==='channels_test_call')await channelsHost.voice.placeCall();
+   else if(command.action==='channels_test_call')await channelsHost.testCall();
    else throw new Error('Unknown channels command.');
   }catch(error){throw new PublicError(error.message);}
   notify();return;
@@ -619,9 +619,10 @@ function requestApproval(title,detail){
   approvalWaiters.set(id,{resolve,title:String(title).slice(0,300),detail:String(detail||'').slice(0,2000)});
   if(!window.isVisible())window.show();if(window.isMinimized())window.restore();try{window.flashFrame(true);}catch{}
   window.webContents.send('approval:request',{id,title:String(title).slice(0,300),detail:String(detail||'').slice(0,2000)});
+  try{if(channelsHost&&(channelsHost.turnActive||!window.isFocused()))channelsHost.routeApproval({id,title:String(title),detail:String(detail||'')}).catch(()=>{});}catch{}
  });
 }
-function settleApproval(id,approved){const waiter=approvalWaiters.get(id);if(!waiter)return false;approvalWaiters.delete(id);waiter.resolve(approved===true);if(!approvalWaiters.size&&window&&!window.isDestroyed()){try{window.flashFrame(false);}catch{}}return true;}
+function settleApproval(id,approved){const waiter=approvalWaiters.get(id);if(!waiter)return false;approvalWaiters.delete(id);try{channelsHost?.approvalSettled(id);}catch{}waiter.resolve(approved===true);if(!approvalWaiters.size&&window&&!window.isDestroyed()){try{window.flashFrame(false);}catch{}}return true;}
 function denyAllApprovals(){for(const id of [...approvalWaiters.keys()])settleApproval(id,false);}
 // Bots whose voice mode is open (on this PC or a phone), with when that was last confirmed.
 const voiceBots=new Map();
@@ -846,7 +847,7 @@ function configureIPC() {
  handle('channels:set-settings',channelCall(async(host,patch)=>{await host.hub.setSettings(patch&&typeof patch==='object'?patch:{});return host.status();}));
  handle('channels:set-person',channelCall(async(host,id,who,patch)=>{await host.hub.setPerson(id,String(who),patch&&typeof patch==='object'?patch:{});return host.status();}));
  handle('channels:remove',channelCall(async(host,id,who)=>{await host.hub.remove(id,String(who));return host.status();}));
- handle('channels:test-call',channelCall(host=>host.voice.placeCall()));
+ handle('channels:test-call',channelCall(host=>host.testCall()));
 
  // ---- Routines screen (10.1): create, edit and run now. Pause and delete are the handlers below. ----
  const routineBot=botID=>{const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Routines belong to an individual Bot.');return bot;};

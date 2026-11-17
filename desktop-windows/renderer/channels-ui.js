@@ -8,7 +8,8 @@ const CHANNELS = [
   { id: 'telegram', title: 'Telegram', steps: ['In Telegram, message @BotFather and send /newbot.', 'Follow the steps, then paste the token it gives you.', 'Message your new bot. It answers direct messages only.'], fields: [{ key: 'token', label: 'Bot token', secret: true }] },
   { id: 'discord', title: 'Discord', steps: ['At discord.com/developers/applications make an application, then add a Bot.', 'Under Bot, turn on Message Content Intent, then copy the token.', 'Add it to a server with OAuth2 → URL Generator (scope bot). It answers direct messages, and in a server when you @mention it.'], fields: [{ key: 'token', label: 'Bot token', secret: true }] },
   { id: 'slack', title: 'Slack', steps: ['At api.slack.com/apps make an app from scratch and turn on Socket Mode.', 'Make an App-Level Token with connections:write (starts xapp-).', 'Under OAuth & Permissions add chat:write, im:history, im:read and app_mentions:read, install to your workspace and copy the Bot token (starts xoxb-).', 'Under Event Subscriptions turn on message.im and app_mention.'], fields: [{ key: 'botToken', label: 'Bot token (xoxb-)', secret: true }, { key: 'appToken', label: 'App-level token (xapp-)', secret: true }] },
-  { id: 'imessage', title: 'iMessage (through Inkbox)', steps: ['Sign up at inkbox.ai and create an agent with iMessage turned on.', 'Make an API key for that agent in the Inkbox console and paste it here.', 'From your phone, text “connect @your-agent-handle” to Inkbox’s router number (the console shows it). After that, your messages reach the Bot.', 'Inkbox limits an agent to about 100 iMessages a day on the base plan.'], fields: [{ key: 'apiKey', label: 'Inkbox API key', secret: true }] },
+  { id: 'imessage', title: 'iMessage (through Inkbox)', steps: ['Sign up at inkbox.ai and create an agent with iMessage turned on.', 'Make an API key for that agent in the Inkbox console and paste it here.', 'From your phone, text “connect @your-agent-handle” to Inkbox’s router number (the console shows it). After that, your messages reach the Bot.', 'Inkbox limits an agent to about 100 iMessages a day on the base plan.'], fields: [{ key: 'apiKey', label: 'Inkbox API key', secret: true }],
+    calls: [{ key: 'ownerNumber', label: 'Your phone number for calls (+15551234567)' }] },
   { id: 'sms', title: 'SMS and phone calls (Twilio)', steps: ['Make a Twilio account and buy a phone number.', 'Paste its Account SID, Auth Token and number. Texts to that number reach the Bot.', 'For calls, add your own number, a PIN, and a public https address. On a server run “tailscale funnel --bg 8766” and paste the address it prints. Only the phone port is public.', 'The Bot calls you, or you call the number and enter the PIN. Say “call me” in any channel to get a call.'],
     fields: [{ key: 'accountSid', label: 'Account SID' }, { key: 'authToken', label: 'Auth Token', secret: true }, { key: 'number', label: 'Twilio number (+15551234567)' }],
     calls: [{ key: 'ownerNumber', label: 'Your own number (+15551234567)' }, { key: 'pin', label: 'Call PIN (4 to 8 digits)', secret: true }, { key: 'publicUrl', label: 'Public https address' }, { key: 'language', label: 'Call language (en-US)' }] },
@@ -44,7 +45,20 @@ export async function renderChannels({ bridge, result, toast, page }) {
     busySelect.value = status.settings?.whenBusy || 'steer';
     busySelect.addEventListener('change', async () => { try { await result(bridge.channelsSetSettings({ whenBusy: busySelect.value })); draw(); } catch (error) { toast(error.message); } });
     busy.append(busySelect);
-    who.append(fast, busy, el('p', 'muted', 'Messages sent a second apart are read together, so a photo and “add these to my reminders” arrive as one request. Texting “stop” only stops the Bot.'));
+    const reach = el('label', 'channel-field'); reach.append(el('span', '', 'When the Bot needs you and you have not messaged it, reach me on'));
+    const reachSelect = el('select', 'field'); reachSelect.setAttribute('aria-label', 'Reach me on');
+    const anyOption = el('option', '', 'Any channel where I am marked Me'); anyOption.value = ''; reachSelect.append(anyOption);
+    for (const spec of CHANNELS) { const option = el('option', '', spec.title); option.value = spec.id; reachSelect.append(option); }
+    reachSelect.value = status.settings?.reachOn || '';
+    reachSelect.addEventListener('change', async () => { try { await result(bridge.channelsSetSettings({ reachOn: reachSelect.value })); draw(); } catch (error) { toast(error.message); } });
+    reach.append(reachSelect);
+    const escalate = el('label', 'channel-field'); escalate.append(el('span', '', 'If an urgent question gets no answer'));
+    const escalateSelect = el('select', 'field'); escalateSelect.setAttribute('aria-label', 'If I do not answer');
+    for (const [value, label] of [['call', 'Call me (outside quiet hours)'], ['text', 'Text me again'], ['none', 'Do nothing']]) { const option = el('option', '', label); option.value = value; escalateSelect.append(option); }
+    escalateSelect.value = status.settings?.escalate || 'call';
+    escalateSelect.addEventListener('change', async () => { try { await result(bridge.channelsSetSettings({ escalate: escalateSelect.value })); draw(); } catch (error) { toast(error.message); } });
+    escalate.append(escalateSelect);
+    who.append(fast, busy, reach, escalate, el('p', 'muted', 'Messages sent a second apart are read together, so a photo and “add these to my reminders” arrive as one request. Texting “stop” only stops the Bot.'));
     root.append(who);
 
     for (const spec of CHANNELS) root.append(card(status, spec));
@@ -77,8 +91,20 @@ export async function renderChannels({ bridge, result, toast, page }) {
       try { await result(bridge.channelsConfigure(spec.id, values)); for (const input of inputs) if (input.type === 'password') input.value = ''; draft = {}; toast('Saved.'); draw(); } catch (error) { toast(error.message); }
     }));
     actions.append(pill(info.enabled ? 'Turn off' : 'Turn on', async () => { try { await result(bridge.channelsEnable(spec.id, !info.enabled)); draw(); } catch (error) { toast(error.message); } }, info.enabled ? 'pill' : 'pill primary'));
-    if (spec.id === 'sms') actions.append(pill('Call me now', async () => { try { toast(await result(bridge.channelsTestCall())); } catch (error) { toast(error.message); } }));
+    if (spec.id === 'sms' || spec.id === 'imessage') actions.append(pill('Call me now', async () => { try { toast(await result(bridge.channelsTestCall())); } catch (error) { toast(error.message); } }));
     box.append(actions);
+    if (spec.id === 'imessage' && info.enabled) {
+      const inkbox = status.inkbox || {};
+      const row = el('label', 'channel-field'); row.append(el('span', '', 'Phone voice'));
+      const select = el('select', 'field'); select.setAttribute('aria-label', 'Phone voice');
+      const none = el('option', '', 'Default voice'); none.value = ''; select.append(none);
+      for (const voice of inkbox.voices || []) { const option = el('option', '', voice.name + (voice.available ? '' : ' (unavailable)')); option.value = voice.id; option.disabled = !voice.available; select.append(option); }
+      select.value = info.fields?.voice || '';
+      select.addEventListener('change', async () => { try { await result(bridge.channelsConfigure('imessage', { voice: select.value })); toast('Voice saved.'); draw(); } catch (error) { toast(error.message); } });
+      row.append(select); box.append(row);
+      box.append(el('p', 'muted', 'Calls are answered by Inkbox\u2019s voice assistant, which is told your Bot\u2019s name, style and notes. It cannot run the Bot\u2019s tools during a call; the transcript comes back into the Bot\u2019s chat and anything left to do is handed to the Bot. Tip: in the Inkbox console set the agent to contact-scoped access and allow only your own number to call it.'));
+      if (inkbox.pendingAsk) box.append(el('p', 'muted', `The Bot is waiting for your answer to: ${inkbox.pendingAsk.question}`));
+    }
     if (spec.id === 'sms') box.append(el('p', 'muted', status.calls?.ready ? (status.calls.listening ? 'Calls are ready. Twilio reaches the phone port at your public address.' : 'Calls are set up and starting.') : 'Calls need your Twilio number, your own number and an https address.'));
 
     if (info.pending?.length) {

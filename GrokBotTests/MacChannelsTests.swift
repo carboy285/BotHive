@@ -113,9 +113,11 @@ final class MacChannelsTests: XCTestCase {
         var asked: [(String, [ChannelMedia])] = []
         r.channels.askOverride = { _, _, text, media, _ in asked.append((text, media)); return "done" }
         let photo = ChannelMedia(url: "https://x.example/a.jpg", contentType: "image/jpeg")
-        async let first: Void = r.channels.inbound("telegram", message("", media: [photo]))
-        async let second: Void = r.channels.inbound("telegram", message("add these to my reminders"))
-        _ = await (first, second)
+        let channels = r.channels
+        let one = message("", media: [photo]), two = message("add these to my reminders")
+        let firstTask = Task { await channels.inbound("telegram", one) }
+        let secondTask = Task { await channels.inbound("telegram", two) }
+        await firstTask.value; await secondTask.value
         XCTAssertEqual(asked.count, 1)
         XCTAssertEqual(asked.first?.0, "add these to my reminders")
         XCTAssertEqual(asked.first?.1, [photo])

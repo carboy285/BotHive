@@ -36,18 +36,55 @@ Texting "call me" on any channel places a call too. Bot-to-Bot messages and head
 
 1. At api.slack.com/apps make an app from scratch and turn on **Socket Mode**.
 2. Make an **App-Level Token** with `connections:write` (starts `xapp-`).
-3. Under OAuth & Permissions add `chat:write`, `im:history`, `im:read` and `app_mentions:read`, install it to your workspace and copy the **Bot token** (starts `xoxb-`).
+3. Under OAuth & Permissions add `chat:write`, `im:history`, `im:read`, `files:read` (so pictures reach the Bot) and `app_mentions:read`, install it to your workspace and copy the **Bot token** (starts `xoxb-`).
 4. Under Event Subscriptions turn on `message.im` and `app_mention`.
 
 ## iMessage, through Inkbox
 
-[Inkbox](https://inkbox.ai) gives an agent its own iMessage identity, so this works from Windows or a Docker server and needs no Mac. Bothive checks Inkbox's inbox every few seconds and answers in the same conversation.
+[Inkbox](https://inkbox.ai) gives an agent its own iMessage identity, so this works from Windows or a Docker server and needs no Mac. Bothive checks Inkbox's inbox every two seconds, marks your message read and shows the typing bubble at once, then answers in the same conversation.
 
 1. Sign up at inkbox.ai and create an agent with **iMessage turned on**.
 2. Make an API key for that agent in the Inkbox console and paste it in (Docker: `OPENGROKBOT_INKBOX_API_KEY`).
 3. From your phone, text `connect @your-agent-handle` to Inkbox's router number (the console shows it). Then approve the code Bothive sends back.
 
 Inkbox's limits apply: about 100 iMessages a day per agent on the base plan, and a message to someone who has not written back yet must be short with no links or phone numbers. Group chats are ignored. See Inkbox's pricing page for current plans.
+
+**Who can start a conversation.** On Inkbox's shared number, a person has to text first (`connect @handle`), and the link lapses after a while without messages. The Bot can only start a conversation on its own on a *dedicated line*, which is a paid add-on in the Inkbox console. When the Bot tries to reach you first and Inkbox refuses, the Bot is told "they need to text the Bot once first" and, if the question was urgent, falls back to a phone call. A first message is trimmed to under 160 characters with no links or numbers; the detail follows after you reply.
+
+## Faster replies, photos, and sending several messages
+
+- **Read at once.** The moment an approved person's message arrives the Bot marks it read and shows typing. Strangers get neither.
+- **Fast replies on channels** (on by default). Channel messages use the quicker model each CLI has (Haiku, Gemini Flash, Codex at low effort) and ask for one to three plain sentences. Turn it off in Settings → Channels if you want the Bot's full model on every message. A CLI still starts fresh each turn, so expect a few seconds, not an instant answer.
+- **Photos and screenshots.** A picture sent on iMessage, Telegram, Discord or Slack is saved to the Bot's Attachments folder and the Bot is told where it is, exactly like a picture attached in the app. Up to three pictures a message, PNG, JPEG, GIF or WebP, judged by their bytes. On the Mac, HEIC photos from an iPhone are converted to JPEG first. Windows and Docker cannot convert HEIC, so the Bot says "send it as a JPEG or a screenshot". Slack needs the `files:read` scope.
+- **Bursts become one request.** Messages from one person within about a second (up to four) are read together, so a photo and "add these to my reminders" arrive as one request.
+- **Steering.** Send another message while the Bot is working and, by default, the running turn stops and the Bot carries on with your new message in mind (it is told not to redo finished work). Choose **Queue** instead to have it answer after the current turn. The words "stop" or "cancel" only stop. The Mac and Windows chat boxes work the same way.
+- **Approval prompts.** Tools that need your OK (like adding reminders) normally ask on the computer's screen. If you are marked Me and the app is in the background, or the request came from a channel, the prompt is also sent to your chat: reply yes or no. Only the person marked Me can answer, and the first answer wins.
+
+## Memory
+
+The Bot remembers across every channel and the app:
+
+- A **rolling summary** of what it has been told is refreshed after about every ten new messages by a short background request to the faster model, along with **lasting facts** that are added to its notes (never passwords, codes or one-off details). At 90 notes the pass tidies them down to about 60.
+- A **recall** tool searches every message the Bot has had on every channel, including old ones no longer in its context.
+- When a Bot's chat passes 9,000 entries, the oldest 2,000 move to an archive file that recall still searches, so a busy Bot never hits the app's limit.
+- Give a person a **name** (Rename next to their entry) and the Bot sees the same name on every channel, so Sam on iMessage and Sam on Telegram are one person.
+
+## Phone calls, through Inkbox Voice AI
+
+Turn on iMessage (through Inkbox) and add your own number. Calls are answered and placed by Inkbox's voice assistant, which feels instant and needs no public address.
+
+- Bothive gives the voice assistant the Bot's name, purpose, summary and notes as its instructions (kept under Inkbox's 8,000 characters and refreshed when the Bot's memory changes). It is Inkbox's voice model, not the Bot's own CLI, so it cannot run the Bot's tools during a call. It writes down anything that needs doing; the real Bot picks that up right after the call.
+- **Call me**: text "call me", press **Call me now**, or the Bot starts a call with `phone_call`. Only the person marked Me can ask, at most five calls an hour.
+- Finished calls come back: the transcript goes into the Bot's chat and memory, and the call's action items are handed to the Bot in one follow-up turn (anything that sends, buys or deletes still needs your OK).
+- **Safety.** Inkbox's voice assistant defaults to a mode that can look across the whole identity's contacts, email and messages. In the Inkbox console set the agent to **contact-scoped** access and allow only your own number to call it, so a stranger who finds the number cannot talk to your Bot.
+
+## The Bot reaches out first
+
+Tick **Me** next to your own name (or approve yourself with "This is me"). Then the Bot can contact you without waiting:
+
+- `ask_owner` texts you a question when it needs a decision or a missing detail, then waits. Your next message on that channel is tagged to the Bot as the answer.
+- If a question is **urgent** and unanswered after ten minutes (you can change that), Bothive calls you, or texts again if you prefer. No calls during quiet hours (10 pm to 8 am by default).
+- It only ever reaches the person marked Me, at most five times an hour and twenty a day. Telegram only lets a bot message someone who has started it once; Discord needs a shared server or earlier direct message; Slack can open a direct message.
 
 ## SMS and phone calls, through Twilio
 
@@ -71,7 +108,7 @@ The compose file passes these through (all optional; the screens set the same th
 | Variable | Meaning |
 | --- | --- |
 | `OPENGROKBOT_CHANNEL_BOT` | Name of the Bot that answers |
-| `OPENGROKBOT_CHANNELS_APPROVE` | People approved from the start, like `telegram:123456789,discord:456,sms:+15551234567` |
+| `OPENGROKBOT_CHANNELS_APPROVE` | People approved from the start, like `telegram:123456789,discord:456,imessage:+15551234567!me`. Add `!me` to mark yourself as the owner |
 | `OPENGROKBOT_TELEGRAM_TOKEN` | Telegram bot token |
 | `OPENGROKBOT_DISCORD_TOKEN` | Discord bot token |
 | `OPENGROKBOT_SLACK_BOT_TOKEN`, `OPENGROKBOT_SLACK_APP_TOKEN` | Slack tokens |
@@ -83,4 +120,4 @@ Port 8766 is published to the computer only (`127.0.0.1:8766`), for Tailscale Fu
 
 ## What is not done
 
-These were tested against fake servers and fake chats, not real Telegram, Discord, Slack, Inkbox or Twilio accounts or a real phone call. The Mac and iPhone apps do not run channels themselves, and there is no WhatsApp or email channel yet.
+These were tested against fake servers and fake chats, not real Telegram, Discord, Slack, Inkbox or Twilio accounts or a real phone call. Twilio SMS and calls run on a server (Windows or Docker), not on the Mac; the Mac handles Telegram, Discord, Slack and iMessage (through Inkbox) itself, and calls through Inkbox. There is no WhatsApp or email channel yet. Instant answers are not possible with a CLI: expect the read receipt within two seconds and an answer in a few seconds, longer if the Bot uses tools.

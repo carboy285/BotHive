@@ -125,3 +125,37 @@ test('channel_send reaches only approved people, defaults to whoever wrote last,
   const xml = await g.host.voice.handle('/twilio/voice', { AccountSid: 'AC1', CallSid: 'CA1' }, { t: token });
   assert.match(xml, /Your 3pm moved to 4pm\./);
 });
+
+test('end to end: a Telegram message from a pre-approved person reaches the chosen Bot and its answer is sent back; a stranger only gets a code', async () => {
+  const sent = []; const updates = [[
+    { update_id: 1, message: { text: 'what is on today?', chat: { id: 555, type: 'private' }, from: { id: 555, first_name: 'Sam' } } },
+    { update_id: 2, message: { text: 'let me in', chat: { id: 777, type: 'private' }, from: { id: 777, first_name: 'Mallory' } } },
+  ]];
+  const fetchImpl = async (url, options) => {
+    const method = url.split('/').pop(); const body = JSON.parse(options.body); const json = value => ({ ok: true, status: 200, json: async () => value });
+    if (method === 'getMe') return json({ ok: true, result: { username: 'hive_bot' } });
+    if (method === 'getUpdates') { const next = updates.shift(); if (!next) { await new Promise(r => setTimeout(r, 5)); return json({ ok: true, result: [] }); } return json({ ok: true, result: next }); }
+    if (method === 'sendMessage') sent.push([body.chat_id, body.text]);
+    return json({ ok: true, result: {} });
+  };
+  const f = fixture({ env: { OPENGROKBOT_CHANNEL_BOT: 'travel', OPENGROKBOT_TELEGRAM_TOKEN: '9:zzz', OPENGROKBOT_CHANNELS_APPROVE: 'telegram:555' } });
+  // Rebuild the host with the fake Telegram API (the fixture's own fetch answers nothing useful).
+  const { createChannelsHost } = require('./channels-host.cjs');
+  const files = f.files; const state = f.state; const started = [];
+  const host = createChannelsHost({
+    loadJSON: async (n, d) => (n in files ? JSON.parse(JSON.stringify(files[n])) : d), atomicJSON: async (n, v) => { files[n] = JSON.parse(JSON.stringify(v)); },
+    safeStorage: { isEncryptionAvailable: () => false }, platform: 'linux', ensureState: async () => {}, getState: () => state,
+    startChat: async (id, text) => { started.push([id, text]); state.entries.push({ botID: id, kind: 'bot', text: 'Two meetings today.', state: 'complete' }); },
+    isRunning: () => false, env: { OPENGROKBOT_CHANNEL_BOT: 'travel', OPENGROKBOT_TELEGRAM_TOKEN: '9:zzz', OPENGROKBOT_CHANNELS_APPROVE: 'telegram:555' },
+    fetchImpl, sleep: async () => {},
+  });
+  await host.init();
+  await new Promise(r => setTimeout(r, 80));
+  assert.deepEqual(started, [['travel', '[Telegram · Sam] what is on today?']], 'only the approved person reaches the Bot');
+  assert.ok(sent.some(([chat, text]) => chat === 555 || chat === '555' ? text === 'Two meetings today.' : false), 'the answer goes back to Sam');
+  const stranger = sent.find(([chat]) => String(chat) === '777');
+  assert.ok(stranger && /Your code is \d{6}/.test(stranger[1]) && stranger[1].length < 160, 'Mallory gets a short code and nothing else');
+  assert.equal(host.hub.status().channels.telegram.pending.length, 1);
+  assert.match(host.note('travel'), /Telegram \(@hive_bot\), 1 approved person/);
+  await host.stop();
+});

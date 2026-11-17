@@ -123,18 +123,26 @@ struct MacVoiceCard: View {
 
     var body: some View {
         InspectorCard(title: "Voice chat", footer: "Only for this Bot. Anything left on App default follows the voice settings (the gear on the voice screen). Apple's voice runs on this Mac with no key.") {
-            Picker("Voice", selection: Binding(get: { current.speaker ?? "" }, set: { value in update { $0.speaker = value.isEmpty ? nil : value } })) {
-                Text("App default").tag("")
-                ForEach(VoiceProvider.speakers) { Text($0.title).tag($0.rawValue) }
+            HStack {
+                Text("Voice").font(.system(size: 14))
+                Spacer()
+                Picker("Voice", selection: Binding(get: { current.speaker ?? "" }, set: { value in update { $0.speaker = value.isEmpty ? nil : value } })) {
+                    Text("App default").tag("")
+                    ForEach(VoiceProvider.speakers) { Text($0.title).tag($0.rawValue) }
+                }.labelsHidden().pickerStyle(.menu).fixedSize()
             }
             HStack {
-                Text("Speed")
+                Text("Speed").font(.system(size: 14))
                 Slider(value: Binding(get: { current.speed ?? VoiceSettings.storedSpeed }, set: { value in update { $0.speed = value } }), in: 0.75...1.5, step: 0.05)
                 Text(String(format: "%.2g×", current.speed ?? VoiceSettings.storedSpeed)).monospacedDigit().foregroundStyle(MacTheme.secondary).frame(width: 44, alignment: .trailing)
             }
-            Picker("Language", selection: Binding(get: { current.language ?? "" }, set: { value in update { $0.language = value.isEmpty ? nil : value } })) {
-                Text("App default").tag("")
-                ForEach(VoiceSettings.languages, id: \.code) { Text($0.name).tag($0.code) }
+            HStack {
+                Text("Language").font(.system(size: 14))
+                Spacer()
+                Picker("Language", selection: Binding(get: { current.language ?? "" }, set: { value in update { $0.language = value.isEmpty ? nil : value } })) {
+                    Text("Auto-detect").tag("")
+                    ForEach(VoiceSettings.languages, id: \.code) { Text($0.name).tag($0.code) }
+                }.labelsHidden().pickerStyle(.menu).fixedSize()
             }
             if bot.voice != nil { Button("Use app defaults") { app.setVoice(nil, for: bot.id) }.buttonStyle(InspectorButtonStyle(compact: true)) }
         }

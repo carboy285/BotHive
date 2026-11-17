@@ -52,6 +52,8 @@ final class MacAppModel: ObservableObject {
     /// A message to scroll to and highlight (search results and pinned messages, 0.9.5).
     @Published var jumpTo: UUID?
     @Published var panel: MacPanel?
+    /// A Bot to start the New group chat screen with (set from a Bot's own panel).
+    var groupSeed: UUID?
     @Published var settingsTab = SettingsTab.general
     @Published var showSearch = false
     let teach = MacTeachRecorder()

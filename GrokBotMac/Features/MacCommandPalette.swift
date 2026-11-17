@@ -164,6 +164,7 @@ struct MacNewGroupView: View {
                 }.disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || members.count < 2)
             }
         }.padding(30)
+        .onAppear { if let seed = desktop.groupSeed { members = [seed]; desktop.groupSeed = nil } }
     }
 }
 

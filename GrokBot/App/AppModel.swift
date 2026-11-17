@@ -200,6 +200,16 @@ final class AppModel: ObservableObject {
         return commit { $0.bots.append(group) }
     }
 
+    /// Replaces a group chat's members (2 to 8 individual Bots).
+    @discardableResult
+    func setGroupMembers(_ group: Bot, members: [UUID]) -> Bool {
+        guard group.memberIDs != nil, let index = workspace.bots.firstIndex(where: { $0.id == group.id }) else { return false }
+        let valid = members.filter { id in workspace.bots.contains { $0.id == id && $0.memberIDs == nil } }
+        var seen = Set<UUID>(); let unique = valid.filter { seen.insert($0).inserted }
+        guard (2...8).contains(unique.count) else { errorMessage = "A group chat needs 2 to 8 Bots."; return false }
+        return commit { $0.bots[index].memberIDs = unique }
+    }
+
     @discardableResult
     func renameBot(_ bot: Bot, to name: String) -> Bool {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)

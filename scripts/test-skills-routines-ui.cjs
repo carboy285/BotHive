@@ -213,7 +213,7 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
     await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsSetPerson' && x[3].me === true));
     await page.locator('.channel-person', { hasText: 'Sam' }).getByRole('button', { name: 'Remove', exact: true }).click();
     await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsRemove'));
-    await page.getByRole('button', { name: 'Call me now', exact: true }).click();
+    await page.getByRole('button', { name: 'Call me now', exact: true }).first().click();
     await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsTestCall'));
     await page.keyboard.press('Escape');
 

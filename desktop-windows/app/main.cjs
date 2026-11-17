@@ -462,7 +462,8 @@ async function hostSettings(){
  return {hostName:require('node:os').hostname(),platform:'windows',appVersion:app.getVersion(),providers:installed.map(x=>({provider:x.provider,version:x.version})),...(defaultProvider?{defaultProvider}:{}),
   apiKeys:Object.fromEntries([...providerKeys.PROVIDERS].map(p=>[p,!!cli[p]])),voiceKeys:Object.fromEntries([...settingsBundles.VOICE_PROVIDERS].map(p=>[p,!!voiceK[p]])),
   connectors:{configured:!!composioConfiguration,toolkits:composioConfiguration?.toolkits||[]},sharing:!!settings.shareKeys,admin:settings.webAccess?.admin===true,
-  installable:cliInstallModule.catalog().map(item=>({id:item.id,name:item.name,guide:item.guide,installed:installed.some(x=>x.provider===item.id),...(cliInstaller.status()[item.id]||{})}))};
+  installable:cliInstallModule.catalog().map(item=>({id:item.id,name:item.name,guide:item.guide,installed:installed.some(x=>x.provider===item.id),...(cliInstaller.status()[item.id]||{})})),
+  ...(channelsHost?{channels:channelsHost.status()}:{})};
 }
 /** This computer's keys and connector settings, for copying to another computer on the account (only while sharing is on). */
 async function exportBundle(){
@@ -510,6 +511,21 @@ async function remoteCommand(command){
   if(!remoteChangesAllowed)throw new PublicError('Turn on remote administration for this server first (Settings → Web access → Let apps change settings).');
   const found=installed.find(x=>x.provider===command.name);if(!found)throw new PublicError('Install that CLI first.');
   settings.selected=found.id;await saveSettings();notify();return;
+ }
+ if(typeof command.action==='string'&&command.action.startsWith('channels_')){
+  if(!remoteChangesAllowed)throw new PublicError('Turn on remote administration for this server first (Settings → Web access → Let apps change settings).');
+  if(!channelsHost)throw new PublicError('Channels are still starting. Try again in a moment.');
+  const hub=channelsHost.hub,channel=String(command.name??''),text=typeof command.text==='string'?command.text:'';
+  try{
+   if(command.action==='channels_set_bot')await hub.setBot(text||null);
+   else if(command.action==='channels_configure'){if(!command.fields||typeof command.fields!=='object'||Array.isArray(command.fields)||Object.keys(command.fields).length>12)throw new Error('No settings were sent.');await hub.configure(channel,command.fields);}
+   else if(command.action==='channels_enable')await hub.setEnabled(channel,text==='on');
+   else if(command.action==='channels_approve')await hub.approve(channel,text);
+   else if(command.action==='channels_remove')await hub.remove(channel,text);
+   else if(command.action==='channels_test_call')await channelsHost.voice.placeCall();
+   else throw new Error('Unknown channels command.');
+  }catch(error){throw new PublicError(error.message);}
+  notify();return;
  }
  if(command.action==='set_api_key'){
   if(!remoteChangesAllowed)throw new PublicError('Turn on “Share keys and connectors” on this computer first (Settings → Computer).');

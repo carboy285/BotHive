@@ -702,3 +702,15 @@ main.conversation { position: relative; }
 .new-group .field { margin:10px 0; }
 .group-picks { display:flex; flex-direction:column; gap:6px; margin:8px 0 12px; max-height:200px; overflow:auto; }
 .group-pick { display:flex; align-items:center; gap:8px; font-size:14px; }
+
+/* 10.1.2: Settings → Channels */
+.channels-page .channel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.channels-page .channel-state { font-size:12px; padding:3px 10px; border-radius:99px; background:var(--raised); color:var(--muted); }
+.channels-page .channel-state.on { color:#1c8a4a; } .channels-page .channel-state.error { color:#c2410c; }
+.channels-page .channel-steps { margin:6px 0 14px; padding-left:20px; color:var(--muted); font-size:13px; line-height:1.55; }
+.channels-page .channel-field { display:block; margin:10px 0; } .channels-page .channel-field>span { display:block; font-size:12.5px; color:var(--muted); margin-bottom:4px; }
+.channels-page .channel-field input { max-width:420px; }
+.channels-page .channel-actions { display:flex; flex-wrap:wrap; gap:10px; margin:14px 0 6px; }
+.channels-page h3 { font-size:13px; font-weight:600; color:var(--muted); margin:18px 0 6px; }
+.channels-page .channel-person { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-top:1px solid var(--line, rgba(127,127,127,.18)); font-size:14px; }
+.channels-page select.field { max-width:420px; }

@@ -4,6 +4,7 @@ import { renderApiKeys } from './api-keys.js';
 import { renderSecureLogins } from './secure-logins.js';
 import { renderSkills, renderBotSkills } from './skills-ui.js';
 import { renderBotGroups } from './groups-ui.js';
+import { renderChannels } from './channels-ui.js';
 import { renderShareBot, renderAddFromCode } from './share-ui.js';
 import { installDrop } from './drop-ui.js';
 import { openAccountMenu } from './account-menu.js';
@@ -655,7 +656,7 @@ function unavailable(title, detail) { return append(node('div', 'unavailable'), 
 function showSettings(tab = 'General') {
   dialog.replaceChildren();
   const layout = node('div', 'settings-layout'); const nav = node('nav', 'settings-nav'); const page = node('section', 'settings-page');
-  for (const [name, glyph] of [['General','⚙'],['Heads-ups','✦'],['Routines','↻'],['Skills','✎'],['Servers','⌁'],['Computer','▣'],['Web access','⌂'],['Permissions','♧'],['API Keys','⚷'],['Secure Logins','⚿'],['Vault','⚿'],['Voice','♫'],['Local models','◫'],['Backup','⛁'],['Usage & Billing','▥'],['Updates','⇩']]) {const icon=node('span','',glyph);icon.setAttribute('aria-hidden','true');nav.append(append(button('', () => showSettings(name), name === tab ? 'active' : ''), icon, node('div','',name)));}
+  for (const [name, glyph] of [['General','⚙'],['Heads-ups','✦'],['Routines','↻'],['Skills','✎'],['Servers','⌁'],['Channels','✉'],['Computer','▣'],['Web access','⌂'],['Permissions','♧'],['API Keys','⚷'],['Secure Logins','⚿'],['Vault','⚿'],['Voice','♫'],['Local models','◫'],['Backup','⛁'],['Usage & Billing','▥'],['Updates','⇩']]) {const icon=node('span','',glyph);icon.setAttribute('aria-hidden','true');nav.append(append(button('', () => showSettings(name), name === tab ? 'active' : ''), icon, node('div','',name)));}
   append(page, append(node('header','panel-head'), node('h1','',tab), button('×', () => dialog.close(), 'close-panel')));
   append(layout, nav, page); dialog.append(layout); if (!dialog.open) dialog.showModal();
   if (tab === 'General') {
@@ -679,6 +680,7 @@ function showSettings(tab = 'General') {
   else if (tab === 'Secure Logins') renderSecureLogins({ bridge, result, toast, page });
   else if (tab === 'Skills') renderSkills({ bridge, result, toast, page });
   else if (tab === 'Servers') renderServers({ bridge, result, toast, page });
+  else if (tab === 'Channels') renderChannels({ bridge, result, toast, page });
   else if (tab === 'Routines') renderRoutines({ bridge, result, toast, page, workspace: () => workspace, refresh: () => showSettings('Routines') });
   else if (tab === 'Voice') voice.renderSettings(page);
   else if (tab === 'Backup') renderBackup(page);

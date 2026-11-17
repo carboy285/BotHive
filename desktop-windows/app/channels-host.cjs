@@ -184,7 +184,7 @@ function createChannelsHost(deps) {
     hub, voice, note, runAction,
     async init() { await deps.ensureState(); await hub.init(); await seedFromEnvironment().catch(error => deps.log?.(error)); syncVoice(); },
     async stop() { await hub.stopAll(); voiceServer?.close(); voiceServer = null; voiceKey = ''; },
-    status: () => ({ ...hub.status(), calls: { ready: voice.ready(), listening: !!voiceServer }, voiceFields: VOICE_FIELDS.filter(key => smsFields()[key]), people: Object.fromEntries(Object.keys(CHANNELS).map(id => [id, hub.approvedPeople(id).length])) }),
+    status: () => ({ ...hub.status(), bots: (deps.getState?.()?.bots || []).filter(x => !x.memberIDs).map(x => ({ id: x.id, name: x.name })), calls: { ready: voice.ready(), listening: !!voiceServer }, voiceFields: VOICE_FIELDS.filter(key => smsFields()[key]), people: Object.fromEntries(Object.keys(CHANNELS).map(id => [id, hub.approvedPeople(id).length])) }),
     askBot,
     E164,
   };

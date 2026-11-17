@@ -32,12 +32,22 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
       const ok = value => ({ ok: true, value }); const fail = error => ({ ok: false, error });
       const status = { providers: [{ id: 'codex', name: 'Codex', install: 'npm install -g @openai/codex', login: 'codex login', guide: 'https://github.com/openai/codex#quickstart' }], installed: [{ id: 'codex:fixture', provider: 'codex', name: 'Codex', path: '/fixture/codex', version: 'fixture' }], selected: 'codex:fixture', complete: true };
       const skills = [];
+      const channels = { bot: null, fields: {}, enabled: {}, pending: [{ name: 'Sam <b>Lee</b>', code: '123456', at: 1 }], approved: [] };
+      const channelsState = () => ({ bot: channels.bot, bots: workspace.bots.filter(x => !x.memberIDs).map(x => ({ id: x.id, name: x.name })), calls: { ready: false, listening: false },
+        channels: Object.fromEntries(['telegram', 'discord', 'slack', 'imessage', 'sms'].map(id => [id, { name: id, enabled: !!channels.enabled[id], configured: !!channels.fields[id], fields: Object.fromEntries(Object.entries(channels.fields[id] || {}).map(([k]) => [k, true])), state: { state: channels.enabled[id] ? 'on' : 'off', detail: '@fixture_bot' }, approved: id === 'telegram' ? channels.approved : [], pending: id === 'telegram' ? channels.pending : [] }])) });
       const summary = skill => ({ id: skill.id, name: skill.name, description: skill.description, source: skill.source, chars: skill.text.length });
       const task = (botID, id) => workspace.bots.find(x => x.id === botID)?.schedules?.find(x => x.id === id);
       window.desktop = {
         load: async () => ok(workspace), save: async value => { workspace = value; return ok(value); }, setupStatus: async () => ok(status), scanCLIs: async () => ok(status), chooseCLI: async () => ok(status),
         checkLogin: async () => ok('Fixture signed in'), completeSetup: async () => ({ ok: true }), openDocs: async () => ({ ok: true }), onChange: () => {}, listModels: async () => ok([]), listFiles: async () => ok([]),
         composioStatus: async () => ok({ configured: false, toolkits: [] }), vaultList: async () => ok([]),
+        channelsStatus: async () => ok(channelsState()),
+        channelsSetBot: async id => { calls.push(['channelsSetBot', id]); channels.bot = id || null; return ok(channelsState()); },
+        channelsConfigure: async (id, fields) => { calls.push(['channelsConfigure', id, fields]); channels.fields[id] = { ...(channels.fields[id] || {}), ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v)) }; return ok(channelsState()); },
+        channelsEnable: async (id, on) => { calls.push(['channelsEnable', id, on]); if (on && !channels.fields[id]?.token) return fail('Finish setting up Telegram first.'); channels.enabled[id] = on; return ok(channelsState()); },
+        channelsApprove: async (id, code) => { calls.push(['channelsApprove', id, code]); channels.pending = []; channels.approved.push({ id: '9', name: 'Sam <b>Lee</b>' }); return ok(channelsState()); },
+        channelsRemove: async (id, who) => { calls.push(['channelsRemove', id, who]); channels.approved = []; return ok(channelsState()); },
+        channelsTestCall: async () => { calls.push(['channelsTestCall']); return ok('Calling you now.'); },
         createGroup: async (name, members) => { calls.push(['createGroup', name, members]); workspace.bots.push({ id: crypto.randomUUID(), name, purpose: 'Group conversation', color: 'ochre', memberIDs: members }); return ok(workspace); },
         setGroupMembers: async (id, members) => { calls.push(['setGroupMembers', id, members]); workspace.bots.find(x => x.id === id).memberIDs = members; return ok(workspace); },
         skillsList: async () => ok(skills.map(summary)),
@@ -167,6 +177,36 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
     assert.equal((await calls()).filter(x => x[0] === 'setGroupMembers').at(-1)[2].length, 2);
     await page.locator('.group-row .group-open', { hasText: 'Hive' }).click();
     await page.locator('#chat-heading', { hasText: 'Hive' }).waitFor();
+
+    // ---------- Channels ----------
+    await page.keyboard.press('Escape');
+    await page.locator('#profile-button').click();
+    await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
+    await page.locator('.settings-nav button', { hasText: 'Channels' }).click();
+    await page.getByRole('heading', { name: 'Which Bot answers', exact: true }).waitFor();
+    for (const title of ['Telegram', 'Discord', 'Slack', 'iMessage (through Inkbox)', 'SMS and phone calls (Twilio)']) await page.getByRole('heading', { name: title, exact: true }).waitFor();
+    await page.getByLabel('Bot that answers on channels').selectOption({ label: 'Hive' });
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsSetBot' && x[1]));
+    const telegram = page.locator('.channel-card', { hasText: 'Telegram' }).first();
+    await telegram.getByRole('button', { name: 'Turn on', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('Finish setting up'));
+    await telegram.locator('input[type=password]').fill('123456:fixture-token');
+    await telegram.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsConfigure'));
+    assert.deepEqual((await calls()).find(x => x[0] === 'channelsConfigure').slice(1), ['telegram', { token: '123456:fixture-token' }]);
+    assert.equal(await page.locator('.channel-card', { hasText: 'Telegram' }).first().locator('input[type=password]').inputValue(), '', 'a saved token is never shown again');
+    await page.locator('.channel-card', { hasText: 'Telegram' }).first().getByRole('button', { name: 'Turn on', exact: true }).click();
+    await page.locator('.channel-state.on').first().waitFor();
+    const pendingText = await page.locator('.channel-person').first().innerText();
+    assert.ok(pendingText.includes('Sam <b>Lee</b>') && pendingText.includes('123456'), 'a person\u2019s name stays text');
+    assert.equal(await page.locator('.channel-person b').count(), 0);
+    await page.getByRole('button', { name: 'Approve', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsApprove' && x[2] === '123456'));
+    await page.locator('.channel-person', { hasText: 'Sam' }).getByRole('button', { name: 'Remove', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsRemove'));
+    await page.getByRole('button', { name: 'Call me now', exact: true }).click();
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsTestCall'));
+    await page.keyboard.press('Escape');
 
     // ---------- Routines ----------
     await page.keyboard.press('Escape');

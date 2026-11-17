@@ -822,9 +822,11 @@ extension MacAppModel {
         let fast = VoiceSettings.fastModel
         let model = fast ? BotTeamwork.voiceModel(provider: provider.cli.provider, chatModel: provider.choice.model, custom: Self.voiceModels()[provider.cli.provider.rawValue]) : provider.choice.model
         var text = ""
-        for try await event in LocalCLIRun().events(cli: provider.cli, prompt: prompt, session: nil, directory: workingDirectory(for: bot), mcpURL: nil, model: model, fast: fast) {
+        let run = LocalCLIRun()
+        for try await event in run.events(cli: provider.cli, prompt: prompt, session: nil, directory: workingDirectory(for: bot), mcpURL: nil, model: model, fast: fast) {
             if case .text(let value) = event { text = value }
         }
+        withExtendedLifetime(run) {}
         return text
     }
 

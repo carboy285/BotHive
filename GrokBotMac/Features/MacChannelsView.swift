@@ -7,7 +7,10 @@ struct MacChannelsSection: View {
     let serverName: String
     let canChange: Bool
     let reload: () async -> Void
-    @EnvironmentObject private var desktop: MacAppModel
+    /// Runs one channels command and returns an error message, or nil when it worked. A server's channels and this Mac's use the same screen.
+    let execute: (String, String?, String?, [String: String]?) async -> String?
+    /// Shown under the intro when some channels cannot run here.
+    var footnote: String? = nil
     @State private var drafts: [String: String] = [:]
     @State private var feedback: String?
     @State private var busy = false
@@ -30,8 +33,9 @@ struct MacChannelsSection: View {
         VStack(alignment: .leading, spacing: 16) {
             card {
                 Text("Chat channels on \(serverName)").font(.system(size: 16, weight: .medium))
-                Text("One Bot you choose answers messages from your chat channels and can message or phone you. Nobody is answered until you approve them: a stranger gets a short code and nothing else. The channels run on \(serverName), not on this Mac.")
+                Text("One Bot you choose answers messages from your chat channels and can message or phone you. Nobody is answered until you approve them: a stranger gets a short code and nothing else.")
                     .font(.system(size: 12)).lineSpacing(3).foregroundStyle(MacTheme.secondary)
+                if let footnote { Text(footnote).font(.system(size: 12)).lineSpacing(3).foregroundStyle(MacTheme.secondary) }
                 HStack {
                     Text("Bot that answers").font(.system(size: 14))
                     Spacer()
@@ -134,11 +138,10 @@ struct MacChannelsSection: View {
     }
 
     private func run(_ action: String, channel: String? = nil, text: String? = nil, fields: [String: String]? = nil, done: String, after: (() -> Void)? = nil) {
-        guard let gateway = desktop.gateway, !busy else { return }
+        guard !busy else { return }
         busy = true; feedback = nil
         Task {
-            let ok = await gateway.remote.channelCommand(action, channel: channel, text: text, fields: fields)
-            if ok { after?(); feedback = done } else { feedback = gateway.remote.error ?? "\(serverName) did not accept that." }
+            if let problem = await execute(action, channel, text, fields) { feedback = problem } else { after?(); feedback = done }
             await reload()
             busy = false
         }

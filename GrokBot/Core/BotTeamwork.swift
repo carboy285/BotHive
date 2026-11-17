@@ -34,6 +34,8 @@ struct BotAction: Decodable, Sendable {
     var newName: String?
     var on: String?
     var phone: String?
+    /// channel_send: telegram, discord, slack or imessage (10.1.2).
+    var channel: String?
     var email: String?
     var subject: String?
     var change: String?

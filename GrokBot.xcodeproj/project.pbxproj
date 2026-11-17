@@ -587,6 +587,7 @@
 				"71EAF320E1E29E26B71DA4D4",
 				"89F3741D57D4DEE682D6D059",
 				"694E3235C23291CE5F8226AE",
+				"9A9D47169B7DABBA8CA9C4C7",
 			);
 			"name" = "GrokBotTests";
 			"sourceTree" = "<group>";
@@ -838,6 +839,9 @@
 				"9925A2B0F960E501D1BD9400",
 				"49FB58D36A25162C85FA896B",
 				"6BA50A8875E2F6EF2524EAB7",
+				"FFDDD736FD8BDB4E07FB3338",
+				"75154F94AFC1FC3E6A122DB4",
+				"CE349BBC01207C42872705C0",
 			);
 			"name" = "GrokBotMac";
 			"sourceTree" = "<group>";
@@ -1479,6 +1483,9 @@
 				"CF06174EA71A323A8B669A6E",
 				"02AF96B515413AF77B1708EE",
 				"64F9189EF7AFBE78B29B0325",
+				"A2A6225CE5A1A8F5BE8A9BA5",
+				"D84C92260F31466AB77BC7AD",
+				"59394D85D7D5BA0B14C65844",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -1569,6 +1576,7 @@
 				"CDE00D4EE73ABDCC6EA0E649",
 				"3DA38813C42021601353A57A",
 				"BAD8D631543D3EB58EEFD1D8",
+				"75D6EE2DF233A1F1A84D4AB6",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -2713,6 +2721,46 @@
 		"BAD8D631543D3EB58EEFD1D8" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "694E3235C23291CE5F8226AE";
+		};
+		"FFDDD736FD8BDB4E07FB3338" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Channels/MacChannels.swift";
+			"sourceTree" = "<group>";
+		};
+		"A2A6225CE5A1A8F5BE8A9BA5" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "FFDDD736FD8BDB4E07FB3338";
+		};
+		"75154F94AFC1FC3E6A122DB4" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Channels/MacChannelAdapters.swift";
+			"sourceTree" = "<group>";
+		};
+		"D84C92260F31466AB77BC7AD" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "75154F94AFC1FC3E6A122DB4";
+		};
+		"CE349BBC01207C42872705C0" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Features/MacLocalChannelsSettings.swift";
+			"sourceTree" = "<group>";
+		};
+		"59394D85D7D5BA0B14C65844" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "CE349BBC01207C42872705C0";
+		};
+		"9A9D47169B7DABBA8CA9C4C7" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotTests/MacChannelsTests.swift";
+			"sourceTree" = "<group>";
+		};
+		"75D6EE2DF233A1F1A84D4AB6" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "9A9D47169B7DABBA8CA9C4C7";
 		};
 	};
 	"rootObject" = "244210E48437B6556980A702";

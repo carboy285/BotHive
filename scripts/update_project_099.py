@@ -142,6 +142,8 @@ compile_in('GrokBotTests/BackgroundCheckTests.swift', 'GrokBotTests', 'GrokBotTe
 
 # --- 10.1.2: chat channels on a server, managed from the Mac -----------------------------------------------------------
 compile_in('GrokBotMac/Features/MacChannelsView.swift', 'GrokBotMac', 'GrokBotMac')
+compile_in('GrokBotTests/MacChannelsTests.swift', 'GrokBotMacTests', 'GrokBotTests')
+for path in ['GrokBotMac/Channels/MacChannels.swift', 'GrokBotMac/Channels/MacChannelAdapters.swift', 'GrokBotMac/Features/MacLocalChannelsSettings.swift']: compile_in(path, 'GrokBotMac', 'GrokBotMac')
 for name in ['GrokBotTests', 'GrokBotMacTests']: compile_in('GrokBotTests/RemoteChannelsTests.swift', name, 'GrokBotTests')
 
 # --- Version (10.1.2: updaters need three parts; the Mac updater matches it to the tag exactly) ----------------------------------------------------------------------------

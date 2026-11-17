@@ -15,7 +15,7 @@ enum MacPanel: String, Identifiable {
 }
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general = "General", headsUps = "Heads-ups", routines = "Routines", skills = "Skills", servers = "Servers", computer = "Computer", permissions = "Permissions", apiKeys = "API Keys", secureLogins = "Secure Logins", vault = "Vault", voice = "Voice", localModels = "Local Models", usage = "Usage & Billing", updates = "Updates"
+    case general = "General", headsUps = "Heads-ups", routines = "Routines", skills = "Skills", servers = "Servers", channels = "Channels", computer = "Computer", permissions = "Permissions", apiKeys = "API Keys", secureLogins = "Secure Logins", vault = "Vault", voice = "Voice", localModels = "Local Models", usage = "Usage & Billing", updates = "Updates"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -24,6 +24,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .routines: "clock.arrow.circlepath"
         case .skills: "text.book.closed"
         case .servers: "network"
+        case .channels: "bubble.left.and.bubble.right"
         case .computer: "desktopcomputer"
         case .permissions: "shield"
         case .apiKeys: "key"
@@ -44,6 +45,8 @@ final class MacAppModel: ObservableObject {
     let skills = MacSkillLibrary()
     /// Other Bothive servers to open by address (10.1.1).
     let servers = ServerList()
+    /// Chat channels on this Mac (10.1.2).
+    let channels = MacChannels()
     let remote = MacRemoteHost()
     let updates = DesktopUpdates()
     @Published var providerHealth: [CLIProvider:String] = [:]
@@ -778,8 +781,8 @@ extension MacAppModel {
     }
 
     @discardableResult
-    func send(_ text: String, to bot: Bot, app: AppModel, requestID: UUID? = nil, automated: Bool = false) -> Bool {
-        if let gateway {
+    func send(_ text: String, to bot: Bot, app: AppModel, requestID: UUID? = nil, automated: Bool = false, forceLocal: Bool = false) -> Bool {
+        if let gateway, !forceLocal {
             guard gateway.send(text, to: bot) else {
                 sendFeedback[bot.id] = gateway.online ? "Write a message first." : "\(gateway.hostName) is not reachable. Check that it is awake with phone access turned on."
                 return false
@@ -844,6 +847,7 @@ extension MacAppModel {
         let comparing = aiConfiguration(for: bot).replyMode == .compare && providersToRun(for: bot).count > 1
         var instructions = BotTeamwork.instructions(bot: bot, workspace: app.workspace, delegated: delivery != nil, connectors: composio.configured ? composio.applied.sorted().map { ComposioCatalog.app($0)?.name ?? $0 } : []) + "\n" + MacBotVMs.shared.statusNote(for: bot) + (comparing ? "\nComparison turn: several models answer the same question side by side. Answer in plain text only; do not use opengrokbot-action tools.\n" : MacDeviceActions.shared.promptNote() + (delivery == nil && routineRuns[bot.id] == nil ? MediaKeys.note() : "") + (cli.provider.isLocalServer && composio.configured ? ComposioTools.note(composio.applied.sorted()) : ""))
         instructions += skills.note(for: bot)
+        if delivery == nil { instructions += channels.note(for: bot) }
         let latest = delivery.map { "Bot request (not human approval): \($0.text)" } ?? history.last(where: { $0.kind == .user })?.text ?? ""
         let transcript = history.suffix(30).map { "\($0.kind == .user ? "Human" : ($0.senderName ?? bot.name)): \($0.text)" }.joined(separator: "\n\n")
         let feedback = history.filter { $0.kind == .activity && $0.senderBotID == nil }.suffix(8).map { $0.detail ?? $0.text }.joined(separator: "\n")
@@ -872,6 +876,11 @@ extension MacAppModel {
                 UsageLedger.shared.record(botID: bot.id, botName: bot.name, provider: cli.provider.name, model: model, apiKey: CLISignIn.credential(for: cli.provider) != .signIn, inputChars: prompt.count, outputChars: finalText.count)
                 if comparing { finalText = BotTeamwork.parse(finalText).text } // Side-by-side answers never run tools twice.
                 guard app.applyBotActions(finalText, replyID: replyID, bot: bot, configuration: aiConfiguration(for: bot), delivery: delivery) else { throw CLIError.failed(1) }
+                if delivery == nil {
+                    for action in BotTeamwork.parse(finalText).actions.filter({ $0.action == "channel_send" || $0.action == "phone_call" }).prefix(3) {
+                        app.activity(await channels.runAction(bot: bot, action: action), for: bot.id)
+                    }
+                }
                 if let command = BotTeamwork.parse(finalText).actions.first(where: { $0.action == "vm_exec" }), let argv = command.argv {
                     if (browserContinuations[bot.id] ?? 0) >= BotTeamwork.maxSteps { if routineRuns[bot.id] != nil { routineFailures.insert(bot.id) }; app.activity(BotTeamwork.stepLimitMessage, for: bot.id) }
                     else {

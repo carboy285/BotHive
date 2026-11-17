@@ -35,6 +35,7 @@ struct GrokBotMacApp: App {
                     desktop.remote.attach(app: app, desktop: desktop)
                     MacIntentHub.shared.attach(app: app, desktop: desktop)
                     desktop.localApp = app
+                    desktop.channels.attach(desktop: desktop, app: app)
                     desktop.selectFirst(in: app)
                     desktop.startScheduler(app: app)
                     desktop.refreshCLIs()

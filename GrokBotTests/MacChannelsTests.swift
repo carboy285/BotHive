@@ -192,9 +192,11 @@ final class MacChannelsTests: XCTestCase {
 
     func testAnApprovalPromptGoesToTheOwnersChatOnlyWhenAnOwnerIsSet() async throws {
         let r = try rig(me: true)
+        r.channels.appIsActive = { false }
         let sent = await r.channels.routeApproval(id: UUID(), title: "Add 6 reminders", detail: "Buy milk")
         XCTAssertTrue(sent); XCTAssertTrue(r.adapter.sent.last?.text.hasPrefix("Needs your OK: Add 6 reminders") == true)
         let other = try rig(me: false)
+        other.channels.appIsActive = { false }
         let none = await other.channels.routeApproval(id: UUID(), title: "x", detail: "")
         XCTAssertFalse(none, "nobody is marked Me")
     }

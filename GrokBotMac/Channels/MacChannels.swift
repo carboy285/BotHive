@@ -291,6 +291,8 @@ final class MacChannels: ObservableObject {
     /// Tests replace the Bot turn and watch for stops.
     var askOverride: ((String, Sender, String, [ChannelMedia], Bool) async throws -> String?)?
     var onStop: ((UUID) -> Void)?
+    /// Whether Bothive is in front. Approval prompts are only sent to the chat when it is not, or when a chat turn asked for them.
+    var appIsActive: () -> Bool = { NSApp?.isActive == true }
 
     /// Used by tests to put a fake adapter in place.
     func install(_ adapter: any ChannelAdapter, for id: String) { adapters[id] = adapter }
@@ -615,7 +617,7 @@ final class MacChannels: ObservableObject {
     @discardableResult
     func routeApproval(id: UUID, title: String, detail: String) async -> Bool {
         guard let target = owner(preferred: settings.reachOn), adapters[target.channel] != nil else { return false }
-        guard NSApp?.isActive != true || !talking.isEmpty else { return false }
+        guard !appIsActive() || !talking.isEmpty else { return false }
         let text = "Needs your OK: \(title)" + (detail.isEmpty ? "" : " \u{2014} " + String(detail.prefix(600))) + "\nReply yes or no."
         do { try await sendOrThrow(target.channel, chat: target.person.chatID, text: text) } catch { return false }
         approvalAsks[id] = (target.channel, target.person.id, Date())

@@ -37,6 +37,9 @@ const webAccessModule = require('./web-access.cjs');
 // ---------- Servers (10.1.1): this window can use a Bothive that runs somewhere else ----------
 const cliInstallModule = require('./cli-install.cjs');
 let cliInstaller;
+// ---------- Chat channels (10.1.1): Telegram, Discord, Slack, SMS and phone calls reach one Bot you choose ----------
+const { createChannelsHost } = require('./channels-host.cjs');
+let channelsHost;
 function makeCliInstaller(){
   const base=app.getPath('userData');
   process.env.OPENGROKBOT_CLI_BIN=cliInstallModule.binDirectory(base);
@@ -130,6 +133,7 @@ async function ensureState(){
 async function initializeState(){
   const loaded=await loadJSON('preview-workspace.json',previewWorkspace());validateWorkspace(loaded);
   if(!cliInstaller)makeCliInstaller();
+  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text)=>startChat(id,text),isRunning:id=>active.has(id)||pendingBots.has(id),fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
   skillStore=skillsModule.loadStore(await loadJSON('skills.json',null));
   serverStore=serversModule.load(await loadJSON('servers.json',null));
   if(loaded.version===1)await atomicJSON('legacy-workspace-backup.json',loaded);
@@ -802,6 +806,14 @@ function configureIPC() {
   try{return await remoteBackend.connect(entry.url,username,password,entry.name);}catch(error){throw new PublicError(error.message);}});
  handle('servers:status',async()=>remoteBackend.status());
  handle('servers:disconnect',async()=>{remoteBackend.disconnect();return remoteBackend.status();});
+ const channelCall=fn=>async(...args)=>{await ensureState();if(!channelsHost)throw new PublicError('Channels are still starting. Try again in a moment.');try{return await fn(channelsHost,...args);}catch(error){throw new PublicError(error.message);}};
+ handle('channels:status',channelCall(host=>host.status()));
+ handle('channels:set-bot',channelCall(async(host,id)=>{await host.hub.setBot(id||null);return host.status();}));
+ handle('channels:configure',channelCall(async(host,id,fields)=>{await host.hub.configure(id,fields);return host.status();}));
+ handle('channels:enable',channelCall(async(host,id,on)=>{await host.hub.setEnabled(id,on===true);return host.status();}));
+ handle('channels:approve',channelCall(async(host,id,code)=>{await host.hub.approve(id,code);return host.status();}));
+ handle('channels:remove',channelCall(async(host,id,who)=>{await host.hub.remove(id,String(who));return host.status();}));
+ handle('channels:test-call',channelCall(host=>host.voice.placeCall()));
 
  // ---- Routines screen (10.1): create, edit and run now. Pause and delete are the handlers below. ----
  const routineBot=botID=>{const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Routines belong to an individual Bot.');return bot;};
@@ -1205,5 +1217,5 @@ app.whenReady().then(() => {
   (async()=>{try{await ensureState();remoteTrayUpdate();applyWebAccess().catch(()=>{});if(background&&!keepRunning())window.show();installed=await cli.discover(settings.overrides);await cloud.restore();}catch{if(!window.isVisible())window.show();cloud.transition('offline','The desktop could not be restored. Unlock Windows and reopen the app.');}})();
 });
 app.on('will-quit',()=>{try{globalShortcut.unregisterAll();}catch{}});
-app.on('before-quit',()=>{quitting=true;webAccess.stop().catch(()=>{});localBrowsers.closeAll();mirror.stop();cloud.stop();for(const runs of active.values())for(const run of runs)run.cancel(true);});
+app.on('before-quit',()=>{quitting=true;channelsHost?.stop().catch(()=>{});webAccess.stop().catch(()=>{});localBrowsers.closeAll();mirror.stop();cloud.stop();for(const runs of active.values())for(const run of runs)run.cancel(true);});
 app.on('window-all-closed', () => {if(!keepRunning())app.quit();});

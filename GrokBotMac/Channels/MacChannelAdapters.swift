@@ -25,6 +25,7 @@ protocol ChannelAdapter: AnyObject {
     func typing(chat: String) async
 }
 
+@MainActor
 enum ChannelHTTP {
     /// A JSON request. Throws a ChannelError with the HTTP status as `code` for anything but 2xx.
     static func request(_ address: String, method: String = "GET", headers: [String: String] = [:], json: Any? = nil, timeout: TimeInterval = 20) async throws -> (status: Int, body: Any?, headers: [AnyHashable: Any]) {

@@ -34,7 +34,7 @@ class InkboxIMessageChannel {
 
   /** The unread, incoming, one-to-one messages, oldest first. */
   async unread() {
-    const list = await this.api('/messages?' + new URLSearchParams({ limit: '50', is_read: 'false' }));
+    const list = await this.api('/messages?' + new URLSearchParams({ limit: '20', is_read: 'false' }));
     return (Array.isArray(list) ? list : []).filter(m => m.direction === 'inbound' && !m.is_group && !m.is_blocked).reverse();
   }
 

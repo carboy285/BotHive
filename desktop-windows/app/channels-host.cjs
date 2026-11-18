@@ -98,8 +98,12 @@ function createChannelsHost(deps) {
     const token = ++turnCounter; turns.set(botID, token); if (from?.channel && from.channel !== 'phone') turnFrom.set(botID, from);
     await deps.startChat(botID, body, { channelTurn: options.fast !== false && from?.channel !== 'phone', channel: true });
     const deadline = Date.now() + askTimeout;
+    // Wait for the whole chain: a turn that used a tool is followed by another with the result. Replies that arrive along the way
+    // ("I'll check now") are sent at once, so the person is never left waiting on silence.
+    const sent = new Set();
     while (deps.isRunning(botID)) {
       if (Date.now() > deadline) return 'Still working on it, or waiting for your OK in Bothive. I’ll leave the answer in the chat.';
+      for (const entry of deps.getState().entries.slice(before).filter(e => e.botID === botID && e.kind === 'bot' && e.state === 'complete' && e.text && !sent.has(e))) { sent.add(entry); await options.progress?.(entry.text); }
       await sleep(pollMs);
     }
     if (turnFrom.get(botID) === from) turnFrom.delete(botID);
@@ -108,6 +112,7 @@ function createChannelsHost(deps) {
     if (!reply) return 'The Bot did not answer.';
     // The Bot handed part of this to other Bots: when they answer, it gets a follow-up turn so the person hears back.
     if (from && from.channel !== 'phone' && (deps.getState().teamMessages || []).some(m => m.rootID === reply.id && m.from === botID)) delegations.set(reply.id, { botID, from, at: now() });
+    if (sent.has(reply)) return null; // already sent while the Bot was still working
     if (reply.state === 'failed') throw new Error(reply.text || 'The Bot could not finish that.');
     return reply.text;
   }

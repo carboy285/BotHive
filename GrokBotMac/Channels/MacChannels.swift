@@ -112,14 +112,14 @@ final class MacChannels: ObservableObject {
         Info(id: "imessage", name: "iMessage", limit: 4000, required: ["apiKey"]),
     ]
     private static let pairTTL: TimeInterval = 3600, maxPending = 20, window: TimeInterval = 600, maxPerWindow = 30, maxText = 4000, noticeGap: TimeInterval = 600
-    private static let batchMax: TimeInterval = 4, maxMedia = 3
+    private static let batchMax: TimeInterval = 2.5, maxMedia = 3
 
     @Published private(set) var config = Config()
     @Published private(set) var pending: [String: [Waiting]] = [:]
     weak var desktop: MacAppModel?
     weak var app: AppModel?
     /// How long messages are collected into one request. Tests set 0.
-    var batchWindow: TimeInterval = 1.2
+    var batchWindow: TimeInterval = 0.6
     /// How often unanswered urgent questions are checked.
     var askCheckSeconds: UInt64 = 30
     private var adapters: [String: any ChannelAdapter] = [:]
@@ -306,13 +306,25 @@ final class MacChannels: ObservableObject {
         default: return
         }
         adapters[id] = adapter
+        refreshListening()
         Task {
             do { try await adapter.start() } catch { adapter.state = RemoteChannels.State(state: "error", detail: error.localizedDescription) }
             self.objectWillChange.send()
         }
     }
 
-    private func stop(_ id: String) { adapters[id]?.stop(); adapters[id] = nil }
+    private func stop(_ id: String) { adapters[id]?.stop(); adapters[id] = nil; refreshListening() }
+
+    /// While a channel is on, macOS must not nap the app: App Nap would stretch the twice-a-second check to many seconds when Bothive is
+    /// in the background. This also keeps the Mac from idle-sleeping, so messages are answered while you are away from it.
+    private var listening: NSObjectProtocol?
+    private func refreshListening() {
+        if !adapters.isEmpty, listening == nil {
+            listening = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "Bothive is listening for chat messages")
+        } else if adapters.isEmpty, let activity = listening {
+            ProcessInfo.processInfo.endActivity(activity); listening = nil
+        }
+    }
 
     /// Tests replace the Bot turn and watch for stops.
     var askOverride: ((String, Sender, String, [ChannelMedia], Bool) async throws -> String?)?
@@ -509,7 +521,7 @@ final class MacChannels: ObservableObject {
         defer { typing.cancel() }
         do {
             let reply: String?
-            if let askOverride { reply = try await askOverride(botID, from, text, media, steer) } else { reply = try await ask(bot: botID, from: from, text: text, media: media, steer: steer) }
+            if let askOverride { reply = try await askOverride(botID, from, text, media, steer) } else { reply = try await ask(bot: botID, from: from, text: text, media: media, steer: steer, progress: { [weak self] part in await self?.send(from.channel, chat: from.chatID, text: part) }) }
             guard let answer = reply else { return }
             await send(from.channel, chat: from.chatID, text: answer.isEmpty ? "The Bot did not have anything to say." : answer)
         } catch { await send(from.channel, chat: from.chatID, text: error.localizedDescription) }
@@ -525,7 +537,7 @@ final class MacChannels: ObservableObject {
     }
 
     /// Sends a message to the chosen Bot like someone typing it, waits for the run to finish, and returns its reply (nil if the turn was stopped).
-    func ask(bot id: String, from: Sender, text: String, media: [ChannelMedia] = [], steer: Bool = false) async throws -> String? {
+    func ask(bot id: String, from: Sender, text: String, media: [ChannelMedia] = [], steer: Bool = false, progress: ((String) async -> Void)? = nil) async throws -> String? {
         guard let desktop, let app, let bot = botFor(id) else { throw ChannelError(message: "That Bot is gone. Choose another under Settings \u{2192} Channels.") }
         var body = text
         if !media.isEmpty {
@@ -547,8 +559,13 @@ final class MacChannels: ObservableObject {
             throw ChannelError(message: desktop.sendFeedback[bot.id] ?? "The Bot could not take that message right now.")
         }
         let deadline = Date().addingTimeInterval(15 * 60)
-        while desktop.runningBots.contains(bot.id) {
+        // Wait for the whole chain: a turn that used a tool (Reminders, the browser) is followed by another turn with the result.
+        // Replies that arrive along the way ("I'll check now") are sent at once, so the person is never left waiting on silence.
+        var sent = Set<UUID>()
+        while desktop.isWorking(bot.id) {
             if Date() > deadline { talking[bot.id] = nil; return "Still working on it, or waiting for your OK in Bothive. I\u{2019}ll leave the answer in the chat." }
+            let finished = app.entries(for: bot).dropFirst(before).filter { $0.kind == .bot && $0.state == .complete && !$0.text.isEmpty && !sent.contains($0.id) }
+            for entry in finished { sent.insert(entry.id); await progress?(entry.text) }
             try await Task.sleep(nanoseconds: 150_000_000)
         }
         if talking[bot.id] == from { talking[bot.id] = nil }
@@ -559,6 +576,7 @@ final class MacChannels: ObservableObject {
         if from.channel != "phone", (app.workspace.teamMessages ?? []).contains(where: { $0.rootID == reply.id && $0.from == bot.id }) {
             delegations[reply.id] = (bot.id, from, Date())
         }
+        if sent.contains(reply.id) { return nil } // already sent while the Bot was still working
         return reply.text
     }
 

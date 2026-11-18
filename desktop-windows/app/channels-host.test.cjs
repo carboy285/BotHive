@@ -198,3 +198,22 @@ test('channel turns are fast turns, steering adds a note, and a stopped turn ret
   assert.deepEqual(f.startOptions, [{ channelTurn: true, channel: true }, { channelTurn: false, channel: true }]);
   f.running.delete('hive'); await steered;
 });
+
+test('a reply that needs a tool is not cut short: the first reply goes out at once and the real answer follows', async () => {
+  const state = { bots: [{ id: 'hive', name: 'Hive', isMain: true }], entries: [] }; let working = false;
+  const host = createChannelsHost({
+    loadJSON: async (n, d) => d, atomicJSON: async () => {}, safeStorage: { isEncryptionAvailable: () => false }, platform: 'linux',
+    ensureState: async () => {}, getState: () => state, env: {}, sleep: () => new Promise(r => setTimeout(r, 1)), pollMs: 1, askTimeout: 2000,
+    startChat: async (id, text) => {
+      state.entries.push({ botID: id, kind: 'user', text }); working = true;
+      // First turn says it will check, then (after a gap, like a tool step) the second turn has the answer.
+      setTimeout(() => state.entries.push({ id: 'a', botID: id, kind: 'bot', text: 'I will check your reminders now.', state: 'complete' }), 3);
+      setTimeout(() => { state.entries.push({ id: 'b', botID: id, kind: 'bot', text: 'You have two reminders.', state: 'complete' }); working = false; }, 30);
+    },
+    isRunning: () => working,
+  });
+  const progress = [];
+  const answer = await host.askBot('hive', 'check my reminders', { channel: 'imessage', senderName: 'Sam' }, { progress: async text => { progress.push(text); } });
+  assert.deepEqual(progress, ['I will check your reminders now.']);
+  assert.equal(answer, 'You have two reminders.');
+});

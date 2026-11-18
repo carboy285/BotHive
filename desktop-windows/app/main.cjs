@@ -27,6 +27,8 @@ const providerKeys=require('./provider-keys.cjs');
 const deviceActions=require('./device-actions.cjs');
 const memoryModule=require('./memory.cjs');
 const turnOrigin=new Map();
+// Bots whose chain of turns is still going: a turn that used a tool is followed by another, with a moment in between when nothing runs.
+const chains=new Set();
 const memory=memoryModule.createMemory({getState:()=>state,persist:()=>atomicJSON('preview-workspace.json',state),archivePath:id=>file(path.join('Archive',id+'.jsonl')),onChange:id=>{try{notify();}catch{}try{channelsHost?.voiceInstructionsChanged(id);}catch{}},log:error=>console.error('memory:',error.message),
  quickTurn:(botID,prompt)=>quickTurn(botID,prompt)});
 const botPackages=require('./bot-package.cjs');
@@ -137,7 +139,7 @@ async function ensureState(){
 async function initializeState(){
   const loaded=await loadJSON('preview-workspace.json',previewWorkspace());validateWorkspace(loaded);
   if(!cliInstaller)makeCliInstaller();
-  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text,options)=>startChat(id,text,undefined,undefined,0,options),isRunning:id=>active.has(id)||pendingBots.has(id),stop:id=>{stoppedBots.add(id);for(const run of active.get(id)||[])run.cancel();},botDirectory,record:async(botID,text)=>{state.entries.push({id:randomUUID(),botID,kind:'user',text:String(text).slice(0,100000),date:new Date().toISOString(),delivery:'delivered'});await atomicJSON('preview-workspace.json',state);notify();},afterTurn:id=>{memory.noteActivity(id).catch(()=>{});},forceMemory:id=>memory.runPass(id),settleApproval:(id,yes)=>settleApproval(id,yes),fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
+  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text,options)=>startChat(id,text,undefined,undefined,0,options),isRunning:id=>active.has(id)||pendingBots.has(id)||chains.has(id),stop:id=>{stoppedBots.add(id);for(const run of active.get(id)||[])run.cancel();},botDirectory,record:async(botID,text)=>{state.entries.push({id:randomUUID(),botID,kind:'user',text:String(text).slice(0,100000),date:new Date().toISOString(),delivery:'delivered'});await atomicJSON('preview-workspace.json',state);notify();},afterTurn:id=>{memory.noteActivity(id).catch(()=>{});},forceMemory:id=>memory.runPass(id),settleApproval:(id,yes)=>settleApproval(id,yes),fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
   skillStore=skillsModule.loadStore(await loadJSON('skills.json',null));
   serverStore=serversModule.load(await loadJSON('servers.json',null));
   if(loaded.version===1)await atomicJSON('legacy-workspace-backup.json',loaded);
@@ -213,6 +215,7 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
  if(!text&&!delivery&&!state.entries.some(x=>x.botID===botID&&x.kind==='user'))throw new PublicError('Send your first message first.');
  stoppedBots.delete(botID);
  // Where this chain of turns started, so its final reply can be texted to the owner when that is wanted. Continuations keep the origin.
+ if(!(text===undefined&&!delivery&&browserDepth>0)){if(!delivery)chains.add(botID);}
  if(!(text===undefined&&!delivery&&browserDepth>0))turnOrigin.set(botID,options.channel?'channel':headsUp?'headsup':scheduledTask?'scheduled':delivery?'delivery':'app');
  pendingBots.add(botID);
  try{
@@ -270,6 +273,7 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
     let continuing=false;
     if(continueBrowser&&!quitting&&!stoppedBots.has(botID)){try{await startChat(botID,undefined,undefined,undefined,browserSteps);continuing=true;}catch{if(scheduledTask)scheduledTask.lastResult='failed';}}
     if(scheduledTask&&!continuing){if(scheduledTask.lastResult==='running')scheduledTask.lastResult=stoppedBots.has(botID)?'cancelled':routineRuns.get(botID)?.failed?'failed':'completed';const history=scheduledTask.history?.find(run=>run.id===routineRuns.get(botID)?.runID);if(history)history.status=scheduledTask.lastResult;routineRuns.delete(botID);await atomicJSON('preview-workspace.json',state);}
+    if(!continuing&&!delivery)chains.delete(botID);
     if(!continuing&&!headsUp)notifyFinished(botID,reply);
     if(!continuing&&channelsHost&&reply.state==='complete')channelsHost.afterReply(botID,{text:reply.text,origin:turnOrigin.get(botID)||'app'}).catch(()=>{});
     notify();await deliverQueued();

@@ -407,7 +407,7 @@ final class InkboxIMessageAdapter: ChannelAdapter {
 
     /// Unread, incoming, one-to-one messages, oldest first.
     private func unread() async throws -> [[String: Any]] {
-        let list = try await api("/messages?limit=50&is_read=false") as? [[String: Any]] ?? []
+        let list = try await api("/messages?limit=20&is_read=false") as? [[String: Any]] ?? []
         return list.filter { $0["direction"] as? String == "inbound" && $0["is_group"] as? Bool != true && $0["is_blocked"] as? Bool != true }.reversed()
     }
 

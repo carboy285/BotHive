@@ -19,7 +19,7 @@ const CHANNELS = {
 const PAIR_TTL = 60 * 60 * 1000, MAX_PENDING = 20, WINDOW = 10 * 60 * 1000, MAX_PER_WINDOW = 30, MAX_TEXT = 4000, NOTICE_GAP = 10 * 60 * 1000;
 const STOP_WORDS = /^\s*(?:\/stop|stop|cancel|abort|never\s*mind|nevermind)(?:\s+(?:it|that|please))?[.!]*\s*$/i;
 const YES = /^\s*(?:yes|y|yep|yeah|approve|approved|ok|okay|go ahead|do it|sure)[.!]*\s*$/i, NO = /^\s*(?:no|n|nope|deny|denied|don'?t|do not)[.!]*\s*$/i;
-const BATCH_QUIET = 1200, BATCH_MAX = 4000, MAX_MEDIA = 3;
+const BATCH_QUIET = 600, BATCH_MAX = 2500, MAX_MEDIA = 3;
 const DEFAULT_SETTINGS = { fast: true, whenBusy: 'steer', replies: 'where', reachOn: null, escalate: 'call', escalateMinutes: 10, quietStart: 22, quietEnd: 8 };
 const CALL_WORDS = /^\s*(?:\/call|(?:hey\s+)?(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?(?:give\s+me\s+a\s+)?(?:call|phone|ring)(?:\s+me)?(?:\s+now|\s+please)?[.!?]*)\s*$/i;
 
@@ -265,7 +265,7 @@ class ChannelHub {
       const adapter = this.adapters.get(channel);
       const typing = setInterval(() => adapter?.typing?.(chatId)?.catch?.(() => {}), 4000); typing.unref?.();
       try {
-        const answer = await this.deps.ask(botID, text, from, { media, steer, fast: this.data.settings.fast !== false });
+        const answer = await this.deps.ask(botID, text, from, { media, steer, fast: this.data.settings.fast !== false, progress: part => this.send(channel, chatId, part).catch(() => {}) });
         if (answer === null) return;
         await this.send(channel, chatId, answer || 'The Bot did not have anything to say.').catch(() => {});
       } catch (error) { await this.send(channel, chatId, error.message || 'The Bot could not answer right now.').catch(() => {}); }

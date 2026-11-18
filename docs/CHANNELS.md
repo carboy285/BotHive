@@ -53,6 +53,8 @@ Inkbox's limits apply: about 100 iMessages a day per agent on the base plan, and
 
 ## Faster replies, photos, and sending several messages
 
+- **On the Mac, Bothive stays awake while a channel is on.** macOS would otherwise slow a background app down (App Nap), stretching the message check to many seconds, and let the Mac idle-sleep. Turn the channel off to let it nap again.
+- **Replies that use a tool are not cut short.** "I'll check now" is sent at once, and the real answer follows when the tool step finishes.
 - **Read at once.** The moment an approved person's message arrives the Bot marks it read and shows typing. Strangers get neither.
 - **Fast replies on channels** (on by default). Channel messages use the quicker model each CLI has (Haiku, Gemini Flash, Codex at low effort) and ask for one to three plain sentences. Turn it off in Settings → Channels if you want the Bot's full model on every message. A CLI still starts fresh each turn, so expect a few seconds, not an instant answer.
 - **Photos and screenshots.** A picture sent on iMessage, Telegram, Discord or Slack is saved to the Bot's Attachments folder and the Bot is told where it is, exactly like a picture attached in the app. Up to three pictures a message, PNG, JPEG, GIF or WebP, judged by their bytes. On the Mac, HEIC photos from an iPhone are converted to JPEG first. Windows and Docker cannot convert HEIC, so the Bot says "send it as a JPEG or a screenshot". Slack needs the `files:read` scope.

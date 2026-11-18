@@ -803,6 +803,7 @@ extension MacAppModel {
         guard app.addNote(text, to: bot, id: requestID, automated: automated) else { sendFeedback[bot.id] = app.errorMessage ?? "The message could not be saved. Your draft was kept."; return false }
         sendFeedback[bot.id] = nil; browserContinuations.removeValue(forKey: bot.id)
         // Where this chain of turns started, so its final reply can also be texted to the owner when that is wanted.
+        Self.chains.insert(bot.id)
         Self.turnOrigins[bot.id] = fromChannel ? "channel" : (automated ? "scheduled" : "app")
         for provider in providers { startReply(to: bot, cli: provider.cli, model: provider.choice.model, app: app, channelTurn: channelTurn) }
         return true
@@ -810,6 +811,10 @@ extension MacAppModel {
 
     /// Where each Bot's current chain of turns started: app, channel or scheduled (10.1.2).
     private static var turnOrigins: [UUID: String] = [:]
+    /// Bots whose chain of turns is still going: a turn that used a tool is followed by another turn, with a moment in between when nothing runs.
+    private static var chains = Set<UUID>()
+    /// True from the moment a message is sent until the Bot's last follow-up turn has finished.
+    func isWorking(_ botID: UUID) -> Bool { runningBots.contains(botID) || Self.chains.contains(botID) }
 
     static let steerNote = "\n\n(The person sent this while you were still working. Carry on with their original request with this in mind. Do not redo work that is already finished.)"
 
@@ -1036,7 +1041,7 @@ extension MacAppModel {
                 }
                 routineFailures.remove(bot.id); _ = app.updateSchedule(routine, botID: bot.id)
             }
-            if !continuing, delivery == nil { memory.archiveIfNeeded(); Task { await memory.noteActivity(bot) } }
+            if !continuing, delivery == nil { Self.chains.remove(bot.id); memory.archiveIfNeeded(); Task { await memory.noteActivity(bot) } }
             if !continuing {
                 let origin = delivery != nil ? "delivery" : (Self.turnOrigins[bot.id] ?? "app")
                 let final = app.workspace.entries.first(where: { $0.id == replyID })

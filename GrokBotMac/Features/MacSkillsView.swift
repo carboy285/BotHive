@@ -138,7 +138,7 @@ private struct MacSkillsPage: View {
             TextField("Name, for example Cite sources", text: $nameDraft).textFieldStyle(.roundedBorder)
             TextField("What it is for (one line the Bot sees first)", text: $descriptionDraft).textFieldStyle(.roundedBorder)
             TextEditor(text: $textDraft).font(.system(size: 13)).frame(minHeight: 220)
-                .scrollContentBackground(.hidden).padding(6).background(MacTheme.canvas, in: RoundedRectangle(cornerRadius: 8))
+                .scrollContentBackground(.hidden).padding(6).background(MacTheme.canvas, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             Text("Write what the Bot should do, in plain language. Markdown is fine. Up to 20,000 characters.").font(.system(size: 12)).foregroundStyle(MacTheme.secondary)
             HStack(spacing: 8) {
                 Button("Save skill") {
@@ -181,7 +181,7 @@ private struct MacSkillsPage: View {
             Text(draft.description.isEmpty ? "No description" : draft.description).font(.system(size: 12)).foregroundStyle(MacTheme.secondary)
             Text("\(draft.source) \u{00B7} \(draft.text.count) characters").font(.system(size: 11)).foregroundStyle(MacTheme.secondary)
             ScrollView { Text(String(draft.text.prefix(1500)) + (draft.text.count > 1500 ? "\n\u{2026}" : "")).font(.system(size: 12, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
-                .frame(maxHeight: 160).padding(8).background(MacTheme.canvas, in: RoundedRectangle(cornerRadius: 8))
+                .frame(maxHeight: 160).padding(8).background(MacTheme.canvas, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             Button("Add this skill") { add(draft) }.buttonStyle(InspectorButtonStyle(tint: .accentColor))
         }
     }
@@ -319,7 +319,7 @@ struct MacAddFromCodeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             TextEditor(text: $code).font(.system(size: 12, design: .monospaced)).frame(minHeight: 64, maxHeight: 90)
-                .scrollContentBackground(.hidden).padding(8).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+                .scrollContentBackground(.hidden).padding(8).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             Button("Look at it") { look() }.buttonStyle(InspectorButtonStyle(compact: true)).disabled(code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             if let note { Text(note).font(.system(size: 12)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
             if let card {
@@ -337,7 +337,7 @@ struct MacAddFromCodeView: View {
                         Toggle("Include the skills", isOn: $includeSkills).toggleStyle(.checkbox).font(.system(size: 13))
                     }
                     Button("Add this Bot") { add(card) }.buttonStyle(InspectorButtonStyle(tint: .accentColor))
-                }.padding(12).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 12))
+                }.padding(12).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }.padding(.top, 8)
     }

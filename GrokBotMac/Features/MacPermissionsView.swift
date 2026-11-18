@@ -30,7 +30,7 @@ struct MacPermissionsView: View {
                     Spacer()
                     Button { rules.remove(rule.id) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(MacTheme.secondary) }
                         .buttonStyle(.plain).accessibilityLabel("Remove rule")
-                }.padding(14).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14))
+                }.padding(14).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             if addingKind == kind {
                 VStack(alignment: .leading, spacing: 10) {
@@ -42,7 +42,7 @@ struct MacPermissionsView: View {
                         Button("Add") { _ = rules.add(kind: kind, tool: newTool, pattern: newPattern); addingKind = nil }.buttonStyle(.borderedProminent)
                         Button("Cancel") { addingKind = nil }
                     }
-                }.padding(14).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14))
+                }.padding(14).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
         }.padding(.top, 6)
     }
@@ -73,13 +73,13 @@ struct MacPermissionsView: View {
                             .font(.system(size: 15, weight: .medium))
                         Text("Checked before any approval dialog. “Always ask” beats “Allow without asking”. Turn this off to use only the per-app choices below.")
                             .font(.system(size: 12)).foregroundStyle(MacTheme.secondary)
-                    }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+                    }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     ruleList(.ask, title: "Always ask", empty: "No rules. Add one to make a Bot ask every time, for example on a website.")
                     ruleList(.allow, title: "Allow without asking", empty: "No rules. Add one to skip the dialog for a kind of change.")
                     ForEach(Array(AppleConnections.autoApprovable).sorted { $0.title < $1.title }) { service in
                         HStack(spacing: 14) {
                             Image(systemName: service.symbol).font(.system(size: 17)).frame(width: 40, height: 40)
-                                .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 10))
+                                .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("Adding and changing in \(service.title)").font(.system(size: 15, weight: .medium))
                                 if !apple.isEnabled(service) { Text("Not connected").font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
@@ -90,20 +90,20 @@ struct MacPermissionsView: View {
                                 Text("Allow without asking").tag(true)
                             }.labelsHidden().frame(width: 190)
                                 .accessibilityLabel("Permission for \(service.title)")
-                        }.padding(16).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+                        }.padding(16).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                     Text("Always asks").font(.system(size: 13, weight: .semibold)).foregroundStyle(MacTheme.secondary).padding(.top, 8).padding(.horizontal, 4)
                     ForEach(alwaysAsk, id: \.title) { rule in
                         HStack(alignment: .top, spacing: 14) {
                             Image(systemName: rule.symbol).font(.system(size: 17)).frame(width: 40, height: 40)
-                                .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 10))
+                                .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(rule.title).font(.system(size: 15, weight: .medium))
                                 Text(rule.detail).font(.system(size: 13)).lineSpacing(3).foregroundStyle(MacTheme.secondary)
                             }
                             Spacer()
                             Image(systemName: "lock.fill").foregroundStyle(MacTheme.secondary).accessibilityLabel("Always asks")
-                        }.padding(16).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+                        }.padding(16).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                 }.frame(maxWidth: 780, alignment: .leading).padding(.vertical, 6).frame(maxWidth: .infinity)
             }

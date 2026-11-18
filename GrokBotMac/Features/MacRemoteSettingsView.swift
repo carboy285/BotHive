@@ -45,7 +45,7 @@ struct MacRemoteSettingsView: View {
 
     private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10, content: content).padding(20).frame(maxWidth: .infinity, alignment: .leading)
-            .background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+            .background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     @ViewBuilder private func content(_ s: RemoteHostSettings) -> some View {

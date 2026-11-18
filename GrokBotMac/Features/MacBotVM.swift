@@ -238,7 +238,7 @@ private struct VMLinkRow: View {
                     Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(MacTheme.secondary)
                 }
                 .padding(.horizontal, 12).frame(minHeight: 36)
-                .background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 10)).contentShape(RoundedRectangle(cornerRadius: 10))
+                .background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous)).contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }.buttonStyle(.plain)
         }
     }

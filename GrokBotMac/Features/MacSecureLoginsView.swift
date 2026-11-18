@@ -20,7 +20,7 @@ struct MacSecureLoginsView: View {
                     .font(.system(size: 14)).lineSpacing(4).foregroundStyle(MacTheme.secondary)
                 Text("A login only works on the website you save it for, and its subdomains. Verification codes and passkeys are not handled: you finish those yourself in the Bot’s browser. Passwords are stored in this Mac’s Keychain.")
                     .font(.system(size: 13)).lineSpacing(4).foregroundStyle(MacTheme.secondary)
-            }.padding(22).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+            }.padding(22).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
             VStack(alignment: .leading, spacing: 12) {
                 Text("Add a login").font(.system(size: 16, weight: .medium))
@@ -40,13 +40,13 @@ struct MacSecureLoginsView: View {
                         .disabled(label.isEmpty || website.isEmpty || (useOnePassword ? onePasswordItem.isEmpty : (username.isEmpty || password.isEmpty)))
                     if let feedback { Text(feedback).font(.system(size: 13)).foregroundStyle(MacTheme.secondary) }
                 }
-            }.padding(22).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+            }.padding(22).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
             VStack(alignment: .leading, spacing: 0) {
                 Text("Saved logins").font(.system(size: 14)).foregroundStyle(MacTheme.secondary).padding(.leading, 16).padding(.bottom, 10)
                 if logins.isEmpty {
                     Text("No logins saved yet.").font(.system(size: 14)).foregroundStyle(MacTheme.secondary).padding(20)
-                        .frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+                        .frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 } else {
                     VStack(spacing: 0) {
                         ForEach(logins) { login in
@@ -61,7 +61,7 @@ struct MacSecureLoginsView: View {
                             }.padding(16)
                             if login.id != logins.last?.id { Divider() }
                         }
-                    }.background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+                    }.background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
             }
         }.onAppear { logins = store.list() }

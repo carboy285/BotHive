@@ -80,7 +80,7 @@ struct MacBotProviderSettingsView: View {
                         if let note = desktop.modelCatalogFeedback[provider] { Text(note).font(.system(size: 11)).foregroundStyle(MacTheme.secondary) }
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 16))
+                    .padding(14).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             Text("Only the active provider and model answer for this Bot. Model access follows each CLI’s account.")
                 .font(.system(size: 12)).foregroundStyle(MacTheme.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)

@@ -402,12 +402,12 @@ struct CreateBotView: View {
                 VStack(spacing: 20) {
                     BotAvatar(color: color, size: 100, appearance: BotAppearance(shape: shape, color: color)).padding(.top, 8)
                     TextField("Name your Bot", text: $name).focused($nameFocused).textInputAutocapitalization(.words)
-                        .font(.system(size: 18)).padding(14).background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+                        .font(.system(size: 18)).padding(14).background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
                         ForEach(BotAvatarShape.allCases, id: \.self) { option in
                             Button { shape = option } label: {
                                 BotAvatar(color: color, size: 46, appearance: BotAppearance(shape: option, color: color)).frame(width: 56, height: 56)
-                                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(shape == option ? Color.primary : .clear, lineWidth: 2))
+                                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(shape == option ? Color.primary : .clear, lineWidth: 2))
                             }.buttonStyle(.plain).accessibilityLabel(option.label + " shape").accessibilityAddTraits(shape == option ? [.isSelected] : [])
                         }
                     }
@@ -421,7 +421,7 @@ struct CreateBotView: View {
                     }
                     DisclosureGroup("Add a description", isExpanded: $showMore) {
                         TextField("What will this Bot help with? (optional)", text: $purpose, axis: .vertical).lineLimit(3...5)
-                            .padding(12).background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12)).padding(.top, 8)
+                            .padding(12).background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous)).padding(.top, 8)
                     }.font(.subheadline).foregroundStyle(.secondary)
                     Text("Creates a Bot in your connected desktop workspace.").font(.footnote).foregroundStyle(.secondary)
                 }.padding(.horizontal, 22).padding(.bottom, 24)

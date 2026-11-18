@@ -49,7 +49,7 @@ struct BotGlyphShape: Shape {
     let style: String
     func path(in rect: CGRect) -> Path {
         if style == "circle" || style == "fruit" { return Circle().path(in: rect) }
-        if style == "square" { return RoundedRectangle(cornerRadius: rect.width * 0.13).path(in: rect).applying(CGAffineTransform(translationX: -rect.midX, y: -rect.midY).concatenating(CGAffineTransform(rotationAngle: -.pi / 9)).concatenating(CGAffineTransform(translationX: rect.midX, y: rect.midY))) }
+        if style == "square" { return RoundedRectangle(cornerRadius: rect.width * 0.13, style: .continuous).path(in: rect).applying(CGAffineTransform(translationX: -rect.midX, y: -rect.midY).concatenating(CGAffineTransform(rotationAngle: -.pi / 9)).concatenating(CGAffineTransform(translationX: rect.midX, y: rect.midY))) }
         if style == "capsule" { return Capsule().path(in: rect.insetBy(dx: 0, dy: rect.height * 0.12)) }
         if style == "heart" {
             var path = Path()

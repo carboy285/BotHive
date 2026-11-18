@@ -78,7 +78,7 @@ struct MacBotAvatar: View {
                 } else if color == "pink" {
                     Circle().fill(MacTheme.botColor(color))
                 } else {
-                    RoundedRectangle(cornerRadius: size * 0.27)
+                    RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
                         .fill(MacTheme.botColor(color)).rotationEffect(.degrees(-20))
                 }
                 HStack(spacing: size * 0.13) {
@@ -314,8 +314,8 @@ struct MacActivityPill: View {
                 }
                 .frame(maxHeight: 260).fixedSize(horizontal: false, vertical: true)
                 .padding(12)
-                .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(MacTheme.line, lineWidth: 1))
+                .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(MacTheme.line, lineWidth: 1))
                 .transition(.opacity)
             }
         }
@@ -349,7 +349,7 @@ struct MacApprovalCard: View {
                 }
                 .frame(maxHeight: 150).fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 12).padding(.vertical, 10)
-                .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
@@ -371,8 +371,8 @@ struct MacApprovalCard: View {
             }
         }
         .padding(16)
-        .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(MacTheme.attention.opacity(0.35), lineWidth: 1))
+        .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(MacTheme.attention.opacity(0.35), lineWidth: 1))
         .shadow(color: .black.opacity(0.25), radius: 18, y: 6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Approval needed: \(request.title)")
@@ -416,8 +416,8 @@ struct MacQuestionCard: View {
                         }
                     }
                     .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(hovered == option && canAnswer ? MacTheme.raised : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
-                    .contentShape(RoundedRectangle(cornerRadius: 12))
+                    .background(hovered == option && canAnswer ? MacTheme.raised : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .onHover { inside in hovered = inside ? option : (hovered == option ? nil : hovered) }
@@ -442,8 +442,8 @@ struct MacQuestionCard: View {
         }
         .padding(10)
         .frame(maxWidth: 460, alignment: .leading)
-        .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(MacTheme.line, lineWidth: 1))
+        .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(MacTheme.line, lineWidth: 1))
         .opacity(canAnswer ? 1 : 0.6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(prompt.multiple ? "Question with several answers" : "Question")

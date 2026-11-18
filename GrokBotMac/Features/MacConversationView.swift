@@ -140,7 +140,7 @@ struct MacConversationView: View {
         } isTargeted: { dropTargeted = $0 }
         .overlay {
             if dropTargeted {
-                RoundedRectangle(cornerRadius: 20).strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 6])).foregroundStyle(MacTheme.secondary)
+                RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 6])).foregroundStyle(MacTheme.secondary)
                     .overlay { Text("Drop files, a folder or a screenshot to give this Bot context").font(.system(size: 15, weight: .medium)).padding(16).background(.regularMaterial, in: Capsule()) }
                     .padding(10).allowsHitTesting(false)
             }
@@ -1034,8 +1034,8 @@ private struct ComposerActionRow: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
-            .background(hovering && !disabled ? tint.opacity(0.22) : .clear, in: RoundedRectangle(cornerRadius: 8))
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .background(hovering && !disabled ? tint.opacity(0.22) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain).disabled(disabled).opacity(disabled ? 0.4 : 1)
         .onHover { hovering = $0 }
@@ -1079,7 +1079,7 @@ struct MacStarterCard: View {
                 .padding(.horizontal, 14).padding(.vertical, 13)
                 .background(hovering ? MacTheme.panel : MacTheme.panel.opacity(0.55), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(MacTheme.line, lineWidth: 1))
-                .contentShape(RoundedRectangle(cornerRadius: 16))
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain).onHover { hovering = $0 }
     }

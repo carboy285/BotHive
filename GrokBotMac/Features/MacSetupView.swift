@@ -130,8 +130,8 @@ struct MacSetupView: View {
                         Image(systemName: provider == candidate ? "checkmark.circle.fill" : "circle").font(.system(size: 19))
                     }
                     .padding(15).contentShape(Rectangle())
-                    .background(provider == candidate ? MacTheme.raised : MacTheme.canvas.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(provider == candidate ? Color.primary.opacity(0.35) : MacTheme.line, lineWidth: 1))
+                    .background(provider == candidate ? MacTheme.raised : MacTheme.canvas.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(provider == candidate ? Color.primary.opacity(0.35) : MacTheme.line, lineWidth: 1))
                 }.buttonStyle(.plain)
             }
             HStack {
@@ -202,7 +202,7 @@ struct MacSetupView: View {
             Text(text).font(.system(size: 14, design: .monospaced)).textSelection(.enabled)
             Spacer()
             Button("Copy") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
-        }.padding(17).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 13))
+        }.padding(17).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
     }
     private func title(_ text: String) -> some View {
         Text(text).font(.system(size: 30, weight: .semibold)).tracking(-0.6)
@@ -216,8 +216,8 @@ struct MacSetupView: View {
                 .background(MacTheme.raised, in: Circle())
             VStack(alignment: .leading, spacing: 5) { Text(title).font(.system(size: 14, weight: .semibold)); Text(detail).font(.system(size: 13)).lineSpacing(3).foregroundStyle(MacTheme.secondary).fixedSize(horizontal: false, vertical: true) }
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(MacTheme.canvas.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(MacTheme.line, lineWidth: 1))
+        .background(MacTheme.canvas.opacity(0.5), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(MacTheme.line, lineWidth: 1))
     }
     private func chooseExecutable() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.canChooseFiles = true; panel.allowsMultipleSelection = false

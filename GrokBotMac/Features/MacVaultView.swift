@@ -32,7 +32,7 @@ struct MacVaultView: View {
                 HStack(spacing: 12) {
                     Image(systemName: "key").font(.system(size: 24)).foregroundStyle(MacTheme.secondary)
                     Text("No secure notes yet").foregroundStyle(MacTheme.secondary)
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(24).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 17))
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(24).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
             } else {
                 VStack(spacing: 1) {
                     ForEach(items) { item in
@@ -47,11 +47,11 @@ struct MacVaultView: View {
                             if revealed == item.id {
                                 Text(revealedText).font(.system(.body, design: .monospaced)).textSelection(.enabled)
                                     .privacySensitive().padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+                                    .background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                             }
                         }.padding(18).background(MacTheme.panel)
                     }
-                }.clipShape(RoundedRectangle(cornerRadius: 17))
+                }.clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
             }
             VStack(alignment: .leading, spacing: 14) {
                 Text("Add a secure note").font(.system(size: 17, weight: .medium))
@@ -63,7 +63,7 @@ struct MacVaultView: View {
                     MacPillButton(title: "Save to Keychain", prominent: true) { save() }
                         .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || secret.isEmpty)
                 }
-            }.padding(20).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 17))
+            }.padding(20).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
             if let feedback { Text(feedback).font(.system(size: 13)).foregroundStyle(MacTheme.secondary) }
         }
         .onAppear { loadIndex() }

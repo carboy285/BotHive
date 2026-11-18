@@ -81,9 +81,9 @@ struct MacSettingsView: View {
                     Image(systemName: "terminal")
                 }.font(.system(size: 30)).foregroundStyle(.black).padding(28)
                     .frame(minWidth: 180, maxHeight: .infinity)
-                    .background(LinearGradient(colors: [.white, Color(hex: 0xD0D0D0)], startPoint: .topTrailing, endPoint: .bottomLeading), in: RoundedRectangle(cornerRadius: 12))
-            }.padding(22).background(MacTheme.canvas, in: RoundedRectangle(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(MacTheme.line))
+                    .background(LinearGradient(colors: [.white, Color(hex: 0xD0D0D0)], startPoint: .topTrailing, endPoint: .bottomLeading), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }.padding(22).background(MacTheme.canvas, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(MacTheme.line))
             section("Account") {
                 HStack(spacing: 16) {
                     Text(String(profileName.prefix(2)).uppercased()).font(.system(size: 21)).foregroundStyle(MacTheme.secondary)
@@ -178,7 +178,7 @@ struct MacSettingsView: View {
             Text(title).font(.system(size: 23, weight: .medium))
             Text(detail).font(.system(size: 16)).lineSpacing(5).foregroundStyle(MacTheme.secondary)
             Button("View connection status") { desktop.panel = .setup }.buttonStyle(.link)
-        }.padding(28).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+        }.padding(28).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -213,7 +213,7 @@ private struct MacAPIKeysView: View {
                     .font(.system(size: 15)).lineSpacing(5).foregroundStyle(MacTheme.secondary)
                 Text("Keys are stored only in this Mac’s Keychain and handed to the CLI through its environment. They are never shown to Bots, written to files, or synced.")
                     .font(.system(size: 13)).lineSpacing(4).foregroundStyle(MacTheme.secondary)
-            }.padding(22).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+            }.padding(22).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             ForEach(Self.providers) { provider in card(provider) }
             Text("OpenCode manages its own provider keys: run opencode auth login in Terminal.").font(.system(size: 13)).foregroundStyle(MacTheme.secondary)
         }.onAppear(perform: load)
@@ -241,7 +241,7 @@ private struct MacAPIKeysView: View {
                 Text("Sets \(info.variables.joined(separator: ", ")) for \(provider.name) only.").font(.system(size: 12)).foregroundStyle(MacTheme.secondary)
             }
             if let message = feedback[provider] { Text(message).font(.system(size: 13)).foregroundStyle(MacTheme.secondary) }
-        }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+        }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func load() { for provider in Self.providers { saved[provider] = ProviderAPIKeys.get(provider).map(ProviderAPIKeys.masked) } }
@@ -303,7 +303,7 @@ private struct MacUsageView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value).font(.system(size: 24, weight: .medium))
             Text(caption).font(.system(size: 12)).foregroundStyle(MacTheme.secondary)
-        }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14))
+        }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private func table(_ title: String, _ rows: [UsageRow]) -> some View {
@@ -319,7 +319,7 @@ private struct MacUsageView: View {
                     }.padding(.horizontal, 18).padding(.vertical, 13)
                     if row.id != rows.last?.id { Divider() }
                 }
-            }.background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 16))
+            }.background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
     }
 }
@@ -432,7 +432,7 @@ struct MacHeadsUpsSettings: View {
     }
 
     private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 0) { content() }.frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+        VStack(alignment: .leading, spacing: 0) { content() }.frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -650,7 +650,7 @@ struct MacMediaKeysView: View {
                     }.padding(.horizontal, 20).padding(.vertical, 14)
                     if provider != MediaProvider.allCases.last { Rectangle().fill(MacTheme.line).frame(height: 1).padding(.leading, 20) }
                 }
-            }.background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+            }.background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             HStack(spacing: 20) {
                 defaultPicker("Default for images", kind: "image", selection: $imageDefault)
                 defaultPicker("Default for videos", kind: "video", selection: $videoDefault)

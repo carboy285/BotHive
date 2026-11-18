@@ -25,7 +25,7 @@ struct MacNewBotView: View {
             }
             CustomBotAvatar(appearance: BotAppearance(shape: shape, color: color), size: 100).padding(.top, 2)
             TextField("Name your Bot", text: $name).focused($nameFocused)
-                .textFieldStyle(.plain).font(.system(size: 18)).padding(14).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14))
+                .textFieldStyle(.plain).font(.system(size: 18)).padding(14).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .onSubmit(create)
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -33,7 +33,7 @@ struct MacNewBotView: View {
                         ForEach(BotAvatarShape.allCases, id: \.self) { option in
                             Button { shape = option } label: {
                                 CustomBotAvatar(appearance: BotAppearance(shape: option, color: color), size: 42).frame(width: 54, height: 54)
-                                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(shape == option ? Color.primary : .clear, lineWidth: 2))
+                                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(shape == option ? Color.primary : .clear, lineWidth: 2))
                             }.buttonStyle(.plain).accessibilityLabel(option.label + " shape").accessibilityAddTraits(shape == option ? [.isSelected] : [])
                         }
                     }.frame(maxWidth: .infinity)
@@ -61,7 +61,7 @@ struct MacNewBotView: View {
                                 }
                             }
                             TextField("What should it help with? (optional)", text: $purpose, axis: .vertical)
-                                .textFieldStyle(.plain).lineLimit(2...4).padding(12).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 12))
+                                .textFieldStyle(.plain).lineLimit(2...4).padding(12).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             DisclosureGroup("Have a Bot code from a friend?") { MacAddFromCodeView() }.font(.system(size: 13))
                             if let importNote { Text(importNote).font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
                         }.padding(.top, 8)

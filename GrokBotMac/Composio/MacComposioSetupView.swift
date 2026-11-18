@@ -56,7 +56,7 @@ struct MacComposioSetupView: View {
             }
             Text("The key and tool session stay in this Mac’s Keychain. Composio and AI providers apply their own plans and usage limits.")
                 .font(.system(size: 12)).foregroundStyle(MacTheme.secondary)
-        }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+        }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var configuredBar: some View {
@@ -111,7 +111,7 @@ struct MacComposioSetupView: View {
             }
             Spacer(minLength: 6)
             trailing(app)
-        }.padding(12).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14))
+        }.padding(12).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     @ViewBuilder private func trailing(_ app: CatalogApp) -> some View {

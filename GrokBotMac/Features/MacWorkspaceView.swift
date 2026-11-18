@@ -147,7 +147,7 @@ struct MacWorkspaceView: View {
                                     }
                                     .padding(.vertical, 14).padding(.horizontal, 8).frame(maxWidth: .infinity)
                                     .background(desktop.selected(in: app)?.id == bot.id ? MacTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                                    .contentShape(RoundedRectangle(cornerRadius: 18))
+                                    .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                                 }.buttonStyle(.plain).contextMenu { botMenu(bot) }.draggable(bot.id.uuidString)
                                     .dropDestination(for: String.self) { values, _ in guard let value = values.first.flatMap(UUID.init(uuidString:)) else { return false }; return app.moveBot(value, before: bot.id) }
                             }
@@ -235,8 +235,8 @@ struct MacWorkspaceView: View {
 
     private func appChip(_ name: String, color: Color) -> some View {
         Text(name).font(.system(size: 11, weight: .heavy)).foregroundStyle(.black)
-            .frame(width: 18, height: 18).background(color, in: RoundedRectangle(cornerRadius: 4))
-            .overlay(RoundedRectangle(cornerRadius: 4).stroke(MacTheme.panel, lineWidth: 1))
+            .frame(width: 18, height: 18).background(color, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(MacTheme.panel, lineWidth: 1))
     }
 
     /// Small dialogs stay small; the big screens (settings, apps, computers) keep the wide panel.
@@ -322,7 +322,7 @@ struct MacRosterRow: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
         .background(selected ? MacTheme.selection : (hovering ? MacTheme.hover : .clear), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: 14))
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .onHover { hovering = $0 }
         .accessibilityElement(children: .combine)
     }

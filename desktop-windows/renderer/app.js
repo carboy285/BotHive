@@ -424,6 +424,10 @@ function activityPill(text,routine=false){
  if(!more){const pill=append(node('div','activity-pill'),head);pill.setAttribute('aria-label',`Activity: ${line}`);return pill;}
  const details=node('details','activity-pill'),summary=node('summary');summary.append(head);summary.setAttribute('aria-label',`Activity: ${line}. Show details`);append(details,summary,node('pre','activity-detail',text));return details;
 }
+// Messages from iMessage, Telegram and so on start with a tag like "[iMessage · Sam · the owner] ". Show a small channel badge instead.
+const CHANNEL_LOOK={iMessage:['#34c759','💬'],SMS:['#34c759','💬'],Telegram:['#29a9e1','✈'],Discord:['#5865f2','🎮'],Slack:['#e01e5a','#'],phone:['#34c759','📞'],'Phone call':['#34c759','📞']};
+function channelOrigin(text){const match=/^\[(Telegram|Discord|Slack|SMS|iMessage|phone|Phone call) \u00b7 ([^\]]{1,80}?)( \u00b7 the owner)?\] ?/.exec(text||'');if(!match)return null;let body=text.slice(match[0].length);const steer=body.indexOf('\n\n(The person sent this while you were still working.');if(steer>=0)body=body.slice(0,steer);const automatic=/^\(Automatic follow-up|\n\(Automatic follow-up/.test(body);if(automatic){const close=body.indexOf('.) ');if(close>=0)body=body.slice(close+3);}return{channel:match[1],name:match[2],owner:!!match[3],body,automatic};}
+function originBadge(origin){const [color,mark]=CHANNEL_LOOK[origin.channel]||CHANNEL_LOOK.iMessage;const label=origin.channel==='phone'?'Phone call':origin.channel;const badge=node('div','channel-origin');const dot=node('span','channel-origin-mark',mark);dot.style.background=color;badge.append(dot,node('span','',origin.automatic?`Automatic follow-up · ${label}`:`${label} · ${origin.name}`));badge.setAttribute('aria-label',origin.automatic?'Automatic follow-up':`From ${label}, ${origin.name}`);return badge;}
 function typingBubble(){const dots=append(node('div','bubble typing'),node('i'),node('i'),node('i'));dots.setAttribute('aria-label','Thinking');return append(node('div','typing-row'),dots,node('span','typing-label','Thinking it through'));}
 function senderFace(entry){const sender=workspace.bots.find(x=>x.id===entry.senderBotID);if(sender)return avatar(sender);const ghost=node('span','avatar ghost');ghost.setAttribute('aria-hidden','true');return ghost;}
 function questionCard(bot,prompt,canAnswer){
@@ -456,7 +460,7 @@ function renderEntryBody(bot,entry,body,{isLastUser,canAnswer,canSuggest}){
  else if(text){
   // Bot replies are Markdown (0.9.5): lists, tables, highlighted code, links and the Bot's own images. Your messages stay plain text.
   if(entry.kind==='bot'){const bubble=node('div',`bubble md-bubble${entry.state==='failed'?' failed':''}`);bubble.append(renderMarkdown(text,markdownContext(bot)));stack.append(bubble);}
-  else stack.append(node('div',`bubble${entry.state==='failed'?' failed':''}`,text));
+  else{const origin=channelOrigin(text);if(origin)stack.append(originBadge(origin));stack.append(node('div',`bubble${entry.state==='failed'?' failed':''}`,origin?origin.body:text));}
  }
  if(prompt)stack.append(questionCard(bot,prompt,canAnswer));
  if(canSuggest&&!prompt&&follow.suggestions.length){const chips=node('div','followups');chips.setAttribute('aria-label','Suggested follow-ups');for(const suggestion of follow.suggestions){const chip=button('',()=>submitMessage(bot,suggestion,undefined,[]),'followup');append(chip,node('span','followup-text',suggestion),node('span','followup-arrow','↗'));chips.append(chip);}stack.append(chips);}

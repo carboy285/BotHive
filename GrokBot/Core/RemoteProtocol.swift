@@ -210,3 +210,50 @@ struct RemoteChannels: Codable, Sendable, Equatable {
     var settings: Settings? = nil
     var inkbox: Inkbox? = nil
 }
+
+/// Where a message in a Bot's chat came from, when it arrived on a chat channel (10.1.2). The channels engine starts such messages
+/// with a tag like "[iMessage · Sam · the owner] "; the chat shows a small badge instead of the raw tag.
+struct ChannelOrigin: Equatable, Sendable {
+    let channel: String
+    let name: String
+    let owner: Bool
+    let body: String
+    /// True for turns the app started for the person (other Bots answered, a call ended).
+    let automatic: Bool
+
+    private static let tag = try! NSRegularExpression(pattern: #"^\[(Telegram|Discord|Slack|SMS|iMessage|phone|Phone call) · ([^\]]{1,80}?)( · the owner)?\] ?"#)
+    static let steerNote = "\n\n(The person sent this while you were still working."
+
+    static func parse(_ text: String) -> ChannelOrigin? {
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = tag.firstMatch(in: text, range: range), let whole = Range(match.range, in: text),
+              let channel = Range(match.range(at: 1), in: text), let name = Range(match.range(at: 2), in: text) else { return nil }
+        var body = String(text[whole.upperBound...])
+        if let steer = body.range(of: steerNote) { body = String(body[..<steer.lowerBound]) }
+        let automatic = body.hasPrefix("(Automatic follow-up") || body.contains("\n(Automatic follow-up")
+        if automatic, let close = body.range(of: ".) ") { body = String(body[close.upperBound...]) }
+        return ChannelOrigin(channel: String(text[channel]), name: String(text[name]), owner: match.range(at: 3).location != NSNotFound, body: body, automatic: automatic)
+    }
+
+    /// An SF Symbol and a tint for each channel.
+    var symbol: String {
+        switch channel {
+        case "iMessage": return "message.fill"
+        case "SMS": return "message"
+        case "Telegram": return "paperplane.fill"
+        case "Discord": return "gamecontroller.fill"
+        case "Slack": return "number"
+        default: return "phone.fill"
+        }
+    }
+    var tint: (red: Double, green: Double, blue: Double) {
+        switch channel {
+        case "iMessage", "SMS": return (0.20, 0.78, 0.35)
+        case "Telegram": return (0.16, 0.63, 0.89)
+        case "Discord": return (0.35, 0.40, 0.95)
+        case "Slack": return (0.88, 0.12, 0.35)
+        default: return (0.20, 0.78, 0.35)
+        }
+    }
+    var label: String { channel == "phone" ? "Phone call" : channel }
+}

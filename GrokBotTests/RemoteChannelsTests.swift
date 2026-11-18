@@ -64,4 +64,13 @@ final class RemoteChannelsTests: XCTestCase {
         XCTAssertEqual(object["name"] as? String, "telegram")
         XCTAssertEqual((object["fields"] as? [String: String])?["token"], "123:abc")
     }
+
+    func testChannelMessagesShowABadgeInsteadOfTheRawTag() throws {
+        let origin = try XCTUnwrap(ChannelOrigin.parse("[iMessage \u{00B7} +14694221028 \u{00B7} the owner] Can you check my reminders?\n\n(The person sent this while you were still working. Carry on.)"))
+        XCTAssertEqual(origin.channel, "iMessage"); XCTAssertEqual(origin.name, "+14694221028"); XCTAssertTrue(origin.owner)
+        XCTAssertEqual(origin.body, "Can you check my reminders?"); XCTAssertFalse(origin.automatic)
+        let follow = try XCTUnwrap(ChannelOrigin.parse("[Telegram \u{00B7} Sam] (Automatic follow-up, not a new message from them.) The Bots you asked have finished."))
+        XCTAssertTrue(follow.automatic); XCTAssertEqual(follow.body, "The Bots you asked have finished.")
+        XCTAssertNil(ChannelOrigin.parse("An ordinary message"))
+    }
 }

@@ -653,6 +653,9 @@ struct MacMessageView: View {
         let fromOtherBot = entry.kind == .bot && entry.senderBotID != nil
         let thinking = entry.text.isEmpty && entry.state == .streaming
         let isUser = entry.kind == .user
+        // A message that came from iMessage, Telegram and so on: a small channel badge instead of the raw "[iMessage · …]" tag.
+        let origin = isUser ? ChannelOrigin.parse(split.text) : nil
+        let shownText = origin?.body ?? split.text
         return HStack(alignment: .top, spacing: 10) {
             if isUser { Spacer(minLength: 90) }
             if fromOtherBot { senderAvatar.padding(.top, 21) }
@@ -662,10 +665,20 @@ struct MacMessageView: View {
                     Text(isGroup ? (entry.senderName ?? "Bot") : "\(entry.senderName ?? "Another Bot") replied")
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(MacTheme.secondary).padding(.leading, 4)
                 }
+                if let origin {
+                    HStack(spacing: 6) {
+                        Image(systemName: origin.symbol).font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                            .frame(width: 18, height: 18).background(Color(red: origin.tint.red, green: origin.tint.green, blue: origin.tint.blue), in: Circle())
+                        Text(origin.automatic ? "Automatic follow-up \u{00B7} \(origin.label)" : "\(origin.label) \u{00B7} \(origin.name)")
+                            .font(.system(size: 12, weight: .medium)).foregroundStyle(MacTheme.secondary).lineLimit(1)
+                    }
+                    .padding(.trailing, 4)
+                    .accessibilityElement(children: .combine).accessibilityLabel(origin.automatic ? "Automatic follow-up" : "From \(origin.label), \(origin.name)")
+                }
                 if thinking {
                     thinkingBubble
-                } else if !split.text.isEmpty {
-                    MacMessageContent(text: split.text, markdown: entry.kind == .bot)
+                } else if !shownText.isEmpty {
+                    MacMessageContent(text: shownText, markdown: entry.kind == .bot)
                         .font(.system(size: 15.5)).lineSpacing(5).textSelection(.enabled)
                         .padding(.horizontal, 15).padding(.vertical, 10)
                         .background(bubbleColor, in: RoundedRectangle(cornerRadius: 20, style: .continuous))

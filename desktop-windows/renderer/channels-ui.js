@@ -58,7 +58,13 @@ export async function renderChannels({ bridge, result, toast, page }) {
     escalateSelect.value = status.settings?.escalate || 'call';
     escalateSelect.addEventListener('change', async () => { try { await result(bridge.channelsSetSettings({ escalate: escalateSelect.value })); draw(); } catch (error) { toast(error.message); } });
     escalate.append(escalateSelect);
-    who.append(fast, busy, reach, escalate, el('p', 'muted', 'Messages sent a second apart are read together, so a photo and “add these to my reminders” arrive as one request. Texting “stop” only stops the Bot.'));
+    const replies = el('label', 'channel-field'); replies.append(el('span', '', 'Where replies go'));
+    const repliesSelect = el('select', 'field'); repliesSelect.setAttribute('aria-label', 'Where replies go');
+    for (const [value, label] of [['where', 'Reply where I wrote (a text gets a text; app messages stay in the app; scheduled tasks text me)'], ['always', 'Always text me too (every reply also goes to my chat)']]) { const option = el('option', '', label); option.value = value; repliesSelect.append(option); }
+    repliesSelect.value = status.settings?.replies || 'where';
+    repliesSelect.addEventListener('change', async () => { try { await result(bridge.channelsSetSettings({ replies: repliesSelect.value })); toast('Saved.'); draw(); } catch (error) { toast(error.message); } });
+    replies.append(repliesSelect);
+    who.append(fast, busy, replies, reach, escalate, el('p', 'muted', 'Messages sent a second apart are read together, so a photo and “add these to my reminders” arrive as one request. Texting “stop” only stops the Bot.'));
     root.append(who);
 
     for (const spec of CHANNELS) root.append(card(status, spec));
@@ -103,6 +109,7 @@ export async function renderChannels({ bridge, result, toast, page }) {
       select.addEventListener('change', async () => { try { await result(bridge.channelsConfigure('imessage', { voice: select.value })); toast('Voice saved.'); draw(); } catch (error) { toast(error.message); } });
       row.append(select); box.append(row);
       box.append(el('p', 'muted', 'Calls are answered by Inkbox\u2019s voice assistant, which is told your Bot\u2019s name, style and notes. It cannot run the Bot\u2019s tools during a call; the transcript comes back into the Bot\u2019s chat and anything left to do is handed to the Bot. Tip: in the Inkbox console set the agent to contact-scoped access and allow only your own number to call it.'));
+      if (inkbox.state?.state === 'error' && inkbox.state.detail) box.append(el('p', 'muted', `Phone calls: ${inkbox.state.detail}`));
       if (inkbox.pendingAsk) box.append(el('p', 'muted', `The Bot is waiting for your answer to: ${inkbox.pendingAsk.question}`));
     }
     if (spec.id === 'sms') box.append(el('p', 'muted', status.calls?.ready ? (status.calls.listening ? 'Calls are ready. Twilio reaches the phone port at your public address.' : 'Calls are set up and starting.') : 'Calls need your Twilio number, your own number and an https address.'));
@@ -113,7 +120,7 @@ export async function renderChannels({ bridge, result, toast, page }) {
         const row = el('div', 'channel-person'); row.append(el('span', '', `${person.name} · code ${person.code}`));
         const mine = el('label', 'channel-check'); const mineBox = el('input'); mineBox.type = 'checkbox'; mineBox.setAttribute('aria-label', `This is me: ${person.name}`); mine.append(mineBox, el('span', '', 'This is me'));
         row.append(mine);
-        row.append(pill('Approve', async () => { try { await result(bridge.channelsApprove(spec.id, person.code, { me: mineBox.checked })); toast(`${person.name} can now message the Bot.`); draw(); } catch (error) { toast(error.message); } }, 'pill primary'));
+        row.append(pill('Approve', async () => { try { await result(bridge.channelsApprove(spec.id, person.code, mineBox.checked ? { me: true } : undefined)); toast(`${person.name} can now message the Bot.`); draw(); } catch (error) { toast(error.message); } }, 'pill primary'));
         box.append(row);
       }
     }

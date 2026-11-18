@@ -57,7 +57,7 @@ const hosts = [];
 test.after(async () => { for (const h of hosts) await h.stop(); });
 function hostFixture({ fail = false } = {}) {
   const files = {}; const sent = []; const approvals = []; const records = []; const settled = [];
-  const state = { bots: [{ id: 'hive', name: 'Hive', purpose: 'Errands', isMain: true, memory: ['likes tea'], summary: 'Sam is busy.' }], entries: [] }; let t = new Date('2026-03-10T14:00:00').getTime(); let running = new Set();
+  const state = { bots: [{ id: 'hive', name: 'Hive', purpose: 'Errands', isMain: true, memory: ['likes tea'], summary: 'Sam is busy.' }, { id: 'travel', name: 'Travel', purpose: 'Trips' }], entries: [] }; const hooks = {}; const forced = []; let t = new Date('2026-03-10T14:00:00').getTime(); let running = new Set();
   const calls = []; const apiCalls = [];
   const fetchImpl = async (url, options = {}) => {
     apiCalls.push([options.method || 'GET', url.replace('https://inkbox.ai/api/v1/', ''), options.body ? JSON.parse(options.body) : null]);
@@ -70,12 +70,12 @@ function hostFixture({ fail = false } = {}) {
   const host = createChannelsHost({
     loadJSON: async (n, d) => (n in files ? JSON.parse(JSON.stringify(files[n])) : d), atomicJSON: async (n, v) => { files[n] = JSON.parse(JSON.stringify(v)); },
     safeStorage: { isEncryptionAvailable: () => false }, platform: 'linux', ensureState: async () => {}, getState: () => state,
-    startChat: async (id, text) => { state.entries.push({ botID: id, kind: 'user', text }); running.add(id); setTimeout(() => { state.entries.push({ botID: id, kind: 'bot', text: 'Done: ' + text.slice(0, 40), state: 'complete' }); running.delete(id); }, 2); },
-    isRunning: id => running.has(id), env: {}, sleep: async () => {}, fetchImpl, askTimeout: 500, batchMs: 0, pollMs: 1, now: () => t,
-    record: async (id, text) => { records.push(text); }, settleApproval: (id, yes) => { settled.push([id, yes]); return true; }, afterTurn: () => {}, syncDelay: 1, askCheckMs: 100000,
+    startChat: async (id, text) => { state.entries.push({ id: require('node:crypto').randomUUID(), botID: id, kind: 'user', text, date: new Date(t).toISOString() }); running.add(id); setTimeout(() => { const reply = { id: require('node:crypto').randomUUID(), botID: id, kind: 'bot', text: 'Done: ' + text.slice(0, 40), state: 'complete', date: new Date(t).toISOString() }; state.entries.push(reply); hooks.onReply?.(text, reply); running.delete(id); }, 2); },
+    isRunning: id => running.has(id), env: {}, sleep: () => new Promise(r => setTimeout(r, 1)), fetchImpl, askTimeout: 500, batchMs: 0, pollMs: 1, now: () => t,
+    record: async (id, text) => { records.push(text); }, settleApproval: (id, yes) => { settled.push([id, yes]); return true; }, afterTurn: () => {}, forceMemory: async id => { forced.push(id); }, syncDelay: 1, askCheckMs: 100000,
   });
   hosts.push(host);
-  return { host, files, sent, calls, apiCalls, records, settled, state, advance: ms => { t += ms; }, setTime: value => { t = value; } };
+  return { host, files, sent, calls, apiCalls, records, settled, state, hooks, forced, advance: ms => { t += ms; }, setTime: value => { t = value; } };
 }
 async function setup(f, { me = true, number = '+15551234567' } = {}) {
   await f.host.init(); await f.host.hub.setBot('hive');
@@ -150,5 +150,59 @@ test('a finished call lands in the chat, and what was left to do goes to the Bot
   const importer = f.host.inkbox; assert.ok(importer);
   await importer.onCall({ id: 'c9', direction: 'inbound', number: '+15551234567', reason: '', status: 'completed', seconds: 95, outcome: 'remote', transcript: [{ party: 'person', text: 'Book the dentist' }, { party: 'assistant', text: 'I will follow up.' }], items: [{ action: 'Book the dentist', details: '' }] });
   assert.match(f.records[0], /\[Phone call · .*\] They phoned you, 2 min/); assert.match(f.records[0], /Book the dentist/);
-  assert.match(f.state.entries.find(e => e.kind === 'user' && /left to do/.test(e.text)).text, /Book the dentist/); assert.equal(texts.length, 1);
+  const turn = f.state.entries.find(e => e.kind === 'user' && /Left to do/.test(e.text)).text;
+  assert.match(turn, /Book the dentist/); assert.match(turn, /full transcript/); assert.equal(texts.length, 1); assert.deepEqual(f.forced, ['hive']);
+});
+
+const until = async check => { for (let i = 0; i < 200 && !check(); i++) await new Promise(r => setTimeout(r, 5)); };
+
+test('every call becomes a turn for the Bot with the whole transcript, even with nothing left to do', async () => {
+  const f = hostFixture(); await setup(f);
+  await f.host.inkbox.onCall({ id: 'c10', direction: 'outbound', number: '+15551234567', reason: 'Check in', status: 'completed', seconds: 40, outcome: 'remote', transcript: [{ party: 'person', text: 'Dinner is at 7 on Friday' }], items: [] });
+  const turn = f.state.entries.find(e => e.kind === 'user' && /Automatic follow-up after a phone call/.test(e.text));
+  assert.ok(turn, 'the Bot gets a turn'); assert.match(turn.text, /Dinner is at 7 on Friday/); assert.match(turn.text, /voice assistant spoke for you/);
+  assert.equal(f.sent.length, 1, 'the recap is texted'); assert.deepEqual(f.forced, ['hive'], 'the summary is refreshed right away');
+});
+
+test('when the Bot hands work to another Bot, the answer comes back to the person', async () => {
+  const f = hostFixture(); const onMessage = await setup(f);
+  f.hooks.onReply = (text, reply) => { if (/plan a trip/.test(text)) f.state.teamMessages = [{ id: 'm1', rootID: reply.id, from: 'hive', to: 'travel', text: 'Find flights', depth: 1, status: 'running' }]; };
+  await onMessage({ senderId: '+15551234567', senderName: 'Sam', chatId: 'conv-1', text: 'plan a trip to Rome' });
+  assert.equal(f.sent.length, 1, 'the first answer');
+  await f.host.afterReply('hive', { text: 'x', origin: 'app' }); assert.equal(f.sent.length, 1, 'nothing while Travel works');
+  f.hooks.onReply = null;
+  f.state.teamMessages[0].status = 'complete';
+  f.state.entries.push({ id: 'res', botID: 'hive', kind: 'bot', senderBotID: 'travel', senderName: 'Travel', text: 'Flights to Rome are $300', state: 'complete', date: new Date(Date.now() + 1e10).toISOString() });
+  await f.host.afterReply('travel', { text: 'Flights to Rome are $300', origin: 'delivery' });
+  await until(() => f.sent.length === 2);
+  const followUp = f.state.entries.filter(e => e.kind === 'user').at(-1).text;
+  assert.match(followUp, /The Bots you asked have finished/); assert.match(followUp, /Travel: Flights to Rome are \$300/);
+  assert.equal(f.sent[1].conversation_id, 'conv-1'); assert.match(f.sent[1].text, /^Done:/);
+});
+
+test('"Where replies go": a text gets a text, app messages stay in the app, scheduled tasks text you, or everything does', async () => {
+  const f = hostFixture(); await setup(f);
+  assert.equal(await f.host.afterReply('hive', { text: 'From the app', origin: 'app' }), false);
+  assert.equal(await f.host.afterReply('hive', { text: 'Already answered', origin: 'channel' }), false);
+  assert.equal(await f.host.afterReply('travel', { text: 'Other Bot', origin: 'scheduled' }), false);
+  assert.equal(await f.host.afterReply('hive', { text: 'Your morning summary', origin: 'scheduled' }), true);
+  assert.equal(f.sent.at(-1).text, 'Your morning summary');
+  await f.host.hub.setSettings({ replies: 'always' });
+  assert.equal(await f.host.afterReply('hive', { text: 'Typed in the app', origin: 'app' }), true);
+  assert.equal(f.sent.at(-1).text, 'Typed in the app');
+  assert.equal(await f.host.afterReply('hive', { text: '', origin: 'app' }), false);
+  await assert.rejects(f.host.hub.setSettings({ replies: 'sometimes' }), /where replies go/);
+});
+
+test('the first person approved is the owner unless one is already set, and older setups are fixed', async () => {
+  const f = hostFixture(); await f.host.init(); await f.host.hub.setBot('hive');
+  await f.host.hub.configure('imessage', { apiKey: 'ik_0123456789', ownerNumber: '+15551234567' }); await f.host.hub.setEnabled('imessage', true);
+  const onMessage = f.host.hub.adapters.get('imessage').onMessage;
+  await onMessage({ senderId: '+15551234567', senderName: 'Sam', chatId: 'c1', text: 'hi' });
+  await onMessage({ senderId: '+15559998888', senderName: 'Ann', chatId: 'c2', text: 'hi' });
+  for (const p of f.host.hub.status().channels.imessage.pending) await f.host.hub.approve('imessage', p.code);
+  assert.deepEqual(f.host.hub.status().channels.imessage.approved.map(p => p.me), [true, false]);
+  const { ChannelHub } = require('./channel-hub.cjs');
+  const old = new ChannelHub({ load: async () => ({ bot: 'hive', channels: {}, approved: { telegram: [{ id: '7', name: 'Sam', chatId: '7', at: 1 }] }, pending: {} }), save: async () => {}, makeAdapter: () => ({}), ask: async () => '', botExists: () => true });
+  await old.init(); assert.equal(old.owner().person.id, '7');
 });

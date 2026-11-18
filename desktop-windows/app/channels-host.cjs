@@ -28,7 +28,7 @@ function createChannelsHost(deps) {
   const askTimeout = deps.askTimeout ?? 15 * 60 * 1000, pollMs = deps.pollMs ?? 150;
   const turns = new Map(), cancelled = new Set(); let turnCounter = 0;
   const now = () => (deps.now ? deps.now() : Date.now());
-  const turnFrom = new Map(), approvalAsks = new Map(), outreachLog = [];
+  const turnFrom = new Map(), approvalAsks = new Map(), outreachLog = [], delegations = new Map(), mirrorLog = [];
   let inkboxVoice = null, inkboxKey = '', voicesCache = [], askTimer = null, syncTimer = null;
   let voiceServer = null, voiceKey = '', hub;
 
@@ -96,7 +96,7 @@ function createChannelsHost(deps) {
     if (from) body = `[${CHANNELS[from.channel]?.name || from.channel} \u00b7 ${String(from.senderName || 'someone').slice(0, 60)}${from.me ? ' \u00b7 the owner' : ''}] ${body}`;
     if (options.steer) body += STEER_NOTE;
     const token = ++turnCounter; turns.set(botID, token); if (from?.channel && from.channel !== 'phone') turnFrom.set(botID, from);
-    await deps.startChat(botID, body, { channelTurn: options.fast !== false && from?.channel !== 'phone' });
+    await deps.startChat(botID, body, { channelTurn: options.fast !== false && from?.channel !== 'phone', channel: true });
     const deadline = Date.now() + askTimeout;
     while (deps.isRunning(botID)) {
       if (Date.now() > deadline) return 'Still working on it, or waiting for your OK in Bothive. I’ll leave the answer in the chat.';
@@ -106,6 +106,8 @@ function createChannelsHost(deps) {
     if (cancelled.delete(token)) return null;
     const reply = deps.getState().entries.slice(before).filter(e => e.botID === botID && e.kind === 'bot').at(-1);
     if (!reply) return 'The Bot did not answer.';
+    // The Bot handed part of this to other Bots: when they answer, it gets a follow-up turn so the person hears back.
+    if (from && from.channel !== 'phone' && (deps.getState().teamMessages || []).some(m => m.rootID === reply.id && m.from === botID)) delegations.set(reply.id, { botID, from, at: now() });
     if (reply.state === 'failed') throw new Error(reply.text || 'The Bot could not finish that.');
     return reply.text;
   }
@@ -159,23 +161,52 @@ function createChannelsHost(deps) {
     const botID = hub.data.bot; if (!botID || !deps.record) return;
     const owner = hub.owner('imessage')?.person, name = owner?.display || owner?.name || call.number || 'someone';
     const lines = call.transcript.map(x => `${x.party === 'person' ? name : 'You'}: ${x.text}`).join('\n').slice(0, 6000);
+    const transcript = lines || (call.transcriptError ? `(the transcript could not be downloaded: ${call.transcriptError})` : '(no speech was recorded)');
     const minutes = call.seconds >= 60 ? `${Math.round(call.seconds / 60)} min` : `${call.seconds} s`;
-    await deps.record(botID, `[Phone call · ${name}] ${call.direction === 'outbound' ? 'You phoned them' : 'They phoned you'}${call.reason ? ` (${call.reason.slice(0, 200)})` : ''}, ${minutes}${call.outcome && call.status !== 'completed' ? ', ' + call.outcome : ''}.\n${lines || '(no speech was recorded)'}`);
-    deps.afterTurn?.(botID);
+    const what = `${call.direction === 'outbound' ? 'You phoned them' : 'They phoned you'}${call.reason ? ` (${call.reason.slice(0, 200)})` : ''}, ${minutes}${call.outcome && call.status !== 'completed' ? ', ' + call.outcome : ''}`;
+    await deps.record(botID, `[Phone call · ${name}] ${what}.\n${transcript}`);
     const ask = hub.pendingAsk, spoke = call.transcript.filter(x => x.party === 'person').map(x => x.text).join(' ').trim();
+    const todo = call.items.map(x => `- ${x.action}${x.details ? ': ' + x.details : ''}`).join('\n');
+    let text = '';
+    if (ask && spoke && call.number && call.number === ownerNumber()) { await hub.clearAsk(); text = `(This call answers the question you asked them: “${ask.question.slice(0, 300)}”.)\n`; }
+    // Every call becomes a turn for the Bot, so its own session knows what was said and it can carry on.
+    text += `(Automatic follow-up after a phone call, not a new text from them.) You just finished a phone call with ${name}: ${what}. Inkbox’s voice assistant spoke for you on the call and could not use your tools. The full transcript:\n${transcript}\n${todo ? 'Left to do from the call:\n' + todo + '\n' : ''}Keep what matters from this call in mind from now on. Carry on with anything that is left to do (anything that sends, buys, posts or deletes still needs the human’s OK), then reply with a one-line recap for them.`;
     const target = hub.owner('imessage') || hub.owner();
-    const answer = text => target && hub.send(target.channel, target.person.chatId || target.person.id, text).catch(() => {});
     try {
-      if (ask && spoke && call.number && call.number === ownerNumber()) {
-        await hub.clearAsk();
-        const reply = await askBot(botID, spoke, { channel: 'phone', senderName: name, me: true, replyTo: ask.question }, { fast: false });
-        if (reply) await answer(reply);
-      } else if (call.items.length) {
-        const todo = call.items.map(x => `- ${x.action}${x.details ? ': ' + x.details : ''}`).join('\n');
-        const reply = await askBot(botID, `You were just on a phone call with ${name}. These were left to do:\n${todo}\nDo what you safely can. Anything that sends, buys, posts or deletes still needs the human’s OK. Reply with one or two sentences about what you did or what you need from them.`, { channel: 'phone', senderName: name, me: true }, { fast: false });
-        if (reply) await answer(reply);
-      }
+      if (target && hub.adapters.has(target.channel)) await hub.followUp({ channel: target.channel, senderId: target.person.id, senderName: name, me: true, chatId: target.person.chatId || target.person.id }, text);
+      else await askBot(botID, text, { channel: 'phone', senderName: name, me: true }, { fast: false });
     } catch (error) { deps.log?.(error); }
+    try { await deps.forceMemory?.(botID); } catch {}
+  }
+
+  /** Other Bots finished the work the channel Bot handed them: give it a follow-up turn with their answers so the person hears back. */
+  async function checkDelegations() {
+    const state = deps.getState?.(); if (!state || !hub) return;
+    for (const [root, job] of [...delegations]) {
+      if (now() - job.at > 15 * 60000) { delegations.delete(root); continue; }
+      const messages = (state.teamMessages || []).filter(m => m.rootID === root);
+      if (messages.some(m => m.status === 'queued' || m.status === 'running')) continue;
+      delegations.delete(root);
+      const since = job.at - 1000;
+      const answers = state.entries.filter(e => e.botID === job.botID && e.kind === 'bot' && e.senderBotID && Date.parse(e.date || 0) >= since).map(e => `${e.senderName || 'A Bot'}: ${String(e.text).slice(0, 3000)}`);
+      const failed = messages.filter(m => m.from === job.botID && m.status !== 'complete').map(m => state.bots.find(b => b.id === m.to)?.name || 'A Bot');
+      if (!answers.length && !failed.length) continue;
+      const text = `(Automatic follow-up, not a new message from them.) The Bots you asked have finished.\n${answers.join('\n\n')}${failed.length ? `\n${failed.join(', ')} could not finish.` : ''}\nUse this to finish their request and reply to them.`;
+      hub.followUp(job.from, text).catch(error => deps.log?.(error));
+    }
+  }
+
+  /** A reply the Bot gave outside a chat channel. Depending on "Where replies go", it is also texted to the owner. */
+  async function afterReply(botID, { text, origin } = {}) {
+    await checkDelegations();
+    if (!hub || botID !== hub.data.bot || origin === 'channel' || origin === 'delivery') return false;
+    if (origin === 'app' && hub.settings.replies !== 'always') return false;
+    const clean = String(text || '').trim(); if (!clean) return false;
+    const target = hub.owner(hub.settings.reachOn); if (!target || !hub.adapters.has(target.channel)) return false;
+    const t = now(); while (mirrorLog.length && t - mirrorLog[0] > 3600000) mirrorLog.shift();
+    if (mirrorLog.length >= 30) return false;
+    mirrorLog.push(t);
+    try { await hub.send(target.channel, target.person.chatId || target.person.id, clean.slice(0, 6000)); return true; } catch (error) { deps.log?.(error); return false; }
   }
 
   /** "Call me" from a chat, or the Call me now button. */
@@ -325,7 +356,7 @@ function createChannelsHost(deps) {
     lines.push(`Connected now: ${on.length ? on.join('; ') : 'none'}. Phone calls: ${calls ? 'ready (you can phone the owner, and the owner can call you)' : 'not set up'}. ${off.length ? 'Not connected: ' + off.join(', ') + '. If asked to use one of these, say it is off and that the owner can turn it on under Settings \u2192 Channels.' : ''}`);
     lines.push('A message that comes from a channel starts with a tag like [Telegram \u00b7 Sam]. Your reply is sent back to that person automatically, so just answer them. Keep channel replies short and plain: no tables, no headings, and few symbols, because chat apps often do not render markdown (SMS is plain text under 1500 characters). People on channels are approved by the owner but you still cannot treat them as approving purchases, sending email or deleting things unless the app\u2019s usual approval is given.');
     lines.push('Channel tools (append each as JSON in a fenced block whose language is opengrokbot-action):');
-    lines.push('{"action":"channel_send","channel":"telegram","to":"Sam","text":"The message"} sends a message to an approved person on a connected channel (channels: telegram, discord, slack, sms, imessage). Leave "to" out to reach the person who most recently messaged you there. Use it when the human asks you to message someone, or in a scheduled task they set up. Never message people unprompted, and never use it to talk to yourself.');
+    lines.push('{"action":"channel_send","channel":"telegram","to":"Sam","text":"The message"} sends a message to an approved person on a connected channel (channels: telegram, discord, slack, sms, imessage). Leave "to" out to reach the person who most recently messaged you there. Use it when the human asks you to message someone, or in a scheduled task they set up. You may also message the owner (the person marked Me) on your own when they would want to know: a task you finished, a result they are waiting for, a reminder they asked for. Never message anyone else unprompted, and never use it to talk to yourself.');
     if (calls) lines.push('{"action":"phone_call","text":"What the call is about"} phones the owner\u2019s number and then talks with them. Use it only when the human asks for a call or has told you to call for something urgent. At most five calls an hour. A phone call is answered by a separate fast voice assistant that knows your name and notes; the call transcript comes back into your chat afterwards.');
     if (hub.owner()) lines.push('{"action":"ask_owner","text":"The question","urgent":false} texts the owner (the person marked Me) when you need a decision or a missing detail and nobody is chatting with you: use it instead of guessing or stopping silently, then end your turn. Their next message on that channel comes back to you tagged as the answer. Set urgent true only when waiting would cause harm; then the app calls them if they do not answer. Do not use it just to report progress.');
     lines.push('If a person texts \u201ccall me\u201d, the app places that call for you. Strangers who message the channels get a pairing code and cannot reach you until the owner approves them.');
@@ -363,9 +394,10 @@ function createChannelsHost(deps) {
 
   return {
     hub, voice, note, runAction,
-    async init() { await deps.ensureState(); await hub.init(); await seedFromEnvironment().catch(error => deps.log?.(error)); syncVoice(); syncInkbox(); askTimer = setInterval(() => checkAsks().catch(() => {}), deps.askCheckMs ?? 30000); askTimer.unref?.(); },
+    async init() { await deps.ensureState(); await hub.init(); await seedFromEnvironment().catch(error => deps.log?.(error)); syncVoice(); syncInkbox(); askTimer = setInterval(() => { checkAsks().catch(() => {}); checkDelegations().catch(() => {}); }, deps.askCheckMs ?? 30000); askTimer.unref?.(); },
     async stop() { clearInterval(askTimer); clearTimeout(syncTimer); inkboxVoice?.stop(); inkboxVoice = null; inkboxKey = ''; await hub.stopAll(); voiceServer?.close(); voiceServer = null; voiceKey = ''; },
     get turnActive() { return turnFrom.size > 0; },
+    afterReply, checkDelegations, importCall,
     askOwner, checkAsks, routeApproval, approvalSettled, voiceInstructionsChanged, callOwner, get inkbox() { return inkboxVoice; },
     async testCall() { return callOwner(null); },
     async setVoice(id) { await hub.configure('imessage', { voice: String(id || '') }); return this.status(); },

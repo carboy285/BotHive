@@ -20,7 +20,7 @@ const PAIR_TTL = 60 * 60 * 1000, MAX_PENDING = 20, WINDOW = 10 * 60 * 1000, MAX_
 const STOP_WORDS = /^\s*(?:\/stop|stop|cancel|abort|never\s*mind|nevermind)(?:\s+(?:it|that|please))?[.!]*\s*$/i;
 const YES = /^\s*(?:yes|y|yep|yeah|approve|approved|ok|okay|go ahead|do it|sure)[.!]*\s*$/i, NO = /^\s*(?:no|n|nope|deny|denied|don'?t|do not)[.!]*\s*$/i;
 const BATCH_QUIET = 1200, BATCH_MAX = 4000, MAX_MEDIA = 3;
-const DEFAULT_SETTINGS = { fast: true, whenBusy: 'steer', reachOn: null, escalate: 'call', escalateMinutes: 10, quietStart: 22, quietEnd: 8 };
+const DEFAULT_SETTINGS = { fast: true, whenBusy: 'steer', replies: 'where', reachOn: null, escalate: 'call', escalateMinutes: 10, quietStart: 22, quietEnd: 8 };
 const CALL_WORDS = /^\s*(?:\/call|(?:hey\s+)?(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?(?:give\s+me\s+a\s+)?(?:call|phone|ring)(?:\s+me)?(?:\s+now|\s+please)?[.!?]*)\s*$/i;
 
 class ChannelHub {
@@ -48,6 +48,9 @@ class ChannelHub {
   async init() {
     const saved = await this.deps.load().catch(() => null);
     if (saved && typeof saved === 'object') this.data = { bot: saved.bot ?? null, channels: saved.channels || {}, approved: saved.approved || {}, pending: saved.pending || {}, pendingAsk: saved.pendingAsk || null, settings: { ...DEFAULT_SETTINGS, ...(saved.settings || {}) } };
+    // Older setups had no owner: if exactly one person is approved, that is the owner.
+    const everyone = Object.values(this.data.approved).flat();
+    if (everyone.length === 1 && !everyone.some(p => p.me)) everyone[0].me = true;
     for (const id of Object.keys(CHANNELS)) if (this.data.channels[id]?.enabled) await this.start(id).catch(() => {});
   }
 
@@ -75,6 +78,7 @@ class ChannelHub {
     const next = { ...this.data.settings };
     if ('fast' in patch) next.fast = patch.fast !== false;
     if ('whenBusy' in patch) { if (!['steer', 'queue'].includes(patch.whenBusy)) throw new Error('Choose Steer or Queue.'); next.whenBusy = patch.whenBusy; }
+    if ('replies' in patch) { if (!['where', 'always'].includes(patch.replies)) throw new Error('Choose where replies go.'); next.replies = patch.replies; }
     if ('reachOn' in patch) next.reachOn = patch.reachOn && CHANNELS[patch.reachOn] ? patch.reachOn : null;
     if ('escalate' in patch) { if (!['call', 'text', 'none'].includes(patch.escalate)) throw new Error('Choose call, text or nothing.'); next.escalate = patch.escalate; }
     if ('escalateMinutes' in patch) next.escalateMinutes = Math.min(120, Math.max(1, Math.round(Number(patch.escalateMinutes)) || 10));
@@ -140,7 +144,8 @@ class ChannelHub {
     const list = (this.data.approved[id] ||= []);
     const existing = list.find(item => item.id === entry.senderId);
     if (existing) { if (options.me) existing.me = true; }
-    else list.push({ id: entry.senderId, name: entry.name, at: this.now(), chatId: entry.chatId, me: !!options.me });
+    // The first person approved is almost always the owner, so they are Me unless someone already is.
+    else list.push({ id: entry.senderId, name: entry.name, at: this.now(), chatId: entry.chatId, me: options.me ?? !this.owner() });
     await this.persist();
     this.send(id, entry.chatId, 'You’re approved. Send a message and the Bot will answer.').catch(() => {});
     return { name: entry.name };
@@ -242,13 +247,16 @@ class ChannelHub {
     });
   }
 
+  /** A turn the app starts on the person's behalf (other Bots answered, a call ended). It waits its turn and never steers. */
+  followUp(from, text) { return this.dispatch({ from, texts: [String(text)], media: [], followUp: true }); }
+
   /** Runs one request on the Bot. If the Bot is already working, Steer stops that turn and carries on with this one; Queue waits for it. */
   async dispatch(batch) {
     const botID = this.data.bot, { from } = batch; if (!botID || !this.deps.botExists(botID)) return;
     const chatId = from.chatId, channel = from.channel;
     const text = batch.texts.join('\n').slice(0, MAX_TEXT * 2), media = batch.media.slice(0, MAX_MEDIA);
     const state = this.bots.get(botID) || { active: 0, tail: Promise.resolve() }; this.bots.set(botID, state);
-    const steer = state.active > 0 && this.data.settings.whenBusy !== 'queue';
+    const steer = !batch.followUp && state.active > 0 && this.data.settings.whenBusy !== 'queue';
     state.active++;
     if (steer) this.deps.stop?.(botID);
     const previous = state.tail;

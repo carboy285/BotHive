@@ -11,7 +11,7 @@ const BASE = 'https://inkbox.ai/api/v1/imessage';
 const E164 = /^\+[1-9]\d{6,14}$/;
 
 class InkboxIMessageChannel {
-  constructor({ fields, handlers, fetchImpl = fetch, interval = 2000, setTimer = setTimeout, clearTimer = clearTimeout, uuid = () => crypto.randomUUID() }) {
+  constructor({ fields, handlers, fetchImpl = fetch, interval = 500, setTimer = setTimeout, clearTimer = clearTimeout, uuid = () => crypto.randomUUID() }) {
     this.key = fields.apiKey; this.onMessage = handlers.onMessage; this.fetch = fetchImpl; this.interval = interval;
     this.setTimer = setTimer; this.clearTimer = clearTimer; this.uuid = uuid;
     this.running = false; this.seen = new Set(); this.unacked = new Map(); this.timer = null; this.info = { state: 'starting', detail: '' };

@@ -93,11 +93,11 @@ class InkboxVoice {
       const fresh = (await this.recentCalls()).filter(call => this.finished(call) && !this.seen.has(call.id)).reverse();
       for (const call of fresh) {
         this.seen.add(call.id);
-        let lines = [];
-        try { lines = (await this.api(`/calls/${encodeURIComponent(call.id)}/transcripts`)) || []; } catch (error) { this.log(error); }
+        let lines = [], transcriptError = '';
+        try { lines = (await this.api(`/calls/${encodeURIComponent(call.id)}/transcripts`)) || []; } catch (error) { this.log(error); transcriptError = error.message; }
         const transcript = (Array.isArray(lines) ? lines : []).sort((a, b) => a.seq - b.seq).filter(x => x.text).map(x => ({ party: x.party === 'local' ? 'assistant' : 'person', text: String(x.text) }));
         const items = (Array.isArray(call.post_call_action_items) ? call.post_call_action_items : []).filter(x => x?.action).map(x => ({ action: String(x.action), details: x.details ? String(x.details) : '' }));
-        await this.onCall({ id: call.id, direction: call.direction, number: call.remote_phone_number, reason: call.reason || '', status: call.status, seconds: call.started_at && call.ended_at ? Math.max(0, Math.round((Date.parse(call.ended_at) - Date.parse(call.started_at)) / 1000)) : 0, outcome: call.hangup_reason || '', transcript, items });
+        await this.onCall({ id: call.id, direction: call.direction, number: call.remote_phone_number, reason: call.reason || '', status: call.status, seconds: call.started_at && call.ended_at ? Math.max(0, Math.round((Date.parse(call.ended_at) - Date.parse(call.started_at)) / 1000)) : 0, outcome: call.hangup_reason || '', transcript, items, transcriptError });
       }
       if (this.seen.size > 500) this.seen = new Set([...this.seen].slice(-250));
       if (this.running) this.info = { state: 'on', detail: 'Phone calls ready' };

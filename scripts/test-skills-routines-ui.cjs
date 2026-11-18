@@ -207,6 +207,8 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
     await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsApprove' && x[2] === '123456' && x[3]?.me === true));
     await page.getByLabel('Fast replies on channels').uncheck();
     await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsSetSettings' && x[1].fast === false));
+    await page.getByLabel('Where replies go').selectOption('always');
+    await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsSetSettings' && x[1].replies === 'always'));
     await page.getByLabel('When I send while it is working').selectOption('queue');
     await page.waitForFunction(() => window.__calls.some(x => x[0] === 'channelsSetSettings' && x[1].whenBusy === 'queue'));
     await page.getByLabel('This is me: Sam <b>Lee</b>').first().check();

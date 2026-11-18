@@ -195,6 +195,6 @@ test('channel turns are fast turns, steering adds a note, and a stopped turn ret
   const steered = f.host.askBot('hive', 'shorter', { channel: 'telegram', senderName: 'Sam' }, { steer: true, fast: false });
   await new Promise(r => setTimeout(r, 5));
   assert.match(f.started.at(-1)[1], /\(The person sent this while you were still working/);
-  assert.deepEqual(f.startOptions, [{ channelTurn: true }, { channelTurn: false }]);
+  assert.deepEqual(f.startOptions, [{ channelTurn: true, channel: true }, { channelTurn: false, channel: true }]);
   f.running.delete('hive'); await steered;
 });

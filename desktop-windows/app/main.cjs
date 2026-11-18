@@ -26,6 +26,7 @@ const voice=require('./voice.cjs');
 const providerKeys=require('./provider-keys.cjs');
 const deviceActions=require('./device-actions.cjs');
 const memoryModule=require('./memory.cjs');
+const turnOrigin=new Map();
 const memory=memoryModule.createMemory({getState:()=>state,persist:()=>atomicJSON('preview-workspace.json',state),archivePath:id=>file(path.join('Archive',id+'.jsonl')),onChange:id=>{try{notify();}catch{}try{channelsHost?.voiceInstructionsChanged(id);}catch{}},log:error=>console.error('memory:',error.message),
  quickTurn:(botID,prompt)=>quickTurn(botID,prompt)});
 const botPackages=require('./bot-package.cjs');
@@ -136,7 +137,7 @@ async function ensureState(){
 async function initializeState(){
   const loaded=await loadJSON('preview-workspace.json',previewWorkspace());validateWorkspace(loaded);
   if(!cliInstaller)makeCliInstaller();
-  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text,options)=>startChat(id,text,undefined,undefined,0,options),isRunning:id=>active.has(id)||pendingBots.has(id),stop:id=>{stoppedBots.add(id);for(const run of active.get(id)||[])run.cancel();},botDirectory,record:async(botID,text)=>{state.entries.push({id:randomUUID(),botID,kind:'user',text:String(text).slice(0,100000),date:new Date().toISOString(),delivery:'delivered'});await atomicJSON('preview-workspace.json',state);notify();},afterTurn:id=>{memory.noteActivity(id).catch(()=>{});},settleApproval:(id,yes)=>settleApproval(id,yes),fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
+  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text,options)=>startChat(id,text,undefined,undefined,0,options),isRunning:id=>active.has(id)||pendingBots.has(id),stop:id=>{stoppedBots.add(id);for(const run of active.get(id)||[])run.cancel();},botDirectory,record:async(botID,text)=>{state.entries.push({id:randomUUID(),botID,kind:'user',text:String(text).slice(0,100000),date:new Date().toISOString(),delivery:'delivered'});await atomicJSON('preview-workspace.json',state);notify();},afterTurn:id=>{memory.noteActivity(id).catch(()=>{});},forceMemory:id=>memory.runPass(id),settleApproval:(id,yes)=>settleApproval(id,yes),fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
   skillStore=skillsModule.loadStore(await loadJSON('skills.json',null));
   serverStore=serversModule.load(await loadJSON('servers.json',null));
   if(loaded.version===1)await atomicJSON('legacy-workspace-backup.json',loaded);
@@ -211,6 +212,8 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
  if(active.has(botID)||pendingBots.has(botID))throw new PublicError('A response is already running.');
  if(!text&&!delivery&&!state.entries.some(x=>x.botID===botID&&x.kind==='user'))throw new PublicError('Send your first message first.');
  stoppedBots.delete(botID);
+ // Where this chain of turns started, so its final reply can be texted to the owner when that is wanted. Continuations keep the origin.
+ if(!(text===undefined&&!delivery&&browserDepth>0))turnOrigin.set(botID,options.channel?'channel':headsUp?'headsup':scheduledTask?'scheduled':delivery?'delivery':'app');
  pendingBots.add(botID);
  try{
   if(delivery)teamwork.begin(state,delivery);else if(text)state.entries.push({id:requestID||randomUUID(),botID,kind:'user',text,delivery:headsUp?'proactive':scheduledTask?'scheduled':'delivered',...(headsUp?{label:headsUp.label}:{}),date:new Date().toISOString()});
@@ -268,6 +271,7 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
     if(continueBrowser&&!quitting&&!stoppedBots.has(botID)){try{await startChat(botID,undefined,undefined,undefined,browserSteps);continuing=true;}catch{if(scheduledTask)scheduledTask.lastResult='failed';}}
     if(scheduledTask&&!continuing){if(scheduledTask.lastResult==='running')scheduledTask.lastResult=stoppedBots.has(botID)?'cancelled':routineRuns.get(botID)?.failed?'failed':'completed';const history=scheduledTask.history?.find(run=>run.id===routineRuns.get(botID)?.runID);if(history)history.status=scheduledTask.lastResult;routineRuns.delete(botID);await atomicJSON('preview-workspace.json',state);}
     if(!continuing&&!headsUp)notifyFinished(botID,reply);
+    if(!continuing&&channelsHost&&reply.state==='complete')channelsHost.afterReply(botID,{text:reply.text,origin:turnOrigin.get(botID)||'app'}).catch(()=>{});
     notify();await deliverQueued();
    });
   }
@@ -540,7 +544,7 @@ async function remoteCommand(command){
    if(command.action==='channels_set_bot')await hub.setBot(text||null);
    else if(command.action==='channels_configure'){if(!command.fields||typeof command.fields!=='object'||Array.isArray(command.fields)||Object.keys(command.fields).length>12)throw new Error('No settings were sent.');await hub.configure(channel,command.fields);}
    else if(command.action==='channels_enable')await hub.setEnabled(channel,text==='on');
-   else if(command.action==='channels_approve')await hub.approve(channel,text,{me:command.fields?.me==='true'});
+   else if(command.action==='channels_approve')await hub.approve(channel,text,{me:command.fields?.me==='true'?true:command.fields?.me==='false'?false:undefined});
    else if(command.action==='channels_set_settings'){const f=command.fields||{};const patch={};if('fast' in f)patch.fast=f.fast==='true';for(const key of ['whenBusy','reachOn','escalate','escalateMinutes','quietStart','quietEnd'])if(key in f)patch[key]=f[key];await hub.setSettings(patch);}
    else if(command.action==='channels_set_person'){const f=command.fields||{};const patch={};if('name' in f)patch.name=f.name;if('me' in f)patch.me=f.me==='true';await hub.setPerson(channel,text,patch);}
    else if(command.action==='channels_remove')await hub.remove(channel,text);
@@ -851,7 +855,7 @@ function configureIPC() {
  handle('channels:set-bot',channelCall(async(host,id)=>{await host.hub.setBot(id||null);return host.status();}));
  handle('channels:configure',channelCall(async(host,id,fields)=>{await host.hub.configure(id,fields);return host.status();}));
  handle('channels:enable',channelCall(async(host,id,on)=>{await host.hub.setEnabled(id,on===true);return host.status();}));
- handle('channels:approve',channelCall(async(host,id,code,options)=>{await host.hub.approve(id,code,{me:options?.me===true});return host.status();}));
+ handle('channels:approve',channelCall(async(host,id,code,options)=>{await host.hub.approve(id,code,{me:typeof options?.me==='boolean'?options.me:undefined});return host.status();}));
  handle('channels:set-settings',channelCall(async(host,patch)=>{await host.hub.setSettings(patch&&typeof patch==='object'?patch:{});return host.status();}));
  handle('channels:set-person',channelCall(async(host,id,who,patch)=>{await host.hub.setPerson(id,String(who),patch&&typeof patch==='object'?patch:{});return host.status();}));
  handle('channels:remove',channelCall(async(host,id,who)=>{await host.hub.remove(id,String(who));return host.status();}));

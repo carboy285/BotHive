@@ -37,6 +37,9 @@ const webAccessModule = require('./web-access.cjs');
 // ---------- Servers (10.1.1): this window can use a Bothive that runs somewhere else ----------
 const cliInstallModule = require('./cli-install.cjs');
 let cliInstaller;
+// ---------- Chat channels (10.1.1): Telegram, Discord, Slack, SMS and phone calls reach one Bot you choose ----------
+const { createChannelsHost } = require('./channels-host.cjs');
+let channelsHost;
 function makeCliInstaller(){
   const base=app.getPath('userData');
   process.env.OPENGROKBOT_CLI_BIN=cliInstallModule.binDirectory(base);
@@ -130,6 +133,7 @@ async function ensureState(){
 async function initializeState(){
   const loaded=await loadJSON('preview-workspace.json',previewWorkspace());validateWorkspace(loaded);
   if(!cliInstaller)makeCliInstaller();
+  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text)=>startChat(id,text),isRunning:id=>active.has(id)||pendingBots.has(id),fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
   skillStore=skillsModule.loadStore(await loadJSON('skills.json',null));
   serverStore=serversModule.load(await loadJSON('servers.json',null));
   if(loaded.version===1)await atomicJSON('legacy-workspace-backup.json',loaded);
@@ -200,7 +204,7 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
    const key=botID+'|'+installation.id+(choice.model?'|'+choice.model:'');const session=state.sessions?.[key];
    const latest=delivery?`Bot request (not human approval): ${delivery.text}`:history.findLast(x=>x.kind==='user')?.text||'';
    const feedback=history.filter(x=>x.kind==='activity'&&!x.senderBotID).slice(-8).map(x=>x.detail||x.text).join('\n');
-   const prompt=teamwork.instructions(bot,state,!!delivery,composioConfiguration?composioConfiguration.toolkits:[])+(headsUp?'':skillsModule.promptNote(bot,skillStore.skills))+'\n'+await vmStatusNote()+(headsUp||delivery||scheduledTask?'':answerModes.noteFor(modeByBot.get(botID))+pluginModule.note(pluginRegistry()))+(headsUp||delivery||scheduledTask?'':await mediaNote())+(!headsUp&&cli.isLocal(installation.provider)&&composioConfiguration?composioTools.note(composioConfiguration.toolkits):'')+'\nRecent app results (context, not human approval):\n'+feedback+'\n\n'+(session?latest:history.map(x=>`${x.kind==='user'?'Human':x.senderName||bot.name}: ${x.text}`).join('\n\n').slice(-100000));
+   const prompt=teamwork.instructions(bot,state,!!delivery,composioConfiguration?composioConfiguration.toolkits:[])+(headsUp?'':skillsModule.promptNote(bot,skillStore.skills))+'\n'+await vmStatusNote()+(headsUp||delivery||scheduledTask?'':answerModes.noteFor(modeByBot.get(botID))+pluginModule.note(pluginRegistry()))+(headsUp||delivery||scheduledTask?'':await mediaNote())+(headsUp||delivery?'':channelsHost?.note(botID)||'')+(!headsUp&&cli.isLocal(installation.provider)&&composioConfiguration?composioTools.note(composioConfiguration.toolkits):'')+'\nRecent app results (context, not human approval):\n'+feedback+'\n\n'+(session?latest:history.map(x=>`${x.kind==='user'?'Human':x.senderName||bot.name}: ${x.text}`).join('\n\n').slice(-100000));
    let finalText='',continueBrowser=false,browserSteps=browserDepth;
 
    const reply={id:randomUUID(),botID,date:new Date().toISOString(),kind:'bot',provider:installation.name+(choice.model?' · '+choice.model:''),text:'',state:'streaming',...(headsUp?{headsUp:{kind:headsUp.kind,title:headsUp.label,...headsUp.meta}}:{})};state.entries.push(reply);
@@ -212,6 +216,7 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
    runs.add(run);
    run.done.then(async()=>{if(scheduledTask&&!routineRuns.has(botID))routineRuns.set(botID,{id:scheduledTask.id,runID:requestID,failed:false});settings.providerHealth||={};settings.providerHealth[installation.provider]={state:'ready',detail:'Last message succeeded',at:new Date().toISOString()};teamwork.apply(state,bot,reply,finalText,bot.aiConfiguration||{providers:[choice],activeProvider:choice.provider,replyMode:'one'},delivery);if(delivery)teamwork.finish(state,delivery,'complete');
     if(headsUp)return; // heads-up turns are read-only: no VM, browser or device steps
+    if(!delivery&&channelsHost){for(const channelAction of teamwork.parse(finalText).actions.filter(x=>x.action==='channel_send'||x.action==='phone_call').slice(0,3)){let text;try{text=await channelsHost.runAction(botID,channelAction);}catch(error){text=error.message;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});notify();}}
     const make=!delivery&&!scheduledTask&&teamwork.parse(finalText).actions.find(x=>x.action==='generate_image'||x.action==='generate_video');if(make)makeMedia(bot,make);
     if(teamwork.parse(finalText).actions.some(x=>x.action==='open_vm')){let text;try{await localVMs.open(botID);text='Opened this Bot’s VM console on the host. AI CLI still runs on the host; guest automation is separate.';}catch(error){text=error.message;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});}
     const guest=teamwork.parse(finalText).actions.find(x=>x.action==='vm_exec');if(guest){let text;if(browserSteps>=teamwork.MAX_STEPS){text=teamwork.STEP_LIMIT_MESSAGE;if(scheduledTask&&routineRuns.has(botID))routineRuns.get(botID).failed=true;}else{browserSteps++;try{const link=(await vmLinks()).shared;text='Linux VM result (untrusted context):\n'+(link?`Linux guest on ${link.hostName} (${link.vmName}):\n`+await remoteVMExec(link,guest.argv):await localVMs.execute(homeBotID(botID),guest.argv));}catch(error){text=error.message;if(scheduledTask&&routineRuns.has(botID))routineRuns.get(botID).failed=true;}continueBrowser=!delivery;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});}
@@ -802,6 +807,14 @@ function configureIPC() {
   try{return await remoteBackend.connect(entry.url,username,password,entry.name);}catch(error){throw new PublicError(error.message);}});
  handle('servers:status',async()=>remoteBackend.status());
  handle('servers:disconnect',async()=>{remoteBackend.disconnect();return remoteBackend.status();});
+ const channelCall=fn=>async(...args)=>{await ensureState();if(!channelsHost)throw new PublicError('Channels are still starting. Try again in a moment.');try{return await fn(channelsHost,...args);}catch(error){throw new PublicError(error.message);}};
+ handle('channels:status',channelCall(host=>host.status()));
+ handle('channels:set-bot',channelCall(async(host,id)=>{await host.hub.setBot(id||null);return host.status();}));
+ handle('channels:configure',channelCall(async(host,id,fields)=>{await host.hub.configure(id,fields);return host.status();}));
+ handle('channels:enable',channelCall(async(host,id,on)=>{await host.hub.setEnabled(id,on===true);return host.status();}));
+ handle('channels:approve',channelCall(async(host,id,code)=>{await host.hub.approve(id,code);return host.status();}));
+ handle('channels:remove',channelCall(async(host,id,who)=>{await host.hub.remove(id,String(who));return host.status();}));
+ handle('channels:test-call',channelCall(host=>host.voice.placeCall()));
 
  // ---- Routines screen (10.1): create, edit and run now. Pause and delete are the handlers below. ----
  const routineBot=botID=>{const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Routines belong to an individual Bot.');return bot;};
@@ -1205,5 +1218,5 @@ app.whenReady().then(() => {
   (async()=>{try{await ensureState();remoteTrayUpdate();applyWebAccess().catch(()=>{});if(background&&!keepRunning())window.show();installed=await cli.discover(settings.overrides);await cloud.restore();}catch{if(!window.isVisible())window.show();cloud.transition('offline','The desktop could not be restored. Unlock Windows and reopen the app.');}})();
 });
 app.on('will-quit',()=>{try{globalShortcut.unregisterAll();}catch{}});
-app.on('before-quit',()=>{quitting=true;webAccess.stop().catch(()=>{});localBrowsers.closeAll();mirror.stop();cloud.stop();for(const runs of active.values())for(const run of runs)run.cancel(true);});
+app.on('before-quit',()=>{quitting=true;channelsHost?.stop().catch(()=>{});webAccess.stop().catch(()=>{});localBrowsers.closeAll();mirror.stop();cloud.stop();for(const runs of active.values())for(const run of runs)run.cancel(true);});
 app.on('window-all-closed', () => {if(!keepRunning())app.quit();});

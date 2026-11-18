@@ -13,30 +13,28 @@ struct MacSettingsView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            VStack(spacing: 4) {
-                ForEach(SettingsTab.allCases) { tab in
-                    Button { desktop.settingsTab = tab } label: {
-                        HStack(spacing: 13) {
-                            Image(systemName: tab.icon).font(.system(size: 17)).frame(width: 22)
-                            Text(tab.rawValue).font(.system(size: 17))
-                            Spacer()
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(SettingsTab.groups, id: \.title) { group in
+                            if !group.title.isEmpty {
+                                Text(group.title.uppercased()).font(.system(size: 10.5, weight: .semibold)).kerning(0.6)
+                                    .foregroundStyle(MacTheme.tertiary).padding(.horizontal, 10).padding(.top, 16).padding(.bottom, 4)
+                            }
+                            ForEach(group.tabs) { tab in MacSettingsNavRow(tab: tab, selected: desktop.settingsTab == tab) { desktop.settingsTab = tab } }
                         }
-                        .padding(.horizontal, 14).padding(.vertical, 12)
-                        .background(desktop.settingsTab == tab ? MacTheme.raised : .clear, in: RoundedRectangle(cornerRadius: 11))
-                        .contentShape(RoundedRectangle(cornerRadius: 11))
-                    }.buttonStyle(.plain).accessibilityAddTraits(desktop.settingsTab == tab ? [.isSelected] : [])
-                }
-                Spacer()
-                Text("Bothive \(desktop.updates.current)").font(.system(size: 11)).foregroundStyle(MacTheme.secondary)
+                    }.padding(12).padding(.top, 6)
+                }.scrollIndicators(.never)
+                Text("Bothive \(desktop.updates.current)").font(.system(size: 11)).foregroundStyle(MacTheme.tertiary).padding(.bottom, 14)
             }
-            .padding(16).padding(.top, 6).frame(width: 238).background(MacTheme.sidebar)
+            .frame(width: 232).background(MacTheme.sidebar)
             Rectangle().fill(MacTheme.line).frame(width: 1)
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    Text(desktop.settingsTab.rawValue).font(.system(size: 24, weight: .medium))
+                    Text(desktop.settingsTab.rawValue).font(.system(size: 22, weight: .semibold)).kerning(-0.2)
                     Spacer()
-                    Button { desktop.panel = nil } label: { Image(systemName: "xmark").font(.system(size: 19)).frame(width: 34, height: 34) }.buttonStyle(.plain).help("Close settings")
-                }.padding(.horizontal, 36).padding(.top, 25).padding(.bottom, 25)
+                    MacCircleButton(symbol: "xmark", label: "Close settings", diameter: 32) { desktop.panel = nil }
+                }.padding(.horizontal, 34).padding(.top, 22).padding(.bottom, 18)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 28) {
                         switch desktop.settingsTab {
@@ -44,6 +42,7 @@ struct MacSettingsView: View {
                         case .headsUps: MacHeadsUpsSettings()
                         case .routines: MacRoutinesSettings()
                         case .skills: MacSkillsSettings()
+                        case .channels: MacChannelsSettings()
                         case .servers: MacServersSettings()
                         case .computer: computer
                         case .permissions: unavailable(title: "Your CLI keeps its permissions", detail: "Codex runs with read-only workspace access. Other CLIs keep their own configured permissions. This app does not add approval-bypass flags or auto-approve tools.", icon: "shield")
@@ -183,14 +182,16 @@ struct MacSettingsView: View {
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.system(size: 14)).foregroundStyle(MacTheme.secondary).padding(.leading, 16)
-            content().frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title.uppercased()).font(.system(size: 11, weight: .semibold)).kerning(0.5).foregroundStyle(MacTheme.tertiary).padding(.leading, 4)
+            content().frame(maxWidth: .infinity, alignment: .leading)
+                .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(MacTheme.line, lineWidth: 1))
         }
     }
 
     private func settingRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack { Text(title).font(.system(size: 16)); Spacer(); content() }.padding(.horizontal, 20).padding(.vertical, 18)
+        HStack { Text(title).font(.system(size: 14.5)); Spacer(); content() }.padding(.horizontal, 18).padding(.vertical, 14)
     }
 
     private func openDocumentation(_ address: String) { if let url = URL(string: address) { NSWorkspace.shared.open(url) } }
@@ -723,5 +724,30 @@ struct MacHeadsUpSources: View {
             Spacer()
             Text(on ? "Connected" : "Not connected").font(.system(size: 13)).foregroundStyle(MacTheme.secondary)
         }.padding(.horizontal, 20).padding(.vertical, 10)
+    }
+}
+
+
+/// One row of the settings sidebar (10.2): compact, with the app accent on the selected row and a soft hover.
+private struct MacSettingsNavRow: View {
+    let tab: SettingsTab
+    let selected: Bool
+    let action: () -> Void
+    @State private var hovering = false
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: tab.icon).font(.system(size: 13.5, weight: .medium)).frame(width: 20)
+                    .foregroundStyle(selected ? MacTheme.accent : MacTheme.secondary)
+                Text(tab.rawValue).font(.system(size: 13.5, weight: selected ? .semibold : .regular))
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10).frame(height: 32)
+            .background(selected ? MacTheme.accent.opacity(0.16) : (hovering ? MacTheme.hover : .clear), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }

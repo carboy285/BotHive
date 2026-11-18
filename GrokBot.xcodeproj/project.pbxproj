@@ -784,6 +784,8 @@
 				"D42190AB321F4E1303BCF0FF",
 				"1BC4BA355E16ACC96C4605D6",
 				"5B1865B379D5FA54681B5596",
+				"3C68C95CB1196E1B872F352E",
+				"49060762769D313002F98E1D",
 				"0938FD4ADC00621AEC2603D4",
 				"F27D5222E8BB0FB1CB09860D",
 				"10844AF1F3A791297CC2033B",
@@ -1035,6 +1037,26 @@
 		"5A7C5FBC54E845C9F3F0A30A" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "5B1865B379D5FA54681B5596";
+		};
+		"3C68C95CB1196E1B872F352E" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Features/MacChannelsView.swift";
+			"sourceTree" = "<group>";
+		};
+		"7723A1FEB24303C1C1EA0C50" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "3C68C95CB1196E1B872F352E";
+		};
+		"49060762769D313002F98E1D" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GrokBotMac/Features/MacChannels.swift";
+			"sourceTree" = "<group>";
+		};
+		"DACE76FFF6609430AE6F9534" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "49060762769D313002F98E1D";
 		};
 		"0938FD4ADC00621AEC2603D4" = {
 			"isa" = "PBXFileReference";
@@ -1417,6 +1439,8 @@
 				"A00D89FA4A8867714FD4EA32",
 				"11C6327260FC7C9DA9A9039B",
 				"5A7C5FBC54E845C9F3F0A30A",
+				"7723A1FEB24303C1C1EA0C50",
+				"DACE76FFF6609430AE6F9534",
 				"DDEE2C3D258DC03D4A199E79",
 				"DC96C4F48B2BA02149FAE6E8",
 				"D7D1AD66ED2AF34B713E3484",

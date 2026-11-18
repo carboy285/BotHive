@@ -1065,6 +1065,70 @@ final class MacToolServerTests: XCTestCase {
     }
 }
 
+
+actor FakeChannelAdapter: MacChannelAdapter {
+    private var sent: [(chat: String, text: String)] = []
+    func start() async throws -> String { "@fake_bot" }
+    func stop() {}
+    func send(chatID: String, text: String) async throws { sent.append((chatID, text)) }
+    func typing(chatID: String) async {}
+    func texts() -> [String] { sent.map(\.text) }
+}
+
+/// 10.2: chat channels on the Mac.
+@MainActor
+final class MacChannelsTests: XCTestCase {
+    @MainActor private final class Asked { var texts: [String] = [] }
+
+    func testStrangersGetACodeOnlyAndApprovedPeopleReachTheBot() async throws {
+        let store = KeychainSecretStore(service: "org.opengrokbot.tests.channels." + UUID().uuidString)
+        defer { try? store.delete(account: "settings") }
+        let hub = MacChannels(store: store), fake = FakeChannelAdapter(), asked = Asked(), botID = UUID()
+        hub.makeAdapter = { _, _, _, _ in fake }
+        hub.ask = { _, text in asked.texts.append(text); return "Hello Sam" }
+        hub.makeCode = { "123456" }
+
+        XCTAssertThrowsError(try hub.setEnabled(.telegram, true), "a channel cannot be turned on before it is set up")
+        try hub.configure(.telegram, fields: ["token": "123:secret"])
+        XCTAssertThrowsError(try hub.setEnabled(.telegram, true), "a channel needs a Bot first")
+        hub.setBot(botID)
+        try hub.setEnabled(.telegram, true)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(hub.state(.telegram), .on("@fake_bot"))
+
+        await hub.inbound(MacInboundMessage(channel: .telegram, senderID: "42", senderName: "Sam", chatID: "42", text: "hi"))
+        XCTAssertEqual(hub.pending(.telegram).first?.code, "123456")
+        XCTAssertTrue(asked.texts.isEmpty, "nothing a stranger writes reaches the Bot")
+        let first = await fake.texts()
+        XCTAssertTrue(first.last?.contains("123456") == true)
+
+        XCTAssertThrowsError(try hub.approve(.telegram, code: "000000"))
+        XCTAssertEqual(try hub.approve(.telegram, code: "123456"), "Sam")
+        await hub.inbound(MacInboundMessage(channel: .telegram, senderID: "42", senderName: "Sam", chatID: "42", text: "what's up"))
+        XCTAssertEqual(asked.texts, ["[Telegram · Sam] what's up"])
+        let replies = await fake.texts()
+        XCTAssertTrue(replies.contains("Hello Sam"))
+
+        let sent = try await hub.runSend(botID: botID, channel: "telegram", to: nil, text: "Running late")
+        XCTAssertEqual(sent, "Sent to Sam on Telegram.")
+        do { _ = try await hub.runSend(botID: UUID(), channel: "telegram", to: nil, text: "x"); XCTFail("another Bot cannot use the channels") } catch {}
+        do { _ = try await hub.runSend(botID: botID, channel: "telegram", to: "Mallory", text: "x"); XCTFail("only approved people") } catch {}
+
+        hub.remove(.telegram, person: "42")
+        XCTAssertTrue(hub.approved(.telegram).isEmpty)
+        XCTAssertTrue(hub.note(for: botID).contains("channel_send"))
+        XCTAssertEqual(hub.note(for: UUID()), "", "other Bots are not told about channels")
+        hub.stopAll()
+    }
+
+    func testLongAnswersAreSplitAtBreaks() {
+        let text = String(repeating: "word ", count: 2000)
+        let parts = MacChannelText.chunk(text, limit: 4000)
+        XCTAssertTrue(parts.allSatisfy { $0.count <= 4000 })
+        XCTAssertEqual(parts.joined(separator: " ").split(separator: " ").count, 2000)
+    }
+}
+
 #endif
 
 @MainActor

@@ -1,6 +1,6 @@
 # Chat channels (10.2)
 
-One Bot you choose answers messages that arrive on Telegram, Discord, Slack, SMS, iMessage and phone calls. On Windows, set them up under **Settings → Channels**: pick the Bot that answers, open a channel's card, follow its three steps, paste the token and turn it on. On a Docker server the same settings can come from environment variables (below), and the Windows or Mac app connected to that server can't change them yet.
+One Bot you choose answers messages that arrive on Telegram, Discord, Slack, SMS, iMessage and phone calls. On Windows and the Mac, set them up under **Settings → Channels** (the Mac has Telegram and iMessage through Inkbox; Discord, Slack, SMS and calls are on Windows and the Docker server): pick the Bot that answers, open a channel's card, follow its three steps, paste the token and turn it on. On a Docker server the same settings can come from environment variables (below), and the Windows or Mac app connected to that server can't change them yet.
 
 The Bot that answers is told which channels are on and gets two tools: `channel_send` (message an approved person, at most 20 an hour) and `phone_call` (ring your own number, at most 5 an hour). Other Bots are not told about channels.
 

@@ -36,3 +36,33 @@ test('Codex answers sent in pieces stream into the chat, then the final text win
   assert.deepEqual(texts, ['Hello', 'Hello there.', 'Hello there!']);
   assert.equal(parser.text, 'Hello there!');
 });
+
+test('Claude Code gets Bothive tools pre-approved alongside connected apps (10.2)', () => {
+  const { command } = require('./local-cli.cjs');
+  const both = command('claude', 'session-1', 'p.txt', 'sonnet', { allowConnectedApps: true, tools: true });
+  const at = both.indexOf('--allowedTools');
+  assert.deepEqual(both.slice(at + 1, at + 3), ['mcp__opengrokbot-composio', 'mcp__bothive']);
+  assert.equal(both[at + 3], '--resume', 'the list ends before the next flag');
+  const toolsOnly = command('claude', null, 'p.txt', '', { tools: true });
+  assert.deepEqual(toolsOnly.slice(toolsOnly.indexOf('--allowedTools') + 1), ['mcp__bothive']);
+  assert.ok(!command('codex', null, 'p.txt', '', { tools: true }).includes('--allowedTools'));
+});
+
+test('the Claude Code MCP config names the tools token variable and never contains the token', async () => {
+  const fs = require('node:fs/promises'), os = require('node:os'), path = require('node:path');
+  const { configure } = require('./mcp-config.cjs');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bothive-tools-'));
+  const tools = { url: 'http://127.0.0.1:43210/mcp', token: 'secret-token-abcdefghijklmnopqrstuvwxyz' };
+  const result = await configure('claude', dir, null, tools);
+  const file = result.arguments[result.arguments.indexOf('--mcp-config') + 1];
+  const body = await fs.readFile(file, 'utf8');
+  assert.ok(!body.includes(tools.token), 'the token is not written to disk');
+  assert.deepEqual(JSON.parse(body).mcpServers.bothive, { type: 'http', url: tools.url, headers: { Authorization: 'Bearer ${OPENGROKBOT_TOOLS_TOKEN}' } });
+  assert.equal(result.environment.OPENGROKBOT_TOOLS_TOKEN, tools.token);
+  await result.cleanup();
+  await assert.rejects(fs.stat(file));
+  // Other CLIs and other addresses get nothing.
+  assert.deepEqual((await configure('codex', dir, null, tools)).arguments, []);
+  assert.deepEqual((await configure('claude', dir, null, { url: 'http://evil.example/mcp', token: 'x' })).arguments, []);
+  await fs.rm(dir, { recursive: true, force: true });
+});

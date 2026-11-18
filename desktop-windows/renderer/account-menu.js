@@ -10,6 +10,9 @@ const LINKS = {
   site: SITE,
 };
 
+import { icon } from './icons.js';
+
+const GLYPH_ICONS = { '▯': 'phone', '▢': 'help', '⚙': 'general', '\u21E5': 'signIn', '⇥': 'signIn' };
 const el = (tag, className = '', text = '') => { const node = document.createElement(tag); if (className) node.className = className; if (text) node.textContent = text; return node; };
 
 /** Opens the menu above `anchor`. Returns a function that closes it. */
@@ -30,7 +33,8 @@ export function openAccountMenu({ anchor, bridge, result, toast, openSettings })
   };
   const row = (label, glyph, action, extra = '') => {
     const button = el('button', 'account-item ' + extra); button.type = 'button'; button.setAttribute('role', 'menuitem');
-    const mark = el('span', 'account-glyph', glyph); mark.setAttribute('aria-hidden', 'true');
+    const mark = el('span', 'account-glyph'); mark.setAttribute('aria-hidden', 'true');
+    if (GLYPH_ICONS[glyph]) mark.append(icon(GLYPH_ICONS[glyph], { size: 16 })); else mark.textContent = glyph;
     button.append(mark, el('span', 'account-label', label));
     button.addEventListener('click', action); items.push(button); return button;
   };

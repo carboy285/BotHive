@@ -11,6 +11,8 @@ import { connectorIcon } from './connector-icon.js';
 import { installSidebarResize, installChatTools } from './layout-ui.js';
 import { renderRoutines } from './routines-ui.js';
 import { renderServers, installServerBanner } from './servers-ui.js';
+import { renderChannels } from './channels-ui.js';
+import { icon, setIcon } from './icons.js';
 import { encodeWav, splitSuggestions, starters } from './voice-core.mjs';
 import { renderMarkdown } from './markdown.js';
 import * as catalog from './catalog.js';
@@ -396,7 +398,7 @@ function renderMessages(bot){
  const pending=pendingSends.get(bot.id);
  if(pending&&!live.has(pending.id)){const row=append(node('div','message-row user pending'),append(node('div','message-body'),node('div','bubble',pending.text),node('small','delivery-state',pending.failed?'Failed to send':'Sending…')));row.dataset.extra='true';if(pending.failed)row.firstChild.append(button('Retry sending',()=>submitMessage(bot,pending.text,pending.id)));messages.append(row);}
  if(!entries(bot).length&&!pending){const cards=node('div','starters');for(const idea of starters(bot.name,bot.purpose))cards.append(append(button('',()=>submitMessage(bot,idea,undefined,[]),'starter'),node('span','',idea)));const empty=append(node('div','empty empty-chat'),avatar(bot),node('h2','',bot.name),node('p','',bot.purpose||'What’s on your mind?'),cards);empty.dataset.extra='true';messages.append(empty);}
- const busy=running.has(bot.id),send=$('#save-note');send.classList.toggle('stop',busy);send.textContent=busy?'■':'↑';send.title=busy?'Stop response':'Send';
+ const busy=running.has(bot.id),send=$('#save-note');send.classList.toggle('stop',busy);if(send.dataset.icon!==(busy?'stop':'send')){send.dataset.icon=busy?'stop':'send';setIcon(send,busy?'stop':'send',busy?16:19);}send.title=busy?'Stop response':'Send';
  send.disabled=!busy&&!!pending&&!pending.failed;send.setAttribute('aria-label',busy?'Stop response':pending&&!pending.failed?'Sending message':'Send message');
  renderApprovalCard();
  if(chatScroll.follow)scheduleChatBottom();else chatViewport.scrollTop=previousScroll;
@@ -502,7 +504,7 @@ function renderInspector(){
  const config=configuration(bot),busy=running.has(bot.id),signature=JSON.stringify([bot,inspectorTab,busy,setup.installed,modelCatalogs.size,workspace.sharedMemory]);
  if(signature===inspectorSignature)return;inspectorSignature=signature;const generation=++inspectorGeneration;
  pane.replaceChildren();
- const controls=node('div','inspector-actions');const share=button('↑',()=>exportConversation(bot),'circle glass');share.setAttribute('aria-label','Share conversation');const close=button('×',()=>toggleInspector(false),'circle glass');close.setAttribute('aria-label','Close bot details');append(controls,share,close);
+ const controls=node('div','inspector-actions');const share=button('↑',()=>exportConversation(bot),'circle glass');share.setAttribute('aria-label','Share conversation');const close=button('×',()=>toggleInspector(false),'circle glass');close.setAttribute('aria-label','Close bot details');setIcon(share,'share',17);setIcon(close,'close',17);append(controls,share,close);
  const avatarButton=append(button('',()=>showAvatarPicker(bot),'avatar-edit'),avatar(bot));avatarButton.setAttribute('aria-label','Change Bot avatar');const profile=append(node('div','inspector-profile'),avatarButton,node('h2','',bot.name));
  const tabs=node('nav','inspector-tabs');tabs.setAttribute('aria-label','Bot details tabs');
  for(const name of ['Details','Library','Computer']){const tab=button(name,()=>{inspectorTab=name;renderInspector();},name===inspectorTab?'active':'');tab.setAttribute('aria-current',String(name===inspectorTab));tabs.append(tab);}
@@ -652,15 +654,24 @@ async function renderComposio(content){
 }
 async function showApps(){const content=panel('Connect Apps');await renderCatalog(content);}
 function unavailable(title, detail) { return append(node('div', 'unavailable'), node('h2', '', title), node('p', '', detail), button('View connection status', () => showConnection())); }
+const SETTINGS_GROUPS = [
+  ['', [['General','general'],['Heads-ups','headsUps'],['Routines','routines'],['Skills','skills'],['Channels','channels']]],
+  ['Connections', [['Servers','servers'],['Computer','computer'],['Web access','web']]],
+  ['Privacy & security', [['Permissions','permissions'],['API Keys','key'],['Secure Logins','lock'],['Vault','vault']]],
+  ['App', [['Voice','voice'],['Local models','models'],['Backup','backup'],['Usage & Billing','usage'],['Updates','updates']]],
+];
 function showSettings(tab = 'General') {
   dialog.replaceChildren();
   const layout = node('div', 'settings-layout'); const nav = node('nav', 'settings-nav'); const page = node('section', 'settings-page');
-  for (const [name, glyph] of [['General','⚙'],['Heads-ups','✦'],['Routines','↻'],['Skills','✎'],['Servers','⌁'],['Computer','▣'],['Web access','⌂'],['Permissions','♧'],['API Keys','⚷'],['Secure Logins','⚿'],['Vault','⚿'],['Voice','♫'],['Local models','◫'],['Backup','⛁'],['Usage & Billing','▥'],['Updates','⇩']]) {const icon=node('span','',glyph);icon.setAttribute('aria-hidden','true');nav.append(append(button('', () => showSettings(name), name === tab ? 'active' : ''), icon, node('div','',name)));}
-  append(page, append(node('header','panel-head'), node('h1','',tab), button('×', () => dialog.close(), 'close-panel')));
+  for (const [group, items] of SETTINGS_GROUPS) {
+    if (group) nav.append(node('p','settings-group',group));
+    for (const [name, glyph] of items) { const item = append(button('', () => showSettings(name), name === tab ? 'active' : ''), append(node('span','nav-icon'), icon(glyph, { size: 17 })), node('div','',name)); if (name === tab) item.setAttribute('aria-current','page'); nav.append(item); }
+  }
+  { const close = button('', () => dialog.close(), 'close-panel'); close.setAttribute('aria-label','Close settings'); close.append(icon('close',{size:18})); append(page, append(node('header','panel-head'), node('h1','',tab), close)); }
   append(layout, nav, page); dialog.append(layout); if (!dialog.open) dialog.showModal();
   if (tab === 'General') {
     const promo = node('div','promo');
-    append(promo, append(node('div'), node('h3','','A free app for your AI CLIs'), node('p','','Choose Codex, Claude Code, Grok Build, OpenCode, or Gemini CLI on this computer. Optionally connect tools with Composio.'), button('Set up AI and tools', () => showConnection(), 'pill primary')), append(node('div','brand-tile'), node('span','','⬡'), node('span','','✧'), avatar(), node('span','','𝕏')));
+    append(promo, append(node('div'), node('h3','','A free app for your AI CLIs'), node('p','','Choose Codex, Claude Code, Grok Build, OpenCode, or Gemini CLI on this computer. Optionally connect tools with Composio.'), button('Set up AI and tools', () => showConnection(), 'pill primary')), append(node('div','brand-tile'), avatar('white'), avatar('purple'), avatar('teal'), avatar('pink')));
     const profile = node('input'); profile.value = localStorage.getItem('profile') || 'Local workspace'; profile.setAttribute('aria-label','Local display name'); profile.addEventListener('change', () => localStorage.setItem('profile',profile.value));
     const account = append(node('div','settings-card'), append(node('div','setting-row'), node('span','profile-icon',(localStorage.getItem('profile')||'You').slice(0,2).toUpperCase()), append(node('div','profile-text'),profile,node('small','','Uses your CLI account')),button('Connection status', () => showConnection())));
     const appearance = node('div','settings-card'); const select = node('select'); select.setAttribute('aria-label','Theme'); const accentSelect = node('select'); accentSelect.setAttribute('aria-label','Accent'); for (const [value,label] of [['bot','Bot color'],['neutral','Neutral']]) { const option=node('option','',label); option.value=value; accentSelect.append(option); } accentSelect.value=localStorage.getItem('accentStyle')==='neutral'?'neutral':'bot'; accentSelect.addEventListener('change',()=>{localStorage.setItem('accentStyle',accentSelect.value);applyAccent();});
@@ -679,6 +690,7 @@ function showSettings(tab = 'General') {
   else if (tab === 'Secure Logins') renderSecureLogins({ bridge, result, toast, page });
   else if (tab === 'Skills') renderSkills({ bridge, result, toast, page });
   else if (tab === 'Servers') renderServers({ bridge, result, toast, page });
+  else if (tab === 'Channels') renderChannels({ bridge, result, toast, page, workspace: () => workspace });
   else if (tab === 'Routines') renderRoutines({ bridge, result, toast, page, workspace: () => workspace, refresh: () => showSettings('Routines') });
   else if (tab === 'Voice') voice.renderSettings(page);
   else if (tab === 'Backup') renderBackup(page);
@@ -771,6 +783,8 @@ function renderChips(){
 function addFiles(bot,names){if(!bot||!names?.length)return;const list=[...(pendingFiles.get(bot.id)||[]),...names];if(list.length>10){toast('Attach up to 10 files per message.');return;}pendingFiles.set(bot.id,list);renderChips();}
 async function attachFiles(bot=currentBot()){if(!bot)return;if(!window.desktop){toast('Attachments are available in the installed app.');return;}try{addFiles(bot,await result(bridge.attachFiles(bot.id)));}catch(error){toast(error.message);}}
 installSidebarResize();
+// 10.2: one icon set for the chrome around the chat.
+for (const [selector, name, size] of [['#search-button','search',17],['#new-button','plus',18],['#attachment-button','plus',20],['#mic-button','mic',18],['#voice-button','voice',18],['#save-note','send',19]]) setIcon($(selector), name, size);
 installServerBanner({bridge,result,toast});
 installChatTools({copyText:()=>{const bot=currentBot();return bot?workspace.entries.filter(x=>x.botID===bot.id&&x.kind!=='activity').map(x=>`${x.kind==='user'?'You':bot.name}: ${x.text}`).join('\n\n'):'';},exportAs:kind=>exportConversation(currentBot(),kind),toast});
 installDrop({target:document.querySelector('main.conversation'),bridge,result,toast,currentBot:()=>currentBot(),pendingCount:bot=>(pendingFiles.get(bot.id)||[]).length,addFiles});
@@ -1137,7 +1151,7 @@ async function renderPermissions(page) {
   try { config = await result(bridge.approvalRules()); } catch (error) { page.append(node('p', 'muted', error.message || 'Rules are available in the installed Windows app.')); return; }
   const save = async () => { try { config = { ...await result(bridge.setApprovalRules({ enabled: config.enabled, rules: config.rules })), tools: config.tools }; } catch (error) { toast(error.message); } draw(); };
   const draw = () => {
-    page.replaceChildren(append(node('header', 'panel-head'), node('h1', '', 'Permissions'), button('×', () => dialog.close(), 'close-panel')));
+    { const close = button('', () => dialog.close(), 'close-panel'); close.setAttribute('aria-label', 'Close settings'); close.append(icon('close', { size: 18 })); page.replaceChildren(append(node('header', 'panel-head'), node('h1', '', 'Permissions'), close)); }
     const toggle = node('input'); toggle.type = 'checkbox'; toggle.checked = config.enabled; toggle.setAttribute('aria-label', 'Use my rules'); toggle.addEventListener('change', () => { config.enabled = toggle.checked; save(); });
     append(page, append(node('label', 'setting-row'), toggle, append(node('span', 'details'), node('strong', '', 'Use my rules'), node('small', 'muted', 'Checked before any approval dialog. Turn off to use only the built-in behaviour.'))));
     page.append(node('p', 'settings-label', 'Always ask'));
@@ -1149,7 +1163,7 @@ async function renderPermissions(page) {
     page.append(node('p', 'settings-label', 'Allow without asking'), node('p', 'muted', 'Nothing on Windows can be allowed without asking yet, because Bots here do not write to calendars, reminders, contacts or notes. This list will appear here when they can.'));
     page.append(node('p', 'settings-label', 'Always asks, and cannot be changed'));
     for (const [title, detail] of [['Clicks that send, buy, post or delete', 'You see what will be clicked and on which page.'], ['Typing and submitting a form', 'You see the field and the text first.'], ['Saved logins and passwords', 'Signing in always asks. Passwords are typed by the app, never shown to the Bot.'], ['Unattended routines', 'A routine that runs while you are away skips anything that needs approval.']])
-      page.append(append(node('div', 'setting-row'), append(node('span', 'details'), node('strong', '', title), node('small', 'muted', detail)), node('span', 'muted', '🔒')));
+      page.append(append(node('div', 'setting-row'), append(node('span', 'details'), node('strong', '', title), node('small', 'muted', detail)), append(node('span', 'muted lock-mark'), icon('lock', { size: 15 }))));
     page.append(node('p', 'muted', 'Codex runs with read-only workspace access. Other CLIs keep their own permissions, and the app adds no approval bypass flags. Composio tools follow your CLI’s MCP permission settings.'));
   };
   draw();

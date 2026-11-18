@@ -99,14 +99,14 @@ struct MacCommandPalette: View {
                                     }
                                     Spacer(minLength: 0)
                                 }.padding(.horizontal, 12).padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(position == index ? Color.white.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 10)).contentShape(Rectangle())
+                                    .background(position == index ? Color.white.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous)).contentShape(Rectangle())
                             }.buttonStyle(.plain)
                         }
                     }.padding(8)
                 }.frame(maxHeight: 380)
             }
-            .frame(width: 560).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.1)))
+            .frame(width: 560).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.1)))
             .shadow(color: .black.opacity(0.4), radius: 30, y: 12)
             .padding(.bottom, 120)
         }
@@ -139,7 +139,7 @@ struct MacNewGroupView: View {
                 Spacer()
                 Button { desktop.panel = nil } label: { Image(systemName: "xmark").frame(width: 34, height: 34) }.buttonStyle(.plain).accessibilityLabel("Close")
             }
-            TextField("Group name", text: $name).textFieldStyle(.plain).font(.system(size: 18)).padding(14).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 12))
+            TextField("Group name", text: $name).textFieldStyle(.plain).font(.system(size: 18)).padding(14).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             Text("Choose 2 to 8 Bots").font(.system(size: 13)).foregroundStyle(MacTheme.secondary)
             ScrollView {
                 VStack(spacing: 6) {
@@ -150,7 +150,7 @@ struct MacNewGroupView: View {
                                 Text(bot.name).font(.system(size: 15))
                                 Spacer()
                                 Image(systemName: members.contains(bot.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(members.contains(bot.id) ? Color.accentColor : MacTheme.secondary)
-                            }.padding(10).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 10)).contentShape(Rectangle())
+                            }.padding(10).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous)).contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }
                 }
@@ -188,7 +188,7 @@ struct MacShortcutsView: View {
                     HStack { Text(row.1); Spacer(); Text(row.0).font(.system(size: 13, design: .monospaced)).foregroundStyle(MacTheme.secondary) }.padding(.vertical, 11).padding(.horizontal, 16)
                     Divider()
                 }
-            }.background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14))
+            }.background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             Spacer()
         }.padding(30)
     }

@@ -129,8 +129,8 @@ struct BotAvatarPicker: View {
                     }.padding(18)
                 }.frame(maxHeight: 430)
             }
-            .background(.background, in: RoundedRectangle(cornerRadius: 22))
-            .overlay(RoundedRectangle(cornerRadius: 22).stroke(.primary.opacity(0.08), lineWidth: 1))
+            .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(.primary.opacity(0.08), lineWidth: 1))
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
             Button(saving ? "Saving…" : "Save avatar") {
                 saving = true; error = nil
@@ -156,7 +156,7 @@ struct BotAvatarPicker: View {
                     ForEach(Array(BotAvatarShape.allCases.dropFirst(row * 5).prefix(5)), id: \.self) { shape in
                         Button { draft.shape = shape; draft.imageData = nil; reset = false } label: {
                             CustomBotAvatar(appearance: BotAppearance(shape: shape, color: draft.color), size: 38)
-                                .padding(4).overlay(RoundedRectangle(cornerRadius: 15).stroke(draft.shape == shape && draft.imageData == nil ? Color.primary.opacity(0.35) : .clear, lineWidth: 1.5))
+                                .padding(4).overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(draft.shape == shape && draft.imageData == nil ? Color.primary.opacity(0.35) : .clear, lineWidth: 1.5))
                         }.buttonStyle(.plain).accessibilityLabel(shape.label)
                             .accessibilityAddTraits(draft.shape == shape ? [.isSelected] : [])
                     }

@@ -59,15 +59,17 @@ struct RoundButton: View {
     let symbol: String
     let label: String
     var action: () -> Void
+    @State private var taps = 0
     var body: some View {
-        Button(action: action) {
+        Button { taps += 1; action() } label: {
             Image(systemName: symbol)
                 .font(.system(size: 20, weight: .regular))
                 .frame(width: 44, height: 44)
                 .glassChrome(in: Circle())
                 .shadow(color: .black.opacity(0.035), radius: 10, y: 3)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableTileStyle())
+        .sensoryFeedback(.impact(weight: .light), trigger: taps)
         .accessibilityLabel(label)
     }
 }
@@ -87,7 +89,8 @@ struct StatusCard: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 22))
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Palette.hairline, lineWidth: 1))
     }
 }
 
@@ -97,6 +100,8 @@ extension Palette {
     static let working = Color(red: 0.63, green: 0.48, blue: 1)
     static let attention = Color(red: 1, green: 0.62, blue: 0.04)
     static let quiet = Color(uiColor: .tertiaryLabel)
+    /// 10.2: the thin edge cards and pills share.
+    static let hairline = Color.primary.opacity(0.06)
 }
 
 /// Three dots that breathe in turn while a Bot has not written anything yet.
@@ -152,11 +157,13 @@ struct ActivityPill: View {
                 .font(.footnote).foregroundStyle(.secondary)
                 .padding(.horizontal, 11).padding(.vertical, 6)
                 .background(Palette.card, in: Capsule())
-            }.buttonStyle(.plain)
+                .overlay(Capsule().stroke(Palette.hairline, lineWidth: 1))
+                .contentShape(Capsule())
+            }.buttonStyle(PressableTileStyle())
             if expanded {
                 Text(text).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12).background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
+                    .padding(12).background(Palette.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -192,9 +199,9 @@ struct QuestionCard: View {
                         Spacer(minLength: 0)
                     }
                     .font(.body).padding(.horizontal, 14).padding(.vertical, 12)
-                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
-                    .contentShape(RoundedRectangle(cornerRadius: 14))
-                }.buttonStyle(.plain)
+                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }.buttonStyle(PressableTileStyle())
             }
             if canAnswer {
                 HStack {
@@ -210,7 +217,8 @@ struct QuestionCard: View {
             }
         }
         .padding(10)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 20))
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Palette.hairline, lineWidth: 1))
         .opacity(canAnswer ? 1 : 0.6)
     }
 }
@@ -219,6 +227,7 @@ struct QuestionCard: View {
 struct PhoneApprovalCard: View {
     let request: RemoteApproval
     let answer: (Bool) -> Void
+    @State private var answered: Bool?
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Needs your OK", systemImage: "hand.raised.fill").font(.caption.weight(.semibold)).foregroundStyle(Palette.attention)
@@ -229,22 +238,23 @@ struct PhoneApprovalCard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 140).fixedSize(horizontal: false, vertical: true)
-                .padding(12).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+                .padding(12).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             HStack(spacing: 10) {
-                Button { answer(false) } label: {
+                Button { answered = false; answer(false) } label: {
                     Text("Deny").font(.body.weight(.medium)).frame(maxWidth: .infinity).frame(height: 46)
-                        .background(Color.primary.opacity(0.08), in: Capsule())
-                }.buttonStyle(.plain)
-                Button { answer(true) } label: {
+                        .background(Color.primary.opacity(0.08), in: Capsule()).contentShape(Capsule())
+                }.buttonStyle(PressableTileStyle())
+                Button { answered = true; answer(true) } label: {
                     Text("Allow once").font(.body.weight(.semibold)).foregroundStyle(Palette.background)
-                        .frame(maxWidth: .infinity).frame(height: 46).background(Color.primary, in: Capsule())
-                }.buttonStyle(.plain)
+                        .frame(maxWidth: .infinity).frame(height: 46).background(Color.primary, in: Capsule()).contentShape(Capsule())
+                }.buttonStyle(PressableTileStyle())
             }
+            .sensoryFeedback(trigger: answered) { _, new in new == true ? .success : new == false ? .warning : nil }
         }
         .padding(18)
-        .background(Palette.card, in: RoundedRectangle(cornerRadius: 28))
-        .overlay(RoundedRectangle(cornerRadius: 28).stroke(Palette.attention.opacity(0.35), lineWidth: 1))
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Palette.attention.opacity(0.35), lineWidth: 1))
         .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
         .accessibilityElement(children: .contain)
     }

@@ -6,13 +6,15 @@ struct ComposioCLIConfiguration {
     private var files: [URL] = []
     func cleanup() { for file in files { try? FileManager.default.removeItem(at: file) } }
 
-    static func make(provider: CLIProvider, directory: URL, sessionURL: String?) throws -> Self {
-        guard let sessionURL else { return Self() }
-        guard ComposioClient.trustedURL(sessionURL) != nil else { throw ComposioError.invalidResponse }
+    /// `tools` (10.2) is Bothive's own local tool server for this run. Only Claude Code takes it for now.
+    static func make(provider: CLIProvider, directory: URL, sessionURL: String?, tools: BothiveToolsGrant? = nil) throws -> Self {
+        let tools = provider == .claude ? tools.flatMap { Self.loopback($0.url) ? $0 : nil } : nil
+        guard sessionURL != nil || tools != nil else { return Self() }
+        if let sessionURL { guard ComposioClient.trustedURL(sessionURL) != nil else { throw ComposioError.invalidResponse } }
         let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/ComposioBridge").path
-        guard FileManager.default.isExecutableFile(atPath: helper) else { throw CLIError.invalidOutput }
+        if sessionURL != nil { guard FileManager.default.isExecutableFile(atPath: helper) else { throw CLIError.invalidOutput } }
         let name = "opengrokbot-composio", variable = "OPENGROKBOT_COMPOSIO_MCP_URL"
-        var config = Self(environment: [variable: sessionURL])
+        var config = Self(environment: sessionURL.map { [variable: $0] } ?? [:])
         // All generated configs contain environment placeholders; no key or capability URL is written to disk.
         let server: [String:Any] = ["command":helper, "args":[String](), "env":[variable:"${\(variable)}"]]
         func write(_ relative: String, bytes: Data) throws {
@@ -28,6 +30,7 @@ struct ComposioCLIConfiguration {
             config.files.append(url)
         }
         func json(_ object: [String:Any]) throws -> Data { try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) }
+        if sessionURL == nil && provider != .claude { return Self() }
         do {
             switch provider {
             case .codex:
@@ -36,7 +39,14 @@ struct ComposioCLIConfiguration {
                 config.arguments = ["-c", "mcp_servers.\(name).command=\(quoted)", "-c", "mcp_servers.\(name).env_vars=[\"\(variable)\"]"]
             case .claude:
                 let filename = ".composio-\(UUID().uuidString).json"
-                try write(filename, bytes: json(["mcpServers":[name:server]]))
+                var servers: [String:Any] = sessionURL == nil ? [:] : [name:server]
+                if let tools {
+                    // The token travels in the environment; the file only names the variable.
+                    servers[MacToolServer.serverName] = ["type":"http", "url":tools.url, "headers":["Authorization":"Bearer ${\(MacToolServer.tokenVariable)}"]]
+                    config.environment[MacToolServer.tokenVariable] = tools.token
+                    config.environment["MCP_TOOL_TIMEOUT"] = "600000"
+                }
+                try write(filename, bytes: json(["mcpServers":servers]))
                 config.arguments = ["--mcp-config",directory.appendingPathComponent(filename).path]
             case .grok:
                 let quoted = String(data: try JSONSerialization.data(withJSONObject: [helper], options: [.withoutEscapingSlashes]), encoding: .utf8)!.dropFirst().dropLast()
@@ -52,5 +62,11 @@ struct ComposioCLIConfiguration {
             }
             return config
         } catch { config.cleanup(); throw error }
+    }
+
+    /// Only the app's own listener on this Mac.
+    static func loopback(_ address: String) -> Bool {
+        guard let url = URL(string: address), url.scheme == "http", url.host == "127.0.0.1", url.port != nil, url.path == "/mcp", url.user == nil, url.query == nil else { return false }
+        return true
     }
 }

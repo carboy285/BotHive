@@ -143,7 +143,7 @@ compile_in('GrokBotTests/BackgroundCheckTests.swift', 'GrokBotTests', 'GrokBotTe
 # --- Version (10.1.1: updaters need three parts; the Mac updater matches it to the tag exactly) ----------------------------------------------------------------------------
 for key, value in objects.items():
     if value.get('isa') == 'XCBuildConfiguration' and 'MARKETING_VERSION' in value['buildSettings']:
-        value['buildSettings']['MARKETING_VERSION'] = '10.1.1'
+        value['buildSettings']['MARKETING_VERSION'] = '10.2.0'
         value['buildSettings']['CURRENT_PROJECT_VERSION'] = '40'
 
 def encode(value, indent=0):
@@ -151,4 +151,4 @@ def encode(value, indent=0):
     if isinstance(value, list): return '(\n' + ''.join('\t' * (indent + 1) + encode(v, indent + 1) + ',\n' for v in value) + '\t' * indent + ')'
     return json.dumps(str(value))
 PROJECT.write_text('// !$*UTF8*$!\n' + encode(project) + '\n')
-print('Project updated for 10.1.1.')
+print('Project updated for 10.2.0.')

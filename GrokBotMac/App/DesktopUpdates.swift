@@ -158,7 +158,7 @@ struct DesktopUpdatesView: View {
             if updates.readyToInstall && busy { Text("A Bot is still replying. Restart when it finishes.").font(.footnote).foregroundStyle(.secondary) }
             if let date = updates.checkedAt { Text("Last checked \(date.formatted())").font(.caption).foregroundStyle(.secondary) }
             Text("Updates come from this project’s GitHub releases and are checked before they are installed. Restart replaces the app in place and reopens it; your workspace is kept.").font(.footnote).foregroundStyle(.secondary)
-        }.padding(24).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+        }.padding(24).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
@@ -243,7 +243,7 @@ struct MacBackupView: View {
             if let status { Text(status).font(.footnote).accessibilityAddTraits(.updatesFrequently) }
         }
         .textFieldStyle(.roundedBorder)
-        .padding(24).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
+        .padding(24).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func encodedWorkspace() throws -> Data {

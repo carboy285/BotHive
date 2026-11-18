@@ -168,7 +168,7 @@ struct MacBotInspectorView: View {
                 Text("Private memory, one item per line").font(.system(size: 12)).foregroundStyle(MacTheme.secondary)
                 TextEditor(text: $memoryDraft).font(.system(size: 13)).frame(minHeight: 110)
                     .scrollContentBackground(.hidden).padding(6)
-                    .background(MacTheme.canvas, in: RoundedRectangle(cornerRadius: 8))
+                    .background(MacTheme.canvas, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 HStack(spacing: 8) {
                     Button("Save") {
                         let items = memoryDraft.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
@@ -262,7 +262,7 @@ struct MacBotInspectorView: View {
                             Spacer(minLength: 8)
                             Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(MacTheme.secondary)
                         }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14)).contentShape(RoundedRectangle(cornerRadius: 14))
+                            .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous)).contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }.buttonStyle(.plain).help("Show \(file.lastPathComponent) in Finder")
                 }
             }
@@ -333,9 +333,9 @@ struct MacBotInspectorView: View {
                     }
                     Spacer(minLength: 8)
                     ZStack {
-                        RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.55))
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.55))
                         MacBotAvatar(color: bot.color, size: 20, appearance: bot.appearance).opacity(busy ? 1 : 0.55)
-                    }.frame(width: 62, height: 42).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.08)))
+                    }.frame(width: 62, height: 42).overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.primary.opacity(0.08)))
                         .accessibilityHidden(true)
                 }.padding(.vertical, 2)
                 InspectorRow(symbol: "globe", title: "Open browser") { do { _ = try LocalBotBrowsers.shared.open(bot, reveal: true) } catch { app.errorMessage = error.localizedDescription } }
@@ -475,7 +475,7 @@ struct InspectorCard<Content: View>: View {
             }
             VStack(alignment: .leading, spacing: 12) { content }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14))
+                .padding(14).background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             if let footer {
                 Text(footer).font(.system(size: 12)).foregroundStyle(MacTheme.secondary)
                     .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
@@ -511,7 +511,7 @@ struct InspectorRows<Content: View>: View {
         _VariadicView.Tree(InspectorRowsLayout()) { content }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14).padding(.vertical, 4)
-            .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14))
+            .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

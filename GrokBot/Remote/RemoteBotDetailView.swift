@@ -124,7 +124,7 @@ struct RemoteBotDetailView: View {
             }
             TextField("Model ID, blank uses the CLI default", text: $modelID)
                 .textInputAutocapitalization(.never).autocorrectionDisabled()
-                .padding(.horizontal, 12).frame(minHeight: 44).background(Palette.background, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 12).frame(minHeight: 44).background(Palette.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             if provider == .codex || provider == .opencode {
                 DetailAction(title: loading ? "Loading models…" : "Load models from computer", systemImage: "arrow.down.circle", disabled: loading || !remote.online) { loadModels() }
             }
@@ -203,7 +203,7 @@ private struct DetailCard<Content: View>: View {
             }
             VStack(alignment: .leading, spacing: 14) { content }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16).background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+                .padding(16).background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             if let footer {
                 Text(footer).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             }
@@ -228,8 +228,8 @@ private struct DetailAction: View {
             }
             .font(.body).foregroundStyle(.primary)
             .padding(.horizontal, 14).frame(minHeight: 46)
-            .background(Palette.background, in: RoundedRectangle(cornerRadius: 12))
-            .contentShape(RoundedRectangle(cornerRadius: 12))
+            .background(Palette.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }.buttonStyle(.plain).disabled(disabled).opacity(disabled ? 0.4 : 1)
     }
 }

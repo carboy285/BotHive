@@ -140,7 +140,7 @@ struct MacConversationView: View {
         } isTargeted: { dropTargeted = $0 }
         .overlay {
             if dropTargeted {
-                RoundedRectangle(cornerRadius: 20).strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 6])).foregroundStyle(MacTheme.secondary)
+                RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 6])).foregroundStyle(MacTheme.secondary)
                     .overlay { Text("Drop files, a folder or a screenshot to give this Bot context").font(.system(size: 15, weight: .medium)).padding(16).background(.regularMaterial, in: Capsule()) }
                     .padding(10).allowsHitTesting(false)
             }
@@ -272,24 +272,28 @@ struct MacConversationView: View {
                         Text(dictation.note ?? "").font(.callout).padding(14).frame(width: 280)
                     }
                     if desktop.runningBots.contains(bot.id) {
-                        Button { desktop.stop(botID: bot.id) } label: { Image(systemName: "stop.fill").foregroundStyle(ink).frame(width: 36, height: 36).background(tint, in: Circle()) }.buttonStyle(.plain).help("Stop response")
+                        Button { desktop.stop(botID: bot.id) } label: { Image(systemName: "stop.fill").foregroundStyle(ink).frame(width: 36, height: 36).background(tint, in: Circle()) }.buttonStyle(MacPressStyle()).help("Stop response")
                     } else if !draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(desktop.attachments[bot.id] ?? []).isEmpty {
                         Button { sendMessage() } label: {
                             Image(systemName: "arrow.up").font(.system(size: 18, weight: .semibold)).foregroundStyle(ink)
                                 .frame(width: 36, height: 36).background(tint, in: Circle())
-                        }.buttonStyle(.plain).disabled(desktop.needsProvider(bot))
+                        }.buttonStyle(MacPressStyle()).disabled(desktop.needsProvider(bot))
                             .help("Send message").accessibilityLabel("Send message")
                     } else {
                         Button { startVoice() } label: {
                             Image(systemName: "waveform").font(.system(size: 17, weight: .semibold)).foregroundStyle(ink)
                                 .frame(width: 36, height: 36).background(tint, in: Circle())
-                        }.buttonStyle(.plain).help("Start voice mode").accessibilityLabel("Start voice mode")
+                        }.buttonStyle(MacPressStyle()).help("Start voice mode").accessibilityLabel("Start voice mode")
                     }
                 }
                 .padding(.vertical, 2)
             }
             .padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 6).frame(minHeight: 52)
             .background { RoundedRectangle(cornerRadius: 26, style: .continuous).fill(MacTheme.panel.opacity(0.55)).glassChrome(in: RoundedRectangle(cornerRadius: 26, style: .continuous), interactive: false).allowsHitTesting(false) }
+            // 10.2: the box lights up softly in the Bot's colour while you type.
+            .overlay { RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(composing ? tint.opacity(0.45) : MacTheme.line, lineWidth: 1).allowsHitTesting(false) }
+            .shadow(color: composing ? tint.opacity(0.12) : .clear, radius: 10)
+            .animation(.easeOut(duration: 0.18), value: composing)
             .frame(maxWidth: chatWidth)
             .onAppear { installPasteMonitor() }
             .onChange(of: bot.id) { _, _ in installPasteMonitor(); dictation.stop() }
@@ -1034,8 +1038,8 @@ private struct ComposerActionRow: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
-            .background(hovering && !disabled ? tint.opacity(0.22) : .clear, in: RoundedRectangle(cornerRadius: 8))
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .background(hovering && !disabled ? tint.opacity(0.22) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain).disabled(disabled).opacity(disabled ? 0.4 : 1)
         .onHover { hovering = $0 }
@@ -1079,7 +1083,7 @@ struct MacStarterCard: View {
                 .padding(.horizontal, 14).padding(.vertical, 13)
                 .background(hovering ? MacTheme.panel : MacTheme.panel.opacity(0.55), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(MacTheme.line, lineWidth: 1))
-                .contentShape(RoundedRectangle(cornerRadius: 16))
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain).onHover { hovering = $0 }
     }

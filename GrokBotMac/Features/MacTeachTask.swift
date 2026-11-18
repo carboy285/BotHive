@@ -144,7 +144,7 @@ struct MacTeachBar: View {
                         Toggle("Secret", isOn: $secret).toggleStyle(.checkbox).font(.system(size: 12))
                         Button("Add", action: add).controlSize(.small).disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
-                }.padding(12).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14)).padding(.horizontal, 4)
+                }.padding(12).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous)).padding(.horizontal, 4)
             }
         }
         .sheet(isPresented: Binding(get: { teach.review != nil && teach.botID == bot.id }, set: { if !$0 { teach.discard() } })) { reviewSheet }
@@ -162,7 +162,7 @@ struct MacTeachBar: View {
             Text("Edit the steps. Secrets are never saved. This is added to \(bot.name)’s memory, so the Bot can follow it when you ask.").font(.system(size: 12)).foregroundStyle(MacTheme.secondary)
             TextEditor(text: Binding(get: { (teach.review ?? []).joined(separator: "\n") }, set: { teach.review = $0.components(separatedBy: .newlines) }))
                 .font(.system(size: 13)).frame(minHeight: 180).scrollContentBackground(.hidden).padding(8)
-                .background(MacTheme.canvas, in: RoundedRectangle(cornerRadius: 10))
+                .background(MacTheme.canvas, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             HStack {
                 Button("Discard", role: .destructive) { teach.discard() }
                 Spacer()

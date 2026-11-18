@@ -249,8 +249,8 @@ struct ConversationView: View {
             }
             .padding(5)
             .background {
-                RoundedRectangle(cornerRadius: 28).fill(.clear)
-                    .glassChrome(in: RoundedRectangle(cornerRadius: 28), interactive: false)
+                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.clear)
+                    .glassChrome(in: RoundedRectangle(cornerRadius: 28, style: .continuous), interactive: false)
                     .allowsHitTesting(false)
             }
             .shadow(color: .black.opacity(0.035), radius: 14, y: 4)

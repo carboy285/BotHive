@@ -44,7 +44,7 @@ struct ImageChips: View {
                     ZStack(alignment: .topTrailing) {
                         if let ui = UIImage(data: item.data) {
                             Image(uiImage: ui).resizable().scaledToFill().frame(width: 64, height: 64)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 .accessibilityLabel("Attached image \(index + 1)")
                         }
                         Button { remove(index) } label: {

@@ -21,9 +21,11 @@ struct MacAppleConnectionsView: View {
                         Text("Let your Bots look at your Apple apps").font(.system(size: 18, weight: .medium))
                         Text("Each app is off until you turn it on, and macOS asks you to allow it. Turn an app off at any time. Bots can read what you enable, and can add or change things in Calendar, Reminders, Contacts and Notes (you can choose whether each asks first; Reminders doesn’t by default). Sending email or messages, moving mail to the Trash and deleting anything always need your approval.")
                             .font(.system(size: 14)).lineSpacing(4).foregroundStyle(MacTheme.secondary)
+                        Label("Claude Code uses these as real tools: it can check Reminders or add an event in the middle of an answer. Other AI CLIs use them through the app, one step per turn.", systemImage: "wrench.and.screwdriver")
+                            .font(.system(size: 13)).lineSpacing(3).foregroundStyle(Color.primary.opacity(0.8))
                         Text("What a Bot reads becomes part of its conversation and is sent to the AI provider you chose for that Bot, like anything else you type. Turn on only what you are comfortable sharing with that provider.")
                             .font(.system(size: 13)).lineSpacing(4).foregroundStyle(.orange)
-                    }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+                    }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     ForEach(AppleService.allCases) { service in row(service) }
                 }.frame(maxWidth: 780, alignment: .leading).padding(.vertical, 6).frame(maxWidth: .infinity)
             }
@@ -35,7 +37,7 @@ struct MacAppleConnectionsView: View {
         let status = apple.access[service] ?? .notDetermined
         return HStack(alignment: .top, spacing: 14) {
             Image(systemName: service.symbol).font(.system(size: 18)).frame(width: 42, height: 42)
-                .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 11))
+                .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             VStack(alignment: .leading, spacing: 5) {
                 Text(service.title).font(.system(size: 16, weight: .medium))
                 Text(service.summary).font(.system(size: 13)).lineSpacing(3).foregroundStyle(MacTheme.secondary)
@@ -49,7 +51,7 @@ struct MacAppleConnectionsView: View {
             Spacer(minLength: 12)
             Toggle(service.title, isOn: Binding(get: { apple.isEnabled(service) }, set: { apple.setEnabled(service, $0) }))
                 .labelsHidden().toggleStyle(.switch).accessibilityLabel("Let Bots use \(service.title)")
-        }.padding(18).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16))
+        }.padding(18).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     @ViewBuilder private func statusLine(_ service: AppleService, _ status: AppleAccess) -> some View {

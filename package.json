@@ -1,6 +1,6 @@
 {
   "name": "opengrokbot-windows",
-  "version": "10.1.1",
+  "version": "10.2.0",
   "private": true,
   "description": "Free desktop chat for local AI CLIs with optional Composio tools",
   "author": "Bothive contributors",
@@ -15,6 +15,8 @@
     "test:cloud": "node scripts/test-cloud-db.cjs",
     "test:heads-ups": "node scripts/test-heads-ups-main.cjs && node scripts/test-heads-ups-ui.cjs",
     "test:skills-ui": "node scripts/test-skills-routines-ui.cjs",
+    "test:channels-ui": "node scripts/test-channels-ui.cjs",
+    "shots:desktop": "node scripts/shoot-desktop-ui.cjs",
     "test:web": "node scripts/test-web-access.cjs"
   },
   "devDependencies": {

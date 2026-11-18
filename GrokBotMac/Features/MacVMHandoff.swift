@@ -155,12 +155,12 @@ struct MacVMHandoffOverlay: View {
                     }
                     Text(request.reason).font(.system(size: 14)).foregroundStyle(MacTheme.secondary).fixedSize(horizontal: false, vertical: true)
                     ZStack {
-                        RoundedRectangle(cornerRadius: 12).fill(MacTheme.canvas)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).fill(MacTheme.canvas)
                         if let image = handoff.preview {
                             GeometryReader { box in
                                 let ratio = image.size.width / max(image.size.height, 1)
                                 let width = min(box.size.width, box.size.height * ratio), height = width / max(ratio, 0.01)
-                                Image(nsImage: image).resizable().frame(width: width, height: height).clipShape(RoundedRectangle(cornerRadius: 8))
+                                Image(nsImage: image).resizable().frame(width: width, height: height).clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                                     .contentShape(Rectangle())
                                     .onTapGesture(coordinateSpace: .local) { point in Task { await handoff.click(fx: point.x / width, fy: point.y / height) } }
                                     .position(x: box.size.width / 2, y: box.size.height / 2)
@@ -187,8 +187,8 @@ struct MacVMHandoffOverlay: View {
                     }
                 }
                 .padding(22).frame(width: 560)
-                .background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.1)))
+                .background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.1)))
                 .shadow(color: .black.opacity(0.4), radius: 30, y: 12)
                 .task(id: request.id) {
                     await handoff.openConsole()

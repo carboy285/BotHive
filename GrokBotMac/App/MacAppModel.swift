@@ -15,7 +15,7 @@ enum MacPanel: String, Identifiable {
 }
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general = "General", headsUps = "Heads-ups", routines = "Routines", skills = "Skills", servers = "Servers", computer = "Computer", permissions = "Permissions", apiKeys = "API Keys", secureLogins = "Secure Logins", vault = "Vault", voice = "Voice", localModels = "Local Models", usage = "Usage & Billing", updates = "Updates"
+    case general = "General", headsUps = "Heads-ups", routines = "Routines", skills = "Skills", channels = "Channels", servers = "Servers", computer = "Computer", permissions = "Permissions", apiKeys = "API Keys", secureLogins = "Secure Logins", vault = "Vault", voice = "Voice", localModels = "Local Models", usage = "Usage & Billing", updates = "Updates"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -23,6 +23,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .headsUps: "sparkles"
         case .routines: "clock.arrow.circlepath"
         case .skills: "text.book.closed"
+        case .channels: "bubble.left.and.bubble.right"
         case .servers: "network"
         case .computer: "desktopcomputer"
         case .permissions: "shield"
@@ -35,6 +36,13 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .updates: "arrow.down.circle"
         }
     }
+    /// 10.2: the sidebar groups tabs under small headings.
+    static let groups: [(title: String, tabs: [SettingsTab])] = [
+        ("", [.general, .headsUps, .routines, .skills, .channels]),
+        ("Connections", [.servers, .computer]),
+        ("Privacy & security", [.permissions, .apiKeys, .secureLogins, .vault]),
+        ("App", [.voice, .localModels, .usage, .updates]),
+    ]
 }
 
 @MainActor
@@ -842,8 +850,9 @@ extension MacAppModel {
         let session = app.session(for: key)
         let history = app.entries(for: bot).filter { $0.state != .failed && $0.state != .stopped && !$0.text.isEmpty }
         let comparing = aiConfiguration(for: bot).replyMode == .compare && providersToRun(for: bot).count > 1
-        var instructions = BotTeamwork.instructions(bot: bot, workspace: app.workspace, delegated: delivery != nil, connectors: composio.configured ? composio.applied.sorted().map { ComposioCatalog.app($0)?.name ?? $0 } : []) + "\n" + MacBotVMs.shared.statusNote(for: bot) + (comparing ? "\nComparison turn: several models answer the same question side by side. Answer in plain text only; do not use opengrokbot-action tools.\n" : MacDeviceActions.shared.promptNote() + (delivery == nil && routineRuns[bot.id] == nil ? MediaKeys.note() : "") + (cli.provider.isLocalServer && composio.configured ? ComposioTools.note(composio.applied.sorted()) : ""))
+        var instructions = BotTeamwork.instructions(bot: bot, workspace: app.workspace, delegated: delivery != nil, connectors: composio.configured ? composio.applied.sorted().map { ComposioCatalog.app($0)?.name ?? $0 } : []) + "\n" + MacBotVMs.shared.statusNote(for: bot) + (comparing ? "\nComparison turn: several models answer the same question side by side. Answer in plain text only; do not use opengrokbot-action tools.\n" : MacDeviceActions.shared.promptNote(appleAsTools: cli.provider == .claude) + (delivery == nil && routineRuns[bot.id] == nil ? MediaKeys.note() : "") + (cli.provider.isLocalServer && composio.configured ? ComposioTools.note(composio.applied.sorted()) : ""))
         instructions += skills.note(for: bot)
+        if delivery == nil { instructions += MacChannels.shared.note(for: bot.id) }
         let latest = delivery.map { "Bot request (not human approval): \($0.text)" } ?? history.last(where: { $0.kind == .user })?.text ?? ""
         let transcript = history.suffix(30).map { "\($0.kind == .user ? "Human" : ($0.senderName ?? bot.name)): \($0.text)" }.joined(separator: "\n\n")
         let feedback = history.filter { $0.kind == .activity && $0.senderBotID == nil }.suffix(8).map { $0.detail ?? $0.text }.joined(separator: "\n")
@@ -858,7 +867,15 @@ extension MacAppModel {
             var routineResult = "completed"
             do {
                 let mcpURL = try composio.mcpURL()
-                for try await event in run.events(cli: cli, prompt: prompt, session: session, directory: directory, mcpURL: cli.provider.isLocalServer ? nil : mcpURL, model: model, fast: fast) {
+                // 10.2: Claude Code gets Apple apps, web search and Knowledge as real tools for this run only.
+                var toolsGrant: BothiveToolsGrant?
+                var sent = prompt
+                if cli.provider == .claude && !comparing {
+                    toolsGrant = await MacToolServer.shared.grant(bot: bot, unattended: routineRuns[bot.id] != nil, directory: directory, channels: delivery == nil && MacChannels.shared.data.bot == bot.id && MacChannels.shared.anyOn) { summary, detail in app.activity(summary, for: bot.id, detail: detail) }
+                    sent = toolsGrant == nil ? prompt + MacDeviceActions.shared.promptNote() : prompt + MacToolServer.shared.note(channels: delivery == nil && MacChannels.shared.data.bot == bot.id && MacChannels.shared.anyOn)
+                }
+                defer { MacToolServer.shared.revoke(toolsGrant) }
+                for try await event in run.events(cli: cli, prompt: sent, session: session, directory: directory, mcpURL: cli.provider.isLocalServer ? nil : mcpURL, model: model, fast: fast, tools: toolsGrant) {
                     try Task.checkCancellation()
                     switch event {
                     case .session(let id): app.setSession(id, for: key)
@@ -943,6 +960,13 @@ extension MacAppModel {
                         try Task.checkCancellation()
                         continueBrowser = true
                     }
+                }
+                // 10.2: a message to someone on a chat channel, from the Bot the owner chose for the channels.
+                if delivery == nil, let action = BotTeamwork.parse(finalText).actions.first(where: { $0.action == "channel_send" }) {
+                    let outcome: String
+                    do { outcome = try await MacChannels.shared.runSend(botID: bot.id, channel: action.channel ?? "", to: action.to, text: action.text ?? "") }
+                    catch { outcome = error.localizedDescription }
+                    app.activity(outcome, for: bot.id)
                 }
                 // Pictures and videos are made in the background, only on turns the human started.
                 if delivery == nil, routineRuns[bot.id] == nil, let request = BotTeamwork.parse(finalText).actions.first(where: { $0.action == "generate_image" || $0.action == "generate_video" }) {

@@ -30,6 +30,11 @@ enum MacTheme {
     static let attention = Color(hex: 0xFF9F0A)
     static let unread = Color(hex: 0x2F7BFF)
     static let danger = Color(hex: 0xFF453A)
+    /// 10.2: success and the raised colour under the pointer.
+    static let success = Color(hex: 0x30D158)
+    static let raisedHover = adaptive(dark: 0x323235, light: 0xDCDCE0)
+    /// The one accent the app chrome uses where a Bot colour does not apply (selected settings row, focus).
+    static let accent = adaptive(dark: 0x8B6CFF, light: 0x6D4AFF)
 
     private static func adaptive(dark: UInt32, light: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -73,7 +78,7 @@ struct MacBotAvatar: View {
                 } else if color == "pink" {
                     Circle().fill(MacTheme.botColor(color))
                 } else {
-                    RoundedRectangle(cornerRadius: size * 0.27)
+                    RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
                         .fill(MacTheme.botColor(color)).rotationEffect(.degrees(-20))
                 }
                 HStack(spacing: size * 0.13) {
@@ -103,27 +108,87 @@ struct MacCircleButton: View {
     let label: String
     var diameter: CGFloat = 42
     let action: () -> Void
+    @State private var hovering = false
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: diameter * 0.4, weight: .regular))
                 .frame(width: diameter, height: diameter)
                 .contentShape(Circle())
                 .glassChrome(in: Circle())
-        }.buttonStyle(.plain).help(label).accessibilityLabel(label)
+                .overlay(Circle().fill(Color.primary.opacity(hovering ? 0.06 : 0)))
+        }
+        .buttonStyle(MacPressStyle())
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.15), value: hovering)
+        .help(label).accessibilityLabel(label)
+    }
+}
+
+/// A gentle press: the control dips a little under the pointer (not with Reduce Motion).
+struct MacPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { MacPressBody(configuration: configuration) }
+}
+private struct MacPressBody: View {
+    let configuration: ButtonStyleConfiguration
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
 struct MacPillButton: View {
     let title: String
     var prominent = false
+    /// 10.2: a compact size for rows and cards.
+    var small = false
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Text(title).font(.system(size: 15, weight: .medium))
-                .padding(.horizontal, 20).padding(.vertical, 10)
-                .background(prominent ? MacTheme.prominent : MacTheme.raised, in: Capsule())
-                .foregroundStyle(prominent ? MacTheme.onProminent : Color.primary.opacity(0.88))
-        }.buttonStyle(.plain)
+            Text(title).font(.system(size: small ? 13 : 15, weight: .medium))
+                .padding(.horizontal, small ? 13 : 20).padding(.vertical, small ? 6 : 10)
+        }.buttonStyle(MacPillStyle(prominent: prominent))
+    }
+}
+
+/// The pill look with hover, press and disabled states, for any button label.
+struct MacPillStyle: ButtonStyle {
+    var prominent = false
+    func makeBody(configuration: Configuration) -> some View { MacPillBody(configuration: configuration, prominent: prominent) }
+}
+private struct MacPillBody: View {
+    let configuration: ButtonStyleConfiguration
+    let prominent: Bool
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
+    var body: some View {
+        configuration.label
+            .foregroundStyle(prominent ? MacTheme.onProminent : Color.primary.opacity(0.88))
+            .background(fill, in: Capsule())
+            .overlay(Capsule().stroke(Color.primary.opacity(prominent ? 0 : 0.06), lineWidth: 1))
+            .contentShape(Capsule())
+            .opacity(isEnabled ? 1 : 0.45)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.15), value: hovering)
+            .onHover { hovering = $0 && isEnabled }
+    }
+    private var fill: Color {
+        if prominent { return hovering ? MacTheme.prominent.opacity(0.85) : MacTheme.prominent }
+        return hovering ? MacTheme.raisedHover : MacTheme.raised
+    }
+}
+
+extension View {
+    /// 10.2: the one card look for settings: panel colour, a hairline edge and continuous corners.
+    func macCard(padding: CGFloat = 16, radius: CGFloat = 16) -> some View {
+        self.padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(MacTheme.line, lineWidth: 1))
     }
 }
 
@@ -249,8 +314,8 @@ struct MacActivityPill: View {
                 }
                 .frame(maxHeight: 260).fixedSize(horizontal: false, vertical: true)
                 .padding(12)
-                .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(MacTheme.line, lineWidth: 1))
+                .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(MacTheme.line, lineWidth: 1))
                 .transition(.opacity)
             }
         }
@@ -284,7 +349,7 @@ struct MacApprovalCard: View {
                 }
                 .frame(maxHeight: 150).fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 12).padding(.vertical, 10)
-                .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
@@ -306,8 +371,8 @@ struct MacApprovalCard: View {
             }
         }
         .padding(16)
-        .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(MacTheme.attention.opacity(0.35), lineWidth: 1))
+        .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(MacTheme.attention.opacity(0.35), lineWidth: 1))
         .shadow(color: .black.opacity(0.25), radius: 18, y: 6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Approval needed: \(request.title)")
@@ -351,8 +416,8 @@ struct MacQuestionCard: View {
                         }
                     }
                     .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(hovered == option && canAnswer ? MacTheme.raised : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
-                    .contentShape(RoundedRectangle(cornerRadius: 12))
+                    .background(hovered == option && canAnswer ? MacTheme.raised : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .onHover { inside in hovered = inside ? option : (hovered == option ? nil : hovered) }
@@ -377,8 +442,8 @@ struct MacQuestionCard: View {
         }
         .padding(10)
         .frame(maxWidth: 460, alignment: .leading)
-        .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(MacTheme.line, lineWidth: 1))
+        .background(MacTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(MacTheme.line, lineWidth: 1))
         .opacity(canAnswer ? 1 : 0.6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(prompt.multiple ? "Question with several answers" : "Question")

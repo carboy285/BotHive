@@ -272,24 +272,28 @@ struct MacConversationView: View {
                         Text(dictation.note ?? "").font(.callout).padding(14).frame(width: 280)
                     }
                     if desktop.runningBots.contains(bot.id) {
-                        Button { desktop.stop(botID: bot.id) } label: { Image(systemName: "stop.fill").foregroundStyle(ink).frame(width: 36, height: 36).background(tint, in: Circle()) }.buttonStyle(.plain).help("Stop response")
+                        Button { desktop.stop(botID: bot.id) } label: { Image(systemName: "stop.fill").foregroundStyle(ink).frame(width: 36, height: 36).background(tint, in: Circle()) }.buttonStyle(MacPressStyle()).help("Stop response")
                     } else if !draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(desktop.attachments[bot.id] ?? []).isEmpty {
                         Button { sendMessage() } label: {
                             Image(systemName: "arrow.up").font(.system(size: 18, weight: .semibold)).foregroundStyle(ink)
                                 .frame(width: 36, height: 36).background(tint, in: Circle())
-                        }.buttonStyle(.plain).disabled(desktop.needsProvider(bot))
+                        }.buttonStyle(MacPressStyle()).disabled(desktop.needsProvider(bot))
                             .help("Send message").accessibilityLabel("Send message")
                     } else {
                         Button { startVoice() } label: {
                             Image(systemName: "waveform").font(.system(size: 17, weight: .semibold)).foregroundStyle(ink)
                                 .frame(width: 36, height: 36).background(tint, in: Circle())
-                        }.buttonStyle(.plain).help("Start voice mode").accessibilityLabel("Start voice mode")
+                        }.buttonStyle(MacPressStyle()).help("Start voice mode").accessibilityLabel("Start voice mode")
                     }
                 }
                 .padding(.vertical, 2)
             }
             .padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 6).frame(minHeight: 52)
             .background { RoundedRectangle(cornerRadius: 26, style: .continuous).fill(MacTheme.panel.opacity(0.55)).glassChrome(in: RoundedRectangle(cornerRadius: 26, style: .continuous), interactive: false).allowsHitTesting(false) }
+            // 10.2: the box lights up softly in the Bot's colour while you type.
+            .overlay { RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(composing ? tint.opacity(0.45) : MacTheme.line, lineWidth: 1).allowsHitTesting(false) }
+            .shadow(color: composing ? tint.opacity(0.12) : .clear, radius: 10)
+            .animation(.easeOut(duration: 0.18), value: composing)
             .frame(maxWidth: chatWidth)
             .onAppear { installPasteMonitor() }
             .onChange(of: bot.id) { _, _ in installPasteMonitor(); dictation.stop() }

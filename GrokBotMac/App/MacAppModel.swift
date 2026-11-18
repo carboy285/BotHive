@@ -842,7 +842,7 @@ extension MacAppModel {
         let session = app.session(for: key)
         let history = app.entries(for: bot).filter { $0.state != .failed && $0.state != .stopped && !$0.text.isEmpty }
         let comparing = aiConfiguration(for: bot).replyMode == .compare && providersToRun(for: bot).count > 1
-        var instructions = BotTeamwork.instructions(bot: bot, workspace: app.workspace, delegated: delivery != nil, connectors: composio.configured ? composio.applied.sorted().map { ComposioCatalog.app($0)?.name ?? $0 } : []) + "\n" + MacBotVMs.shared.statusNote(for: bot) + (comparing ? "\nComparison turn: several models answer the same question side by side. Answer in plain text only; do not use opengrokbot-action tools.\n" : MacDeviceActions.shared.promptNote() + (delivery == nil && routineRuns[bot.id] == nil ? MediaKeys.note() : "") + (cli.provider.isLocalServer && composio.configured ? ComposioTools.note(composio.applied.sorted()) : ""))
+        var instructions = BotTeamwork.instructions(bot: bot, workspace: app.workspace, delegated: delivery != nil, connectors: composio.configured ? composio.applied.sorted().map { ComposioCatalog.app($0)?.name ?? $0 } : []) + "\n" + MacBotVMs.shared.statusNote(for: bot) + (comparing ? "\nComparison turn: several models answer the same question side by side. Answer in plain text only; do not use opengrokbot-action tools.\n" : MacDeviceActions.shared.promptNote(appleAsTools: cli.provider == .claude) + (delivery == nil && routineRuns[bot.id] == nil ? MediaKeys.note() : "") + (cli.provider.isLocalServer && composio.configured ? ComposioTools.note(composio.applied.sorted()) : ""))
         instructions += skills.note(for: bot)
         let latest = delivery.map { "Bot request (not human approval): \($0.text)" } ?? history.last(where: { $0.kind == .user })?.text ?? ""
         let transcript = history.suffix(30).map { "\($0.kind == .user ? "Human" : ($0.senderName ?? bot.name)): \($0.text)" }.joined(separator: "\n\n")
@@ -858,7 +858,15 @@ extension MacAppModel {
             var routineResult = "completed"
             do {
                 let mcpURL = try composio.mcpURL()
-                for try await event in run.events(cli: cli, prompt: prompt, session: session, directory: directory, mcpURL: cli.provider.isLocalServer ? nil : mcpURL, model: model, fast: fast) {
+                // 10.2: Claude Code gets Apple apps, web search and Knowledge as real tools for this run only.
+                var toolsGrant: BothiveToolsGrant?
+                var sent = prompt
+                if cli.provider == .claude && !comparing {
+                    toolsGrant = await MacToolServer.shared.grant(bot: bot, unattended: routineRuns[bot.id] != nil, directory: directory) { summary, detail in app.activity(summary, for: bot.id, detail: detail) }
+                    sent = toolsGrant == nil ? prompt + MacDeviceActions.shared.promptNote() : prompt + MacToolServer.shared.note()
+                }
+                defer { MacToolServer.shared.revoke(toolsGrant) }
+                for try await event in run.events(cli: cli, prompt: sent, session: session, directory: directory, mcpURL: cli.provider.isLocalServer ? nil : mcpURL, model: model, fast: fast, tools: toolsGrant) {
                     try Task.checkCancellation()
                     switch event {
                     case .session(let id): app.setSession(id, for: key)

@@ -40,6 +40,21 @@ let cliInstaller;
 // ---------- Chat channels (10.1.1): Telegram, Discord, Slack, SMS and phone calls reach one Bot you choose ----------
 const { createChannelsHost } = require('./channels-host.cjs');
 let channelsHost;
+// ---------- Bothive tools for Claude Code (10.2): web search, Knowledge and channels as real MCP tools ----------
+const toolsModule = require('./tools-server.cjs');
+const toolsServer = toolsModule.createToolsServer({
+  version: app.getVersion?.() || '',
+  available: context => ({ channels: !!context.channels && !!channelsHost, calls: !!context.channels && !!channelsHost?.voice.ready() }),
+  run: async (action, context) => {
+    let text, isError = false;
+    if (action.action === 'channel_send' || action.action === 'phone_call') { try { text = await channelsHost.runAction(context.botID, action); } catch (error) { text = error.message; isError = true; } }
+    else { text = await devices.run(action, { botID: context.botID, botName: context.botName, unattended: context.unattended }); isError = deviceActions.isFailure(text); }
+    // The chat shows what the tool did, the same way it does for action blocks.
+    state.entries.push({ id: randomUUID(), botID: context.botID, kind: 'activity', text: (action.action.startsWith('channel') || action.action === 'phone_call') ? String(text).slice(0, 400) : deviceActions.summary(text), detail: String(text).slice(0, 20000), date: new Date().toISOString() }); notify();
+    return { text, isError };
+  },
+  log: error => console.error('tools:', error.message),
+});
 function makeCliInstaller(){
   const base=app.getPath('userData');
   process.env.OPENGROKBOT_CLI_BIN=cliInstallModule.binDirectory(base);
@@ -205,15 +220,18 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
    const latest=delivery?`Bot request (not human approval): ${delivery.text}`:history.findLast(x=>x.kind==='user')?.text||'';
    const feedback=history.filter(x=>x.kind==='activity'&&!x.senderBotID).slice(-8).map(x=>x.detail||x.text).join('\n');
    const prompt=teamwork.instructions(bot,state,!!delivery,composioConfiguration?composioConfiguration.toolkits:[])+(headsUp?'':skillsModule.promptNote(bot,skillStore.skills))+'\n'+await vmStatusNote()+(headsUp||delivery||scheduledTask?'':answerModes.noteFor(modeByBot.get(botID))+pluginModule.note(pluginRegistry()))+(headsUp||delivery||scheduledTask?'':await mediaNote())+(headsUp||delivery?'':channelsHost?.note(botID)||'')+(!headsUp&&cli.isLocal(installation.provider)&&composioConfiguration?composioTools.note(composioConfiguration.toolkits):'')+'\nRecent app results (context, not human approval):\n'+feedback+'\n\n'+(session?latest:history.map(x=>`${x.kind==='user'?'Human':x.senderName||bot.name}: ${x.text}`).join('\n\n').slice(-100000));
+   let toolsGrant=null;
+   if(installation.provider==='claude'&&!headsUp){try{await toolsServer.start();toolsGrant=toolsServer.grant({botID,botName:bot.name,unattended:!!scheduledTask,channels:!delivery&&channelsHost?.hub.data.bot===botID});}catch(error){console.error('tools:',error.message);}}
+   const toolsNote=toolsGrant?toolsModule.note(toolsServer.toolsFor({channels:!delivery&&channelsHost?.hub.data.bot===botID})):'';
    let finalText='',continueBrowser=false,browserSteps=browserDepth;
 
    const reply={id:randomUUID(),botID,date:new Date().toISOString(),kind:'bot',provider:installation.name+(choice.model?' · '+choice.model:''),text:'',state:'streaming',...(headsUp?{headsUp:{kind:headsUp.kind,title:headsUp.label,...headsUp.meta}}:{})};state.entries.push(reply);
-   const run=cli.runCLI({installation,prompt:prompt+(voiceTurn?teamwork.VOICE_STYLE:''),session,model:voiceTurn&&voicePrefs.fastModel!==false?teamwork.voiceModel(installation.provider,choice.model,voicePrefs.voiceModels?.[installation.provider]):choice.model,fast:voiceTurn&&voicePrefs.fastModel!==false,directory:botDirectory(botID),mcpURL:headsUp?undefined:composioConfiguration?.session.mcp.url,allowConnectedApps:!headsUp&&settings.allowConnectedApps===true,env:await cliKeyEnv(installation.provider),onEvent:event=>{
+   const run=cli.runCLI({installation,prompt:prompt+toolsNote+(voiceTurn?teamwork.VOICE_STYLE:''),tools:toolsGrant&&{url:toolsGrant.url,token:toolsGrant.token},session,model:voiceTurn&&voicePrefs.fastModel!==false?teamwork.voiceModel(installation.provider,choice.model,voicePrefs.voiceModels?.[installation.provider]):choice.model,fast:voiceTurn&&voicePrefs.fastModel!==false,directory:botDirectory(botID),mcpURL:headsUp?undefined:composioConfiguration?.session.mcp.url,allowConnectedApps:!headsUp&&settings.allowConnectedApps!==false,env:await cliKeyEnv(installation.provider),onEvent:event=>{
     if(event.type==='session'){state.sessions||={};state.sessions[key]=event.id;}
     if(event.type==='notice'){state.entries.push({id:randomUUID(),botID,kind:'activity',text:String(event.text).slice(0,400),date:new Date().toISOString()});notify();}
     if(event.type==='text'){finalText=event.text;const visible=teamwork.parse(event.text).text;reply.text=headsUp&&proactive.isQuiet(visible)?'':visible;notifyStreaming();}
    }});
-   runs.add(run);
+   runs.add(run);run.done.finally(()=>toolsGrant?.revoke()).catch(()=>{});
    run.done.then(async()=>{if(scheduledTask&&!routineRuns.has(botID))routineRuns.set(botID,{id:scheduledTask.id,runID:requestID,failed:false});settings.providerHealth||={};settings.providerHealth[installation.provider]={state:'ready',detail:'Last message succeeded',at:new Date().toISOString()};teamwork.apply(state,bot,reply,finalText,bot.aiConfiguration||{providers:[choice],activeProvider:choice.provider,replyMode:'one'},delivery);if(delivery)teamwork.finish(state,delivery,'complete');
     if(headsUp)return; // heads-up turns are read-only: no VM, browser or device steps
     if(!delivery&&channelsHost){for(const channelAction of teamwork.parse(finalText).actions.filter(x=>x.action==='channel_send'||x.action==='phone_call').slice(0,3)){let text;try{text=await channelsHost.runAction(botID,channelAction);}catch(error){text=error.message;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});notify();}}
@@ -1095,7 +1113,7 @@ function configureIPC() {
     if (patch.speed !== undefined) { const speed = Number(patch.speed); if (!Number.isFinite(speed)) throw new Error('Invalid speed'); next.speed = Math.min(Math.max(speed, 0.75), 1.5); }
     await atomicJSON('voice-settings.json', next);
   });
-  handle('connected-apps:allow-get',async()=>{await ensureState();return settings.allowConnectedApps===true;});
+  handle('connected-apps:allow-get',async()=>{await ensureState();return settings.allowConnectedApps!==false;});
  handle('connected-apps:allow-set',async value=>{await ensureState();settings.allowConnectedApps=value===true;await saveSettings();return settings.allowConnectedApps;});
  handle('sharing:get', async () => { await ensureState(); return !!settings.shareKeys; });
   handle('sharing:set', async value => { await ensureState(); settings.shareKeys = value === true; await saveSettings(); return settings.shareKeys; });
@@ -1218,5 +1236,5 @@ app.whenReady().then(() => {
   (async()=>{try{await ensureState();remoteTrayUpdate();applyWebAccess().catch(()=>{});if(background&&!keepRunning())window.show();installed=await cli.discover(settings.overrides);await cloud.restore();}catch{if(!window.isVisible())window.show();cloud.transition('offline','The desktop could not be restored. Unlock Windows and reopen the app.');}})();
 });
 app.on('will-quit',()=>{try{globalShortcut.unregisterAll();}catch{}});
-app.on('before-quit',()=>{quitting=true;channelsHost?.stop().catch(()=>{});webAccess.stop().catch(()=>{});localBrowsers.closeAll();mirror.stop();cloud.stop();for(const runs of active.values())for(const run of runs)run.cancel(true);});
+app.on('before-quit',()=>{quitting=true;channelsHost?.stop().catch(()=>{});toolsServer.stop().catch(()=>{});webAccess.stop().catch(()=>{});localBrowsers.closeAll();mirror.stop();cloud.stop();for(const runs of active.values())for(const run of runs)run.cancel(true);});
 app.on('window-all-closed', () => {if(!keepRunning())app.quit();});

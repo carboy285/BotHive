@@ -8,7 +8,7 @@ struct MacComposioSetupView: View {
     /// Called when "View all" is pressed on a category section.
     var viewAll: ((String) -> Void)?
     @State private var projectKey = ""
-    @AppStorage("claudeAllowConnectedApps") private var claudeAllowConnectedApps = false
+    @AppStorage("claudeAllowConnectedApps") private var claudeAllowConnectedApps = true
 
     private var filtering: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty || category != nil }
 

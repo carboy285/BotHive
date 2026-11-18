@@ -97,9 +97,12 @@ struct CLICommand: Sendable {
     let input: String
     /// The name Bots' connected apps (Composio) are registered under in each CLI.
     static let connectedAppsServer = "opengrokbot-composio"
+    /// The name Bothive's own tools are registered under (10.2).
+    static let toolsServer = "bothive"
     /// `allowConnectedApps` pre-approves only the connected-apps tools for Claude Code, which cannot ask for permission in the background.
     /// `fast` (voice mode) asks Codex to think less, which is most of its wait.
-    static func chat(provider: CLIProvider, prompt: String, session: String?, promptFile: String? = nil, model: String = "", allowConnectedApps: Bool = false, fast: Bool = false) -> CLICommand {
+    /// `tools` (10.2) pre-approves Bothive's own local tools, which ask the human themselves before anything that sends or changes.
+    static func chat(provider: CLIProvider, prompt: String, session: String?, promptFile: String? = nil, model: String = "", allowConnectedApps: Bool = false, fast: Bool = false, tools: Bool = false) -> CLICommand {
         let modelArguments = model.isEmpty ? [String]() : ["--model", model]
         switch provider {
         case .codex:
@@ -110,7 +113,8 @@ struct CLICommand: Sendable {
             return CLICommand(arguments: args, input: prompt)
         case .claude:
             var args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
-            if allowConnectedApps { args += ["--allowedTools", "mcp__" + connectedAppsServer] }
+            let allowed = (allowConnectedApps ? ["mcp__" + connectedAppsServer] : []) + (tools ? ["mcp__" + toolsServer] : [])
+            if !allowed.isEmpty { args += ["--allowedTools"] + allowed }
             if let session { args += ["--resume", session] }
             return CLICommand(arguments: args + modelArguments, input: prompt)
         case .opencode:

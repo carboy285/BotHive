@@ -32,11 +32,14 @@ final class LocalCLIRun: @unchecked Sendable {
         }
     }
 
+    /// On unless the human turned it off (10.2; it used to start off). Only connected-app (Composio) tools are pre-approved.
+    static var claudeMayUseConnectedApps: Bool { UserDefaults.standard.object(forKey: "claudeAllowConnectedApps") as? Bool ?? true }
+
     static func stream(cli: InstalledCLI, prompt: String, session: String?, directory: URL, mcpURL: String? = nil, model: String = "", keys: KeychainSecretStore = ProviderAPIKeys.defaultStore) -> AsyncThrowingStream<CLIEvent, Error> {
         LocalCLIRun(keys: keys).events(cli: cli, prompt: prompt, session: session, directory: directory, mcpURL: mcpURL, model: model)
     }
 
-    func events(cli: InstalledCLI, prompt: String, session: String?, directory: URL, mcpURL: String? = nil, model: String = "", fast: Bool = false) -> AsyncThrowingStream<CLIEvent, Error> {
+    func events(cli: InstalledCLI, prompt: String, session: String?, directory: URL, mcpURL: String? = nil, model: String = "", fast: Bool = false, tools: BothiveToolsGrant? = nil) -> AsyncThrowingStream<CLIEvent, Error> {
         let run = self
         if cli.provider.isLocalServer {
             return AsyncThrowingStream { continuation in
@@ -53,7 +56,7 @@ final class LocalCLIRun: @unchecked Sendable {
         return AsyncThrowingStream { continuation in
             continuation.onTermination = { @Sendable _ in run.cancel() }
             DispatchQueue.global(qos: .userInitiated).async {
-                run.execute(cli: cli, prompt: prompt, session: session, directory: directory, mcpURL: mcpURL, model: model, fast: fast, continuation: continuation)
+                run.execute(cli: cli, prompt: prompt, session: session, directory: directory, mcpURL: mcpURL, model: model, fast: fast, tools: tools, continuation: continuation)
             }
         }
     }
@@ -70,7 +73,7 @@ final class LocalCLIRun: @unchecked Sendable {
         }
     }
 
-    private func execute(cli: InstalledCLI, prompt: String, session: String?, directory: URL, mcpURL: String?, model: String, fast: Bool = false, continuation: AsyncThrowingStream<CLIEvent, Error>.Continuation) {
+    private func execute(cli: InstalledCLI, prompt: String, session: String?, directory: URL, mcpURL: String?, model: String, fast: Bool = false, tools: BothiveToolsGrant? = nil, continuation: AsyncThrowingStream<CLIEvent, Error>.Continuation) {
         var promptFile: URL?
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -81,9 +84,9 @@ final class LocalCLIRun: @unchecked Sendable {
                 promptFile = file
             }
             defer { if let promptFile { try? FileManager.default.removeItem(at: promptFile) } }
-            let mcp = try ComposioCLIConfiguration.make(provider: cli.provider, directory: directory, sessionURL: mcpURL)
+            let mcp = try ComposioCLIConfiguration.make(provider: cli.provider, directory: directory, sessionURL: mcpURL, tools: tools)
             defer { mcp.cleanup() }
-            let command = CLICommand.chat(provider: cli.provider, prompt: prompt, session: session, promptFile: promptFile?.path, model: model, allowConnectedApps: mcpURL != nil && UserDefaults.standard.bool(forKey: "claudeAllowConnectedApps"), fast: fast)
+            let command = CLICommand.chat(provider: cli.provider, prompt: prompt, session: session, promptFile: promptFile?.path, model: model, allowConnectedApps: mcpURL != nil && Self.claudeMayUseConnectedApps, fast: fast, tools: cli.provider == .claude && mcp.environment[MacToolServer.tokenVariable] != nil)
             let input = Pipe(), output = Pipe(), error = Pipe()
             process.executableURL = URL(fileURLWithPath: cli.path)
             process.arguments = command.arguments + mcp.arguments

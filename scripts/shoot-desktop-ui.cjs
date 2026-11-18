@@ -69,11 +69,13 @@ fs.mkdirSync(out, { recursive: true });
       await page.locator('.settings-nav button', { hasText: tab }).first().click().catch(() => console.log('no tab', tab));
       await shot('settings-' + tab.toLowerCase().replace(/\W+/g, '-'));
     }
+    await page.keyboard.press('Escape'); await page.evaluate(() => document.querySelector('#panel')?.close());
+    await page.locator('#apps-button').click({ force: true }).catch(error => console.log('apps:', error.message.split('\n')[0])); await shot('apps');
     await page.evaluate(() => document.querySelector('#panel')?.close());
-    await page.locator('#apps-button').click(); await shot('apps');
+    await page.locator('#new-button').click({ force: true }).catch(error => console.log('new:', error.message.split('\n')[0])); await shot('new-bot');
     await page.evaluate(() => document.querySelector('#panel')?.close());
-    await page.locator('#new-button').click(); await shot('new-bot');
-    await page.evaluate(() => document.querySelector('#panel')?.close());
+    await page.keyboard.press('Escape'); await page.evaluate(() => document.querySelector('#panel')?.close());
+    await page.locator('#profile-button').click({ force: true }).catch(() => {}); await shot('account-menu'); await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 420, height: 860 }); await shot('narrow');
     if (errors.length) console.log('page errors:', errors);
     console.log('saved to', out);

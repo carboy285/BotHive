@@ -31,6 +31,10 @@ const ICONS = {
   chevronDown: [['path', { d: 'm6.5 9.5 5.5 5.5 5.5-5.5' }]],
   apps: [['rect', { x: 4, y: 4, width: 7, height: 7, rx: 2 }], ['rect', { x: 13, y: 4, width: 7, height: 7, rx: 2 }], ['rect', { x: 4, y: 13, width: 7, height: 7, rx: 2 }], ['path', { d: 'M16.5 13v7M13 16.5h7' }]],
   check: [['path', { d: 'm5 12.5 4.5 4.5L19 7.5' }]],
+  phone: [['rect', { x: 7, y: 2.5, width: 10, height: 19, rx: 2.5 }], ['path', { d: 'M11 18.5h2' }]],
+  help: [['circle', { cx: 12, cy: 12, r: 8.5 }], ['path', { d: 'M9.7 9.5a2.4 2.4 0 0 1 4.6.9c0 1.6-2.3 2-2.3 3.4M12 17h.01' }]],
+  signIn: [['path', { d: 'M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14M10 8l4 4-4 4M14 12H4' }]],
+  signOut: [['path', { d: 'M10 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20H10M14 8l4 4-4 4M18 12H8' }]],
 };
 
 /** @param {keyof typeof ICONS} name @param {{size?: number, className?: string}} [options] */

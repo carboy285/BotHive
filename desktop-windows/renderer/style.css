@@ -892,3 +892,14 @@ label.setting-row .details small{font-size:12.5px;line-height:1.45}
 .profile-text input:hover{border-color:transparent}.profile-text input:focus{padding:4px 8px;border-color:var(--accent)}
 .code-field::placeholder{letter-spacing:normal}
 .setting-row>.muted:last-child{font-size:14px}
+
+/* 10.2 · account menu icons, and a message box that stays usable on a phone-width window */
+.account-glyph{display:grid;place-items:center;width:20px;color:var(--muted)}
+.account-item:hover .account-glyph,.account-item:focus-visible .account-glyph{color:var(--text)}
+.account-menu{box-shadow:var(--shadow-lg);border-color:var(--line-strong)}
+@media (max-width:640px){
+  #composer{flex-wrap:wrap;border-radius:22px;padding:6px 8px;row-gap:2px}
+  #draft{order:-1;flex:1 1 100%;padding:8px 6px 4px;min-height:36px}
+  .composer-actions{margin-left:auto}
+  .mode-chip{padding:4px 9px;font-size:12px}
+}

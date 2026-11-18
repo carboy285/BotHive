@@ -903,3 +903,8 @@ label.setting-row .details small{font-size:12.5px;line-height:1.45}
   .composer-actions{margin-left:auto}
   .mode-chip{padding:4px 9px;font-size:12px}
 }
+.servers-page>p.muted:first-child{font-size:14px;line-height:1.55;max-width:680px;margin-bottom:6px}
+.voice-row>span{font-size:14px;color:color-mix(in srgb,var(--text) 85%,transparent)}
+.lock-mark{display:grid;place-items:center}
+.rule-add{display:grid;grid-template-columns:200px minmax(0,1fr) auto;gap:10px;align-items:center}
+@media (max-width:760px){.rule-add{grid-template-columns:1fr}}

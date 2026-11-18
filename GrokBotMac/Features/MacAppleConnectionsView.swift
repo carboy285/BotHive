@@ -21,6 +21,8 @@ struct MacAppleConnectionsView: View {
                         Text("Let your Bots look at your Apple apps").font(.system(size: 18, weight: .medium))
                         Text("Each app is off until you turn it on, and macOS asks you to allow it. Turn an app off at any time. Bots can read what you enable, and can add or change things in Calendar, Reminders, Contacts and Notes (you can choose whether each asks first; Reminders doesn’t by default). Sending email or messages, moving mail to the Trash and deleting anything always need your approval.")
                             .font(.system(size: 14)).lineSpacing(4).foregroundStyle(MacTheme.secondary)
+                        Label("Claude Code uses these as real tools: it can check Reminders or add an event in the middle of an answer. Other AI CLIs use them through the app, one step per turn.", systemImage: "wrench.and.screwdriver")
+                            .font(.system(size: 13)).lineSpacing(3).foregroundStyle(Color.primary.opacity(0.8))
                         Text("What a Bot reads becomes part of its conversation and is sent to the AI provider you chose for that Bot, like anything else you type. Turn on only what you are comfortable sharing with that provider.")
                             .font(.system(size: 13)).lineSpacing(4).foregroundStyle(.orange)
                     }.padding(20).frame(maxWidth: .infinity, alignment: .leading).background(MacTheme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))

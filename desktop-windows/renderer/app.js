@@ -1151,7 +1151,7 @@ async function renderPermissions(page) {
   try { config = await result(bridge.approvalRules()); } catch (error) { page.append(node('p', 'muted', error.message || 'Rules are available in the installed Windows app.')); return; }
   const save = async () => { try { config = { ...await result(bridge.setApprovalRules({ enabled: config.enabled, rules: config.rules })), tools: config.tools }; } catch (error) { toast(error.message); } draw(); };
   const draw = () => {
-    page.replaceChildren(append(node('header', 'panel-head'), node('h1', '', 'Permissions'), button('×', () => dialog.close(), 'close-panel')));
+    { const close = button('', () => dialog.close(), 'close-panel'); close.setAttribute('aria-label', 'Close settings'); close.append(icon('close', { size: 18 })); page.replaceChildren(append(node('header', 'panel-head'), node('h1', '', 'Permissions'), close)); }
     const toggle = node('input'); toggle.type = 'checkbox'; toggle.checked = config.enabled; toggle.setAttribute('aria-label', 'Use my rules'); toggle.addEventListener('change', () => { config.enabled = toggle.checked; save(); });
     append(page, append(node('label', 'setting-row'), toggle, append(node('span', 'details'), node('strong', '', 'Use my rules'), node('small', 'muted', 'Checked before any approval dialog. Turn off to use only the built-in behaviour.'))));
     page.append(node('p', 'settings-label', 'Always ask'));
@@ -1163,7 +1163,7 @@ async function renderPermissions(page) {
     page.append(node('p', 'settings-label', 'Allow without asking'), node('p', 'muted', 'Nothing on Windows can be allowed without asking yet, because Bots here do not write to calendars, reminders, contacts or notes. This list will appear here when they can.'));
     page.append(node('p', 'settings-label', 'Always asks, and cannot be changed'));
     for (const [title, detail] of [['Clicks that send, buy, post or delete', 'You see what will be clicked and on which page.'], ['Typing and submitting a form', 'You see the field and the text first.'], ['Saved logins and passwords', 'Signing in always asks. Passwords are typed by the app, never shown to the Bot.'], ['Unattended routines', 'A routine that runs while you are away skips anything that needs approval.']])
-      page.append(append(node('div', 'setting-row'), append(node('span', 'details'), node('strong', '', title), node('small', 'muted', detail)), node('span', 'muted', '🔒')));
+      page.append(append(node('div', 'setting-row'), append(node('span', 'details'), node('strong', '', title), node('small', 'muted', detail)), append(node('span', 'muted lock-mark'), icon('lock', { size: 15 }))));
     page.append(node('p', 'muted', 'Codex runs with read-only workspace access. Other CLIs keep their own permissions, and the app adds no approval bypass flags. Composio tools follow your CLI’s MCP permission settings.'));
   };
   draw();

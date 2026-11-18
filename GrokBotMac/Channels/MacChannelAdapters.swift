@@ -426,7 +426,7 @@ final class InkboxIMessageAdapter: ChannelAdapter {
 
     private func loop() async {
         while !Task.isCancelled {
-            var waitMS: UInt64 = 500 // checked twice a second, so a message is read in under a second
+            var waitMS: UInt64 = 300 // checked about three times a second, so a message is read in under a second
             do {
                 for message in try await unread() {
                     guard let id = message["id"] as? String, !seen.contains(id) else { continue }
@@ -441,6 +441,8 @@ final class InkboxIMessageAdapter: ChannelAdapter {
                     guard !text.isEmpty || !media.isEmpty, let number = message["remote_number"] as? String,
                           number.range(of: #"^\+[1-9]\d{6,14}$"#, options: .regularExpression) != nil, let conversation = message["conversation_id"] as? String else { continue }
                     unacked[conversation] = Date()
+                    if found.count > 200 { found.removeAll() }
+                    found[conversation] = (Self.date(message["created_at"] as? String), Date())
                     onMessage(ChannelMessage(senderID: number, senderName: number, chatID: conversation, text: text, media: media))
                 }
                 // Messages from people nobody approved are marked read too, a little later, so they never clog the unread list.
@@ -449,7 +451,7 @@ final class InkboxIMessageAdapter: ChannelAdapter {
                     _ = try? await api("/mark-read", method: "POST", json: ["conversation_id": conversation])
                 }
                 if seen.count > 1000 { seen = Set(seen.suffix(500)) }
-                state = .init(state: "on", detail: "Connected to Inkbox")
+                state = .init(state: "on", detail: "Connected to Inkbox" + (timing.isEmpty ? "" : " \u{00B7} " + timing))
             } catch let error as ChannelError {
                 if Task.isCancelled { return }
                 if error.code == 401 || error.code == 400 { state = .init(state: "error", detail: error.message); return }
@@ -466,6 +468,22 @@ final class InkboxIMessageAdapter: ChannelAdapter {
     func acknowledge(_ message: ChannelMessage) async {
         unacked[message.chatID] = nil
         _ = try? await api("/mark-read", method: "POST", json: ["conversation_id": message.chatID])
+        // How long the last message took, split into Inkbox's part and Bothive's, so a slow "Read" can be traced.
+        if let entry = found.removeValue(forKey: message.chatID) {
+            let sent = entry.0, seenAt = entry.1
+            let ours = Date().timeIntervalSince(seenAt)
+            if let sent { timing = "last message: Inkbox passed it on \(Self.seconds(seenAt.timeIntervalSince(sent))) after you sent it, Bothive marked it read \(Self.seconds(ours)) later" }
+            else { timing = "last message marked read \(Self.seconds(ours)) after it arrived" }
+            state = .init(state: "on", detail: "Connected to Inkbox \u{00B7} " + timing)
+        }
+    }
+    private var found: [String: (Date?, Date)] = [:]
+    private var timing = ""
+    static func seconds(_ value: TimeInterval) -> String { String(format: "%.1f s", max(0, value)) }
+    static func date(_ text: String?) -> Date? {
+        guard let text else { return nil }
+        let precise = ISO8601DateFormatter(); precise.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return precise.date(from: text) ?? ISO8601DateFormatter().date(from: text)
     }
 
     func send(chat: String, text: String) async throws {

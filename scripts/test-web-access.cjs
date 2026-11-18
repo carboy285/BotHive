@@ -96,7 +96,9 @@ const { previewWorkspace } = require('../desktop-windows/app/workspace.cjs');
     assert.equal(await tab.locator('#workspace').evaluate(x => x.classList.contains('show-sidebar')), false);
     assert.equal(await tab.locator('.traffic').isVisible(), false, 'no fake window buttons in a browser');
     await tab.getByRole('button', { name: 'Show Bots' }).click(); await tab.waitForTimeout(400);
-    await tab.getByRole('button', { name: 'Settings', exact: true }).click();
+    // Settings live in the account menu (10.1).
+    await tab.locator('#profile-button').click();
+    await tab.locator('.account-menu').getByText('Settings', { exact: true }).click();
     await tab.getByRole('button', { name: 'Web access', exact: true }).click();
     await tab.getByText('Change web access on the computer that runs it.', { exact: false }).waitFor();
     assert.deepEqual(errors, []);

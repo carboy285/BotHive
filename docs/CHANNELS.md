@@ -1,6 +1,8 @@
-# Chat channels (work in progress, not in 10.1.1)
+# Chat channels (10.2)
 
-One Bot you choose answers messages that arrive on Telegram, Discord, Slack, SMS, iMessage and phone calls. This page describes the engine on the `claude/channels-wip` branch. There is no Settings screen yet; on a Docker server the channels are set from environment variables.
+One Bot you choose answers messages that arrive on Telegram, Discord, Slack, SMS, iMessage and phone calls. On Windows, set them up under **Settings → Channels**: pick the Bot that answers, open a channel's card, follow its three steps, paste the token and turn it on. On a Docker server the same settings can come from environment variables (below), and the Windows or Mac app connected to that server can't change them yet.
+
+The Bot that answers is told which channels are on and gets two tools: `channel_send` (message an approved person, at most 20 an hour) and `phone_call` (ring your own number, at most 5 an hour). Other Bots are not told about channels.
 
 Nobody is answered until you approve them. A stranger who messages the Bot gets a short code; you enter it under Settings → Channels (or list their ids in `OPENGROKBOT_CHANNELS_APPROVE`).
 

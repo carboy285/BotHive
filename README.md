@@ -38,6 +38,8 @@ The phone controls the same Bots, chats, memories, active models and running tas
 
 ![Native Mac account setup](docs/screenshots/macos-account-setup.png)
 
+**10.2** adds **Channels**: one Bot answers people on Telegram, Discord, Slack, iMessage (through Inkbox) and SMS, and can take or place phone calls; strangers get a code and nothing else until you approve them under Settings → Channels ([details](docs/CHANNELS.md); the Mac has Telegram and iMessage). **Claude Code** now gets Bothive's own tools as a local MCP server for each message: Apple Calendar, Reminders, Contacts, Mail, Notes and Messages on the Mac, web search, Knowledge and channel messages, called mid-answer and still approved by you before anything is sent or changed. Connected apps (Composio) work in Claude Code without flipping a switch first. And a large polish pass: one icon set, grouped settings and consistent controls on Windows; a grouped settings sidebar and hover/press states on Mac; continuous corners and haptics on iPhone.
+
 **10.0** is the first public release, as Bothive: the new name, a privacy policy and terms, Delete account on every app, open-source license notices, a [website](https://carboy285.github.io/BotHive/), and fixes from a full UI audit. Bots, chats and settings carry over from OpenGrokBot.
 
 **0.9.9** gives the Mac and iPhone a first run where the Bots say hello, and lets voice calls follow you out of the app: into the Dynamic Island and Lock Screen on iPhone (through CallKit), and into a pill hanging from the notch on the Mac. The Mac DMG window gets the same characters. Replies from your computer reach the iPhone faster, and with the new relay migration applied the phone and computer are pinged the moment a message lands instead of checking on a timer.

@@ -1,5 +1,5 @@
 'use strict';
-// The chat channels hub (10.1.1): one Bot you choose answers messages that arrive on Telegram, Discord, Slack, SMS and more.
+// The chat channels hub (10.2): one Bot you choose answers messages that arrive on Telegram, Discord, Slack, SMS and more.
 //
 // Safety first. A channel is a way to reach a Bot that can run tasks on this computer, so nobody is answered until you approve them:
 //  - A stranger who messages the Bot gets a short code and nothing else. The code does nothing until you type it into Bothive

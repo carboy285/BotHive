@@ -218,5 +218,36 @@ final class MacChannelsTests: XCTestCase {
         r.adapter.sent.removeAll(); await r.channels.checkAsks()
         XCTAssertTrue(r.adapter.sent.isEmpty, "once")
     }
+    func testWhereRepliesGoDecidesWhatIsTextedToTheOwner() async throws {
+        let r = try rig(me: true)
+        let app1 = await r.channels.afterReply(bot: r.bot, text: "From the app", origin: "app")
+        let chat = await r.channels.afterReply(bot: r.bot, text: "Already answered", origin: "channel")
+        XCTAssertFalse(app1); XCTAssertFalse(chat)
+        let scheduled = await r.channels.afterReply(bot: r.bot, text: "Your morning summary", origin: "scheduled")
+        XCTAssertTrue(scheduled); XCTAssertEqual(r.adapter.sent.last?.text, "Your morning summary")
+        let problem = await r.channels.execute("channels_set_settings", channel: nil, text: nil, fields: ["replies": "always"])
+        XCTAssertNil(problem)
+        let typed = await r.channels.afterReply(bot: r.bot, text: "Typed in the app", origin: "app")
+        XCTAssertTrue(typed); XCTAssertEqual(r.adapter.sent.last?.text, "Typed in the app")
+        let bad = await r.channels.execute("channels_set_settings", channel: nil, text: nil, fields: ["replies": "sometimes"])
+        XCTAssertEqual(bad, "Choose where replies go.")
+    }
+
+    func testTheFirstPersonApprovedIsTheOwner() async throws {
+        let r = try rig(me: false)
+        var config = r.channels.config; config.approved = [:]; r.channels.configureForTesting(config)
+        r.channels.askOverride = { _, _, _, _, _ in "ok" }
+        await r.channels.inbound("telegram", message("hi", from: "42"))
+        let code = try XCTUnwrap(r.channels.status().channels["telegram"]?.pending.first?.code)
+        let problem = await r.channels.execute("channels_approve", channel: "telegram", text: code, fields: nil)
+        XCTAssertNil(problem)
+        XCTAssertEqual(r.channels.owner(preferred: nil)?.person.id, "42")
+    }
+
+    func testSettingsSavedByAnOlderBuildStillLoad() throws {
+        let old = #"{"fast":false,"whenBusy":"queue","escalate":"call","escalateMinutes":10,"quietStart":22,"quietEnd":8}"#
+        let settings = try JSONDecoder().decode(MacChannels.Settings.self, from: Data(old.utf8))
+        XCTAssertEqual(settings.whenBusy, "queue"); XCTAssertEqual(settings.replies, "where"); XCTAssertFalse(settings.fast)
+    }
 }
 #endif

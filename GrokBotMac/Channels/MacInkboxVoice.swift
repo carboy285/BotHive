@@ -13,6 +13,7 @@ final class InkboxVoiceClient {
         var seconds: Int
         var transcript: [Line]
         var items: [Item]
+        var transcriptError = ""
     }
     struct VoiceChoice: Equatable { var id: String; var name: String; var available: Bool }
     struct Context { var botName = "the assistant", purpose = "", summary = "", memory: [String] = [], ownerName = "" }
@@ -135,7 +136,9 @@ final class InkboxVoiceClient {
                 for call in fresh {
                     guard let id = call["id"] as? String else { continue }
                     seen.insert(id)
-                    let rows = ((try? await api("/calls/\(id)/transcripts")) as? [[String: Any]] ?? []).sorted { (($0["seq"] as? Int) ?? 0) < (($1["seq"] as? Int) ?? 0) }
+                    var rows: [[String: Any]] = [], transcriptError = ""
+                    do { rows = ((try await api("/calls/\(id)/transcripts")) as? [[String: Any]] ?? []).sorted { (($0["seq"] as? Int) ?? 0) < (($1["seq"] as? Int) ?? 0) } }
+                    catch { transcriptError = error.localizedDescription }
                     let transcript = rows.compactMap { row -> Line? in
                         guard let text = row["text"] as? String, !text.isEmpty else { return nil }
                         return Line(fromPerson: (row["party"] as? String) != "local", text: text)
@@ -148,7 +151,7 @@ final class InkboxVoiceClient {
                     let parser = ISO8601DateFormatter()
                     if let a = (call["started_at"] as? String).flatMap({ parser.date(from: $0) }), let b = (call["ended_at"] as? String).flatMap({ parser.date(from: $0) }) { seconds = max(0, Int(b.timeIntervalSince(a))) }
                     await onCall(Call(id: id, direction: (call["direction"] as? String) ?? "", number: (call["remote_phone_number"] as? String) ?? "", reason: (call["reason"] as? String) ?? "",
-                                      status: (call["status"] as? String) ?? "", outcome: (call["hangup_reason"] as? String) ?? "", seconds: seconds, transcript: transcript, items: items))
+                                      status: (call["status"] as? String) ?? "", outcome: (call["hangup_reason"] as? String) ?? "", seconds: seconds, transcript: transcript, items: items, transcriptError: transcriptError))
                 }
                 if seen.count > 500 { seen = Set(seen.suffix(250)) }
                 state = .init(state: "on", detail: "Phone calls ready")

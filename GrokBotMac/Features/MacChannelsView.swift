@@ -57,6 +57,14 @@ struct MacChannelsSection: View {
                     }.labelsHidden().pickerStyle(.menu).fixedSize().disabled(!canChange)
                 }
                 HStack {
+                    Text("Where replies go").font(.system(size: 14))
+                    Spacer()
+                    Picker("Where replies go", selection: Binding(get: { settings.replies ?? "where" }, set: { value in setting(["replies": value]) })) {
+                        Text("Reply where I wrote (a text gets a text; scheduled tasks text me)").tag("where")
+                        Text("Always text me too (every reply also goes to my chat)").tag("always")
+                    }.labelsHidden().pickerStyle(.menu).fixedSize().disabled(!canChange)
+                }
+                HStack {
                     Text("When the Bot needs me and I have not messaged it, reach me on").font(.system(size: 14))
                     Spacer()
                     Picker("Reach me on", selection: Binding(get: { settings.reachOn ?? "" }, set: { value in setting(["reachOn": value]) })) {
@@ -131,6 +139,7 @@ struct MacChannelsSection: View {
                 }
                 Text("Calls are answered by Inkbox\u{2019}s voice assistant, which is told your Bot\u{2019}s name, style and notes. It cannot run the Bot\u{2019}s tools during a call; the transcript comes back into the Bot\u{2019}s chat and anything left to do is handed to the Bot. Tip: in the Inkbox console set the agent to contact-scoped access and allow only your own number to call it.")
                     .font(.system(size: 12)).lineSpacing(3).foregroundStyle(MacTheme.secondary)
+                if inkbox.state?.state == "error", let detail = inkbox.state?.detail, !detail.isEmpty { Text("Phone calls: \(detail)").font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
                 if let question = inkbox.pendingAsk?.question { Text("The Bot is waiting for your answer to: \(question)").font(.system(size: 12)).foregroundStyle(MacTheme.secondary) }
             }
             if spec.id == "sms" {
@@ -144,7 +153,7 @@ struct MacChannelsSection: View {
                         Text("\(person.name) \u{00B7} code \(person.code)").font(.system(size: 14))
                         Spacer()
                         Toggle("This is me", isOn: Binding(get: { meDrafts[person.code] ?? false }, set: { meDrafts[person.code] = $0 })).font(.system(size: 12)).toggleStyle(.checkbox)
-                        MacPillButton(title: "Approve", prominent: true) { run("channels_approve", channel: spec.id, text: person.code, fields: ["me": (meDrafts[person.code] ?? false) ? "true" : "false"], done: "\(person.name) can now message the Bot.") }.disabled(!canChange || busy)
+                        MacPillButton(title: "Approve", prominent: true) { run("channels_approve", channel: spec.id, text: person.code, fields: (meDrafts[person.code] ?? false) ? ["me": "true"] : nil, done: "\(person.name) can now message the Bot.") }.disabled(!canChange || busy)
                     }
                 }
             }

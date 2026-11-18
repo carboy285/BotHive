@@ -37,6 +37,21 @@ final class MacChannels: ObservableObject {
         var escalateMinutes = 10
         var quietStart = 22
         var quietEnd = 8
+        /// "where": answer where the message came from (automatic turns text the owner); "always": text every reply to the owner too.
+        var replies = "where"
+        init() {}
+        // Settings saved by an earlier build lack newer keys, so every key is optional when reading.
+        init(from decoder: Decoder) throws {
+            let box = try decoder.container(keyedBy: CodingKeys.self)
+            fast = try box.decodeIfPresent(Bool.self, forKey: .fast) ?? true
+            whenBusy = try box.decodeIfPresent(String.self, forKey: .whenBusy) ?? "steer"
+            reachOn = try box.decodeIfPresent(String.self, forKey: .reachOn)
+            escalate = try box.decodeIfPresent(String.self, forKey: .escalate) ?? "call"
+            escalateMinutes = try box.decodeIfPresent(Int.self, forKey: .escalateMinutes) ?? 10
+            quietStart = try box.decodeIfPresent(Int.self, forKey: .quietStart) ?? 22
+            quietEnd = try box.decodeIfPresent(Int.self, forKey: .quietEnd) ?? 8
+            replies = try box.decodeIfPresent(String.self, forKey: .replies) ?? "where"
+        }
     }
     /// A question the Bot asked you. Your next message on that channel is the answer.
     struct PendingAsk: Codable, Equatable {
@@ -85,6 +100,8 @@ final class MacChannels: ObservableObject {
         var started = Date()
         var generation = 0
         var waiters: [CheckedContinuation<Void, Never>] = []
+        /// A turn the app starts for the person (other Bots answered, a call ended): it waits its turn and never steers.
+        var followUp = false
     }
     private final class BotState { var active = 0; var tail: Task<Void, Never>? }
 
@@ -116,6 +133,8 @@ final class MacChannels: ObservableObject {
     private var turnCounter = 0
     private var cancelled = Set<Int>()
     private var talking: [UUID: Sender] = [:]
+    private var delegations: [UUID: (botID: UUID, from: Sender, at: Date)] = [:]
+    private var mirrorLog: [Date] = []
     private var approvalAsks: [UUID: (channel: String, sender: String, at: Date)] = [:]
     private var voice: InkboxVoiceClient?
     private var voiceKey = ""
@@ -135,6 +154,11 @@ final class MacChannels: ObservableObject {
     func attach(desktop: MacAppModel, app: AppModel) {
         self.desktop = desktop; self.app = app
         if let data = try? store.read(account: "config"), let saved = try? JSONDecoder().decode(Config.self, from: data) { config = saved }
+        // Older setups had no owner: if exactly one person is approved, that is the owner.
+        let everyone = config.approved.flatMap { channel, people in people.map { (channel, $0.id) } }
+        if everyone.count == 1, owner(preferred: nil) == nil, let only = everyone.first, var list = config.approved[only.0], let index = list.firstIndex(where: { $0.id == only.1 }) {
+            list[index].me = true; config.approved[only.0] = list; save()
+        }
         for info in Self.infos where config.channels[info.id]?.enabled == true { start(info.id) }
         syncVoice()
         MacApproval.shared.onRoute = { [weak self] id, title, detail in Task { @MainActor in _ = await self?.routeApproval(id: id, title: title, detail: detail) } }
@@ -143,6 +167,7 @@ final class MacChannels: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: (self?.askCheckSeconds ?? 30) * 1_000_000_000)
                 await self?.checkAsks()
+                await self?.checkDelegations()
             }
         }
     }
@@ -188,7 +213,7 @@ final class MacChannels: ObservableObject {
 
     private func remoteSettings() -> RemoteChannels.Settings {
         let s = settings
-        return RemoteChannels.Settings(fast: s.fast, whenBusy: s.whenBusy, reachOn: s.reachOn, escalate: s.escalate, escalateMinutes: s.escalateMinutes, quietStart: s.quietStart, quietEnd: s.quietEnd)
+        return RemoteChannels.Settings(fast: s.fast, whenBusy: s.whenBusy, replies: s.replies, reachOn: s.reachOn, escalate: s.escalate, escalateMinutes: s.escalateMinutes, quietStart: s.quietStart, quietEnd: s.quietEnd)
     }
 
     /// The same commands the Windows app and Docker server take, so one screen manages either.
@@ -198,7 +223,7 @@ final class MacChannels: ObservableObject {
             case "channels_set_bot": try setBot(text ?? "")
             case "channels_configure": try await configure(channel, fields ?? [:])
             case "channels_enable": try await setEnabled(channel, on: text == "on")
-            case "channels_approve": try approve(channel, code: text ?? "", me: fields?["me"] == "true")
+            case "channels_approve": try approve(channel, code: text ?? "", me: fields?["me"].map { $0 == "true" })
             case "channels_remove": remove(channel, id: text ?? "")
             case "channels_set_settings": try setSettings(fields ?? [:])
             case "channels_set_person": try setPerson(channel, id: text ?? "", fields: fields ?? [:])
@@ -249,6 +274,7 @@ final class MacChannels: ObservableObject {
         var next = settings
         if let value = fields["fast"] { next.fast = value == "true" }
         if let value = fields["whenBusy"] { guard ["steer", "queue"].contains(value) else { throw ChannelError(message: "Choose Steer or Queue.") }; next.whenBusy = value }
+        if let value = fields["replies"] { guard ["where", "always"].contains(value) else { throw ChannelError(message: "Choose where replies go.") }; next.replies = value }
         if let value = fields["reachOn"] { next.reachOn = Self.info(value) == nil ? nil : value }
         if let value = fields["escalate"] { guard ["call", "text", "none"].contains(value) else { throw ChannelError(message: "Choose call, text or nothing.") }; next.escalate = value }
         if let value = fields["escalateMinutes"], let number = Int(value) { next.escalateMinutes = min(120, max(1, number)) }
@@ -302,7 +328,9 @@ final class MacChannels: ObservableObject {
 
     private func live(_ id: String) -> [Waiting] { (pending[id] ?? []).filter { Date().timeIntervalSince($0.at) < Self.pairTTL } }
 
-    private func approve(_ id: String?, code: String, me: Bool = false) throws {
+    private func approve(_ id: String?, code: String, me requested: Bool? = nil) throws {
+        // The first person approved is almost always the owner, so they are Me unless someone already is.
+        let me = requested ?? (owner(preferred: nil) == nil)
         guard let id, Self.info(id) != nil else { throw ChannelError(message: "Unknown channel.") }
         guard let entry = live(id).first(where: { $0.code == code.trimmingCharacters(in: .whitespaces) }) else { throw ChannelError(message: "That code is not waiting. Ask them to message the Bot again to get a new one.") }
         pending[id] = live(id).filter { $0.code != entry.code }
@@ -462,7 +490,7 @@ final class MacChannels: ObservableObject {
         let from = batch.from
         let text = String(batch.texts.joined(separator: "\n").prefix(Self.maxText * 2)), media = Array(batch.media.prefix(Self.maxMedia))
         let state = botStates[botID] ?? BotState(); botStates[botID] = state
-        let steer = state.active > 0 && settings.whenBusy != "queue"
+        let steer = !batch.followUp && state.active > 0 && settings.whenBusy != "queue"
         state.active += 1
         if steer { stopTurn(id) }
         let previous = state.tail
@@ -514,7 +542,7 @@ final class MacChannels: ObservableObject {
         let before = app.entries(for: bot).count
         turnCounter += 1; let token = turnCounter; turns[bot.id] = token
         if from.channel != "phone" { talking[bot.id] = from }
-        guard desktop.send(body, to: bot, app: app, forceLocal: true, channelTurn: settings.fast && from.channel != "phone") else {
+        guard desktop.send(body, to: bot, app: app, forceLocal: true, channelTurn: settings.fast && from.channel != "phone", fromChannel: true) else {
             talking[bot.id] = nil
             throw ChannelError(message: desktop.sendFeedback[bot.id] ?? "The Bot could not take that message right now.")
         }
@@ -527,6 +555,10 @@ final class MacChannels: ObservableObject {
         if cancelled.remove(token) != nil { return nil }
         guard let reply = app.entries(for: bot).dropFirst(before).last(where: { $0.kind == .bot }) else { return "The Bot did not answer." }
         if reply.state == .failed { throw ChannelError(message: reply.text.isEmpty ? "The Bot could not finish that." : reply.text) }
+        // The Bot handed part of this to other Bots: when they answer, it gets a follow-up turn so the person hears back.
+        if from.channel != "phone", (app.workspace.teamMessages ?? []).contains(where: { $0.rootID == reply.id && $0.from == bot.id }) {
+            delegations[reply.id] = (bot.id, from, Date())
+        }
         return reply.text
     }
 
@@ -582,8 +614,9 @@ final class MacChannels: ObservableObject {
     }
 
     /// A finished call: its transcript goes into the Bot's chat and memory, and whatever it needs done is handed to the Bot.
-    private func importCall(_ call: InkboxVoiceClient.Call) async {
-        guard let app, let desktop, let id = config.bot, let bot = botFor(id) else { return }
+    /// A finished call: its transcript goes into the Bot's chat, and the Bot gets a turn with all of it, so it knows what was said and carries on.
+    func importCall(_ call: InkboxVoiceClient.Call) async {
+        guard let app, let id = config.bot, let bot = botFor(id) else { return }
         let person = owner(preferred: "imessage")?.person
         let name = person?.label ?? (call.number.isEmpty ? "someone" : call.number)
         let lines = call.transcript.map { "\($0.fromPerson ? name : "You"): \($0.text)" }.joined(separator: "\n")
@@ -591,24 +624,65 @@ final class MacChannels: ObservableObject {
         let reason = call.reason.isEmpty ? "" : " (\(call.reason.prefix(200)))"
         let outcome = call.outcome.isEmpty || call.status == "completed" ? "" : ", " + call.outcome
         let who = call.direction == "outbound" ? "You phoned them" : "They phoned you"
-        let body = lines.isEmpty ? "(no speech was recorded)" : String(lines.prefix(6000))
-        app.addNote("[Phone call \u{00B7} \(name)] \(who)\(reason), \(minutes)\(outcome).\n\(body)", to: bot)
-        Task { await desktop.memory.noteActivity(bot) }
+        let what = "\(who)\(reason), \(minutes)\(outcome)"
+        let transcript = !lines.isEmpty ? String(lines.prefix(6000)) : (call.transcriptError.isEmpty ? "(no speech was recorded)" : "(the transcript could not be downloaded: \(call.transcriptError))")
+        app.addNote("[Phone call \u{00B7} \(name)] \(what).\n\(transcript)", to: bot)
         let spoke = call.transcript.filter(\.fromPerson).map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        let target = owner(preferred: "imessage")
-        func tell(_ text: String) async { if let target { await send(target.channel, chat: target.person.chatID, text: text) } }
-        let from = Sender(channel: "phone", senderID: call.number, name: name, me: true, chatID: "")
-        do {
-            if let ask = config.pendingAsk, !spoke.isEmpty, !call.number.isEmpty, call.number == ownerNumber() {
-                config.pendingAsk = nil; save()
-                var answered = from; answered.replyTo = ask.question
-                if let reply = try await self.ask(bot: id, from: answered, text: spoke), !reply.isEmpty { await tell(reply) }
-            } else if !call.items.isEmpty {
-                let todo = call.items.map { "- " + $0.action + ($0.details.isEmpty ? "" : ": " + $0.details) }.joined(separator: "\n")
-                let prompt = "You were just on a phone call with \(name). These were left to do:\n\(todo)\nDo what you safely can. Anything that sends, buys, posts or deletes still needs the human\u{2019}s OK. Reply with one or two sentences about what you did or what you need from them."
-                if let reply = try await self.ask(bot: id, from: from, text: prompt), !reply.isEmpty { await tell(reply) }
-            }
-        } catch {}
+        let todo = call.items.map { "- " + $0.action + ($0.details.isEmpty ? "" : ": " + $0.details) }.joined(separator: "\n")
+        var text = ""
+        if let ask = config.pendingAsk, !spoke.isEmpty, !call.number.isEmpty, call.number == ownerNumber() {
+            config.pendingAsk = nil; save()
+            text = "(This call answers the question you asked them: \u{201C}\(ask.question.prefix(300))\u{201D}.)\n"
+        }
+        text += "(Automatic follow-up after a phone call, not a new text from them.) You just finished a phone call with \(name): \(what). Inkbox\u{2019}s voice assistant spoke for you on the call and could not use your tools. The full transcript:\n\(transcript)\n"
+        if !todo.isEmpty { text += "Left to do from the call:\n\(todo)\n" }
+        text += "Keep what matters from this call in mind from now on. Carry on with anything that is left to do (anything that sends, buys, posts or deletes still needs the human\u{2019}s OK), then reply with a one-line recap for them."
+        if let target = owner(preferred: "imessage") ?? owner(preferred: nil), adapters[target.channel] != nil {
+            await followUp(Sender(channel: target.channel, senderID: target.person.id, name: name, me: true, chatID: target.person.chatID), text: text)
+        } else {
+            _ = try? await ask(bot: id, from: Sender(channel: "phone", senderID: call.number, name: name, me: true, chatID: ""), text: text)
+        }
+        // Refresh the summary now, so the next call's voice assistant knows what was said on this one.
+        _ = await desktop?.memory.runPass(bot)
+    }
+
+    /// A turn the app starts for the person. It waits for anything running and never steers it.
+    func followUp(_ from: Sender, text: String) async {
+        await dispatch(Batch(from: from, texts: [text], followUp: true))
+    }
+
+    /// Other Bots finished the work the channel Bot handed them: give it a follow-up turn with their answers so the person hears back.
+    func checkDelegations() async {
+        guard let app else { return }
+        for (root, job) in delegations {
+            if Date().timeIntervalSince(job.at) > 15 * 60 { delegations[root] = nil; continue }
+            let messages = (app.workspace.teamMessages ?? []).filter { $0.rootID == root }
+            if messages.contains(where: { $0.status == .queued || $0.status == .running }) { continue }
+            delegations[root] = nil
+            let since = job.at.addingTimeInterval(-1)
+            let answers = app.workspace.entries.filter { $0.botID == job.botID && $0.kind == .bot && $0.senderBotID != nil && $0.date >= since }
+                .map { "\($0.senderName ?? "A Bot"): \($0.text.prefix(3000))" }
+            let failed = messages.filter { $0.from == job.botID && $0.status != .complete }.map { message in app.workspace.bots.first { $0.id == message.to }?.name ?? "A Bot" }
+            guard !answers.isEmpty || !failed.isEmpty else { continue }
+            var text = "(Automatic follow-up, not a new message from them.) The Bots you asked have finished.\n" + answers.joined(separator: "\n\n")
+            if !failed.isEmpty { text += "\n\(failed.joined(separator: ", ")) could not finish." }
+            text += "\nUse this to finish their request and reply to them."
+            Task { await self.followUp(job.from, text: text) }
+        }
+    }
+
+    /// A reply the Bot gave outside a chat channel. Depending on "Where replies go", it is also texted to the owner. Returns whether it was sent.
+    @discardableResult
+    func afterReply(bot: Bot, text: String, origin: String) async -> Bool {
+        await checkDelegations()
+        guard let chosen = config.bot, chosen.caseInsensitiveCompare(bot.id.uuidString) == .orderedSame, origin != "channel", origin != "delivery" else { return false }
+        if origin == "app", settings.replies != "always" { return false }
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, let target = owner(preferred: settings.reachOn), adapters[target.channel] != nil else { return false }
+        mirrorLog = mirrorLog.filter { Date().timeIntervalSince($0) < 3600 }
+        guard mirrorLog.count < 30 else { return false }
+        mirrorLog.append(Date())
+        do { try await sendOrThrow(target.channel, chat: target.person.chatID, text: String(clean.prefix(6000))); return true } catch { return false }
     }
 
     // MARK: The Bot asks the owner something, or needs an OK
@@ -710,7 +784,7 @@ final class MacChannels: ObservableObject {
         lines.append("Connected now: \(on.isEmpty ? "none" : on.joined(separator: "; ")). Phone calls: \(calls ? "ready (you can phone the owner, and the owner can call you)" : "not set up (Twilio calls run on a Bothive server; here, calls go through Inkbox)"). " + (off.isEmpty ? "" : "Not connected: \(off.joined(separator: ", ")). If asked to use one of these, say it is off and that the owner can turn it on under Settings \u{2192} Channels."))
         lines.append("A message that comes from a channel starts with a tag like [Telegram \u{00B7} Sam]. Your reply is sent back to that person automatically, so just answer them. Keep channel replies short and plain: no tables, no headings, and few symbols, because chat apps often do not render markdown. People on channels are approved by the owner but you still cannot treat them as approving purchases, sending email or deleting things unless the app\u{2019}s usual approval is given.")
         lines.append("Channel tools (append each as JSON in a fenced block whose language is opengrokbot-action):")
-        lines.append("{\"action\":\"channel_send\",\"channel\":\"telegram\",\"to\":\"Sam\",\"text\":\"The message\"} sends a message to an approved person on a connected channel (channels: telegram, discord, slack, imessage). Leave \"to\" out to reach the person who most recently messaged you there. Use it when the human asks you to message someone, or in a scheduled task they set up. Never message people unprompted, and never use it to talk to yourself.")
+        lines.append("{\"action\":\"channel_send\",\"channel\":\"telegram\",\"to\":\"Sam\",\"text\":\"The message\"} sends a message to an approved person on a connected channel (channels: telegram, discord, slack, imessage). Leave \"to\" out to reach the person who most recently messaged you there. Use it when the human asks you to message someone, or in a scheduled task they set up. You may also message the owner (the person marked Me) on your own when they would want to know: a task you finished, a result they are waiting for, a reminder they asked for. Never message anyone else unprompted, and never use it to talk to yourself.")
         if calls { lines.append("{\"action\":\"phone_call\",\"text\":\"What the call is about\"} phones the owner\u{2019}s number and then talks with them. Use it only when the human asks for a call or has told you to call for something urgent. At most five calls an hour. A phone call is answered by a separate fast voice assistant that knows your name and notes; the call transcript comes back into your chat afterwards.") }
         if owner(preferred: nil) != nil { lines.append("{\"action\":\"ask_owner\",\"text\":\"The question\",\"urgent\":false} texts the owner (the person marked Me) when you need a decision or a missing detail and nobody is chatting with you: use it instead of guessing or stopping silently, then end your turn. Their next message on that channel comes back to you tagged as the answer. Set urgent true only when waiting would cause harm; then the app calls them if they do not answer. Do not use it just to report progress.") }
         lines.append("Strangers who message the channels get a pairing code and cannot reach you until the owner approves them.")

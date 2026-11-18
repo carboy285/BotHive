@@ -186,6 +186,8 @@ struct RemoteChannels: Codable, Sendable, Equatable {
     struct Settings: Codable, Sendable, Equatable {
         var fast: Bool = true
         var whenBusy: String = "steer"
+        /// "where": reply where the message came from; "always": also text every reply to the owner. Older servers send nothing.
+        var replies: String? = nil
         var reachOn: String? = nil
         var escalate: String = "call"
         var escalateMinutes: Int = 10

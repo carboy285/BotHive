@@ -770,6 +770,7 @@ extension MacAppModel {
                 } else {
                     app.completeReply(replyID, text: text)
                     HeadsUpNotifier.send(title: bot.name, body: text, silent: quiet, urgent: false)
+                    Task { _ = await self.channels.afterReply(bot: bot, text: text, origin: "headsup") }
                 }
             } catch {
                 // The AI could not answer: fall back to the plain list, so the heads-up is never lost.
@@ -783,7 +784,7 @@ extension MacAppModel {
     }
 
     @discardableResult
-    func send(_ text: String, to bot: Bot, app: AppModel, requestID: UUID? = nil, automated: Bool = false, forceLocal: Bool = false, channelTurn: Bool = false) -> Bool {
+    func send(_ text: String, to bot: Bot, app: AppModel, requestID: UUID? = nil, automated: Bool = false, forceLocal: Bool = false, channelTurn: Bool = false, fromChannel: Bool = false) -> Bool {
         if let gateway, !forceLocal {
             guard gateway.send(text, to: bot) else {
                 sendFeedback[bot.id] = gateway.online ? "Write a message first." : "\(gateway.hostName) is not reachable. Check that it is awake with phone access turned on."
@@ -801,9 +802,14 @@ extension MacAppModel {
         guard !runningBots.contains(bot.id), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 100000 else { sendFeedback[bot.id] = "Stop the current response first, and keep messages under 100,000 characters."; return false }
         guard app.addNote(text, to: bot, id: requestID, automated: automated) else { sendFeedback[bot.id] = app.errorMessage ?? "The message could not be saved. Your draft was kept."; return false }
         sendFeedback[bot.id] = nil; browserContinuations.removeValue(forKey: bot.id)
+        // Where this chain of turns started, so its final reply can also be texted to the owner when that is wanted.
+        turnOrigins[bot.id] = fromChannel ? "channel" : (automated ? "scheduled" : "app")
         for provider in providers { startReply(to: bot, cli: provider.cli, model: provider.choice.model, app: app, channelTurn: channelTurn) }
         return true
     }
+
+    /// Where each Bot's current chain of turns started: app, channel or scheduled (10.1.2).
+    private var turnOrigins: [UUID: String] = [:]
 
     static let steerNote = "\n\n(The person sent this while you were still working. Carry on with their original request with this in mind. Do not redo work that is already finished.)"
 
@@ -1031,6 +1037,12 @@ extension MacAppModel {
                 routineFailures.remove(bot.id); _ = app.updateSchedule(routine, botID: bot.id)
             }
             if !continuing, delivery == nil { memory.archiveIfNeeded(); Task { await memory.noteActivity(bot) } }
+            if !continuing {
+                let origin = delivery != nil ? "delivery" : (turnOrigins[bot.id] ?? "app")
+                let final = app.workspace.entries.first(where: { $0.id == replyID })
+                let text = final?.state == .complete ? (final?.text ?? "") : ""
+                Task { _ = await channels.afterReply(bot: bot, text: text, origin: origin) }
+            }
             deliverQueuedMessages(app: app)
         }
     }

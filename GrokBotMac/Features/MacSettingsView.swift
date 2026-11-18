@@ -13,23 +13,28 @@ struct MacSettingsView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            VStack(spacing: 4) {
-                ForEach(SettingsTab.allCases) { tab in
-                    Button { desktop.settingsTab = tab } label: {
-                        HStack(spacing: 13) {
-                            Image(systemName: tab.icon).font(.system(size: 17)).frame(width: 22)
-                            Text(tab.rawValue).font(.system(size: 17))
-                            Spacer()
+            VStack(spacing: 0) {
+                // 15 sections: compact rows so they all fit, and a scroll on short windows instead of cutting off the top.
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 2) {
+                        ForEach(SettingsTab.allCases) { tab in
+                            Button { desktop.settingsTab = tab } label: {
+                                HStack(spacing: 11) {
+                                    Image(systemName: tab.icon).font(.system(size: 15)).frame(width: 20)
+                                    Text(tab.rawValue).font(.system(size: 15))
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(desktop.settingsTab == tab ? MacTheme.raised : .clear, in: RoundedRectangle(cornerRadius: 10))
+                                .contentShape(RoundedRectangle(cornerRadius: 10))
+                            }.buttonStyle(.plain).accessibilityAddTraits(desktop.settingsTab == tab ? [.isSelected] : [])
                         }
-                        .padding(.horizontal, 14).padding(.vertical, 12)
-                        .background(desktop.settingsTab == tab ? MacTheme.raised : .clear, in: RoundedRectangle(cornerRadius: 11))
-                        .contentShape(RoundedRectangle(cornerRadius: 11))
-                    }.buttonStyle(.plain).accessibilityAddTraits(desktop.settingsTab == tab ? [.isSelected] : [])
+                    }
+                    .padding(.top, 6)
                 }
-                Spacer()
-                Text("Bothive \(desktop.updates.current) Beta").font(.system(size: 11)).foregroundStyle(MacTheme.secondary)
+                Text("Bothive \(desktop.updates.current) Beta").font(.system(size: 11)).foregroundStyle(MacTheme.secondary).padding(.top, 8)
             }
-            .padding(16).padding(.top, 6).frame(width: 238).background(MacTheme.sidebar)
+            .padding(16).frame(width: 238).background(MacTheme.sidebar)
             Rectangle().fill(MacTheme.line).frame(width: 1)
             VStack(alignment: .leading, spacing: 0) {
                 HStack {

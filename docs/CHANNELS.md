@@ -41,7 +41,7 @@ Texting "call me" on any channel places a call too. Bot-to-Bot messages and head
 
 ## iMessage, through Inkbox
 
-[Inkbox](https://inkbox.ai) gives an agent its own iMessage identity, so this works from Windows or a Docker server and needs no Mac. Bothive checks Inkbox's inbox every two seconds, marks your message read and shows the typing bubble at once, then answers in the same conversation.
+[Inkbox](https://inkbox.ai) gives an agent its own iMessage identity, so this works from Windows or a Docker server and needs no Mac. Bothive checks Inkbox's inbox twice a second, marks your message read and shows the typing bubble at once, then answers in the same conversation.
 
 1. Sign up at inkbox.ai and create an agent with **iMessage turned on**.
 2. Make an API key for that agent in the Inkbox console and paste it in (Docker: `OPENGROKBOT_INKBOX_API_KEY`).
@@ -60,6 +60,15 @@ Inkbox's limits apply: about 100 iMessages a day per agent on the base plan, and
 - **Steering.** Send another message while the Bot is working and, by default, the running turn stops and the Bot carries on with your new message in mind (it is told not to redo finished work). Choose **Queue** instead to have it answer after the current turn. The words "stop" or "cancel" only stop. The Mac and Windows chat boxes work the same way.
 - **Approval prompts.** Tools that need your OK (like adding reminders) normally ask on the computer's screen. If you are marked Me and the app is in the background, or the request came from a channel, the prompt is also sent to your chat: reply yes or no. Only the person marked Me can answer, and the first answer wins.
 
+## Where replies go
+
+Settings → Channels → **Where replies go**:
+
+- **Reply where I wrote** (default): a text gets a text back, and the reply also shows in the app. A message typed in the app is answered only in the app. Things the Bot does on its own (scheduled tasks, heads-ups) are texted to you on the **Reach me on** channel and shown in the app.
+- **Always text me too**: every reply of the channel Bot, including replies to messages typed in the app, is also texted to you.
+
+When the Bot hands part of a request to another Bot, it waits for that Bot's answer and then texts you the result. The first person you approve counts as you (Me) unless you already marked someone, so the Bot can reach you without extra setup.
+
 ## Memory
 
 The Bot remembers across every channel and the app:
@@ -75,7 +84,7 @@ Turn on iMessage (through Inkbox) and add your own number. Calls are answered an
 
 - Bothive gives the voice assistant the Bot's name, purpose, summary and notes as its instructions (kept under Inkbox's 8,000 characters and refreshed when the Bot's memory changes). It is Inkbox's voice model, not the Bot's own CLI, so it cannot run the Bot's tools during a call. It writes down anything that needs doing; the real Bot picks that up right after the call.
 - **Call me**: text "call me", press **Call me now**, or the Bot starts a call with `phone_call`. Only the person marked Me can ask, at most five calls an hour.
-- Finished calls come back: the transcript goes into the Bot's chat and memory, and the call's action items are handed to the Bot in one follow-up turn (anything that sends, buys or deletes still needs your OK).
+- Finished calls come back: after every call the Bot gets a turn with the whole transcript, why the call happened and anything left to do, so it knows what was said and carries on. It texts you a one-line recap, and its summary is refreshed right away so the next call's voice assistant knows about this one. Anything that sends, buys or deletes still needs your OK. If Inkbox can't be read for calls, the reason shows on the iMessage card.
 - **Safety.** Inkbox's voice assistant defaults to a mode that can look across the whole identity's contacts, email and messages. In the Inkbox console set the agent to **contact-scoped** access and allow only your own number to call it, so a stranger who finds the number cannot talk to your Bot.
 
 ## The Bot reaches out first

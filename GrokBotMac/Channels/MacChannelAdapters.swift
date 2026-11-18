@@ -426,7 +426,7 @@ final class InkboxIMessageAdapter: ChannelAdapter {
 
     private func loop() async {
         while !Task.isCancelled {
-            var wait: UInt64 = 2
+            var waitMS: UInt64 = 500 // checked twice a second, so a message is read in under a second
             do {
                 for message in try await unread() {
                     guard let id = message["id"] as? String, !seen.contains(id) else { continue }
@@ -454,12 +454,12 @@ final class InkboxIMessageAdapter: ChannelAdapter {
                 if Task.isCancelled { return }
                 if error.code == 401 || error.code == 400 { state = .init(state: "error", detail: error.message); return }
                 state = .init(state: "error", detail: error.code == 429 ? error.message : "Reconnecting: \(error.message)")
-                wait = error.retryAfter.map { UInt64(min($0, 300)) } ?? 8
+                waitMS = error.retryAfter.map { UInt64(min($0, 300) * 1000) } ?? 8000
             } catch {
                 if Task.isCancelled { return }
-                state = .init(state: "error", detail: "Reconnecting: \(error.localizedDescription)"); wait = 8
+                state = .init(state: "error", detail: "Reconnecting: \(error.localizedDescription)"); waitMS = 8000
             }
-            try? await Task.sleep(nanoseconds: wait * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: waitMS * 1_000_000)
         }
     }
 

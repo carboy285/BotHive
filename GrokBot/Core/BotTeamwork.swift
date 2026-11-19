@@ -52,8 +52,6 @@ struct BotAction: Decodable, Sendable {
     var query: String?
     var tool: String?
     var arguments: JSONValue?
-    /// 10.2: chat channels (channel_send).
-    var channel: String?
 }
 
 /// Any JSON value, for tool input whose shape the app does not know in advance (connected-app tools).

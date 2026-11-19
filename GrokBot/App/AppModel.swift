@@ -440,7 +440,7 @@ final class AppModel: ObservableObject {
                 default: note("Unsupported app operation: \(String(action.action.prefix(60))). Only you can delete Bots or approve external actions.")
                 }
             }
-            if let delivery, value.bots.contains(where: { $0.id == delivery.from }) {
+            if let delivery, delivery.reply != true, value.bots.contains(where: { $0.id == delivery.from }) {
                 var result = Entry(botID: delivery.from, kind: .bot, text: parsed.text.isEmpty ? "Request completed. See \(bot.name)’s chat for activity." : parsed.text)
                 result.senderBotID = bot.id; result.senderName = bot.name
                 result.provider = value.entries.first(where: { $0.id == replyID })?.provider

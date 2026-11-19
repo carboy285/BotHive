@@ -87,7 +87,7 @@ function apply(state,bot,reply,response,configuration,delivery){
    state.bots.push({id:randomUUID(),name:action.name.trim(),purpose:'Group conversation',color:'ochre',memberIDs:members.map(x=>x.id)});note('Created group · '+action.name.trim());
   }else note('Unsupported app operation. Only you can delete Bots or approve external actions.');
  }
- if(delivery&&state.bots.some(x=>x.id===delivery.from))state.entries.push({...entry(delivery.from,'bot',parsed.text||`Request completed. See ${bot.name}’s chat for activity.`),senderBotID:bot.id,senderName:bot.name,provider:reply.provider,state:'complete'});
+ if(delivery&&!delivery.reply&&state.bots.some(x=>x.id===delivery.from))state.entries.push({...entry(delivery.from,'bot',parsed.text||`Request completed. See ${bot.name}’s chat for activity.`),senderBotID:bot.id,senderName:bot.name,provider:reply.provider,state:'complete'});
 }
 function begin(state,message){message.status='running';const sender=state.bots.find(x=>x.id===message.from)?.name||'Deleted Bot';state.entries.push({...entry(message.to,'activity',`Message from ${sender}:\n${message.text}`),senderBotID:message.from,senderName:sender});}
 function finish(state,message,status){message.status=status;if(status!=='complete'&&state.bots.some(x=>x.id===message.from)){const name=state.bots.find(x=>x.id===message.to)?.name||'Deleted Bot';state.entries.push(entry(message.from,'activity',`${name}’s request ${status==='stopped'?'was stopped':'could not be completed'}. Open its chat to check setup or retry.`));}}

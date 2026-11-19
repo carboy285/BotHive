@@ -123,7 +123,7 @@ class EventParser {
   }
   part(id,text){if(!this.parts.has(id))this.order.push(id);this.parts.set(id,text);this.text=this.order.map(x=>this.parts.get(x)).join('\n\n');}
 }
-function runCLI({installation,prompt,session,directory,onEvent,mcpURL,model='',timeout=600000,env={},allowConnectedApps=false,fast=false,tools=null}) {
+function runCLI({installation,prompt,session,directory,onEvent,mcpURL,model='',timeout=1800000,env={},allowConnectedApps=false,fast=false,tools=null}) {
   if(isLocal(installation.provider))return localLLM.run({provider:installation.provider,base:installation.path,prompt,model,onEvent,timeout});
   let child, cancelled=false, timedOut=false, cancelTimer;
   const cancel=(immediately=false)=>{cancelled=true;if(child&&child.exitCode===null){if(immediately){child.kill('SIGKILL');return;}if(!child.killed){child.kill('SIGINT');cancelTimer=setTimeout(()=>{if(child.exitCode===null)child.kill('SIGKILL');},2000);cancelTimer.unref();}}};
@@ -153,7 +153,7 @@ function runCLI({installation,prompt,session,directory,onEvent,mcpURL,model='',t
         child.on('error',()=>{clean();reject(new Error('The CLI could not start. Check its installation path in setup.'));});
         child.on('close',code=>{
           clean();pending+=decoder.end();if(pending.trim())consume(pending);
-          if(timedOut)return reject(new Error('The CLI did not finish within ten minutes. Check its connection and retry.'));
+          if(timedOut)return reject(new Error('The CLI did not finish within thirty minutes. Check its connection and retry.'));
           if(cancelled)return reject(new Error('Response stopped.'));
           if(code!==0||protocolFailed){const auth=/not logged in|unauthorized|authentication|sign in|401/i.test(stderr);return reject(new Error(auth?'Sign in through your CLI, then retry.':`The CLI stopped (exit ${code??'unknown'}). Check its login and configuration in Terminal.`));}
           if(!parser.text.trim())return reject(new Error('The CLI did not return a supported response. Update it or choose another installation.'));

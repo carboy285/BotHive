@@ -4,6 +4,7 @@ import { renderApiKeys } from './api-keys.js';
 import { renderSecureLogins } from './secure-logins.js';
 import { renderSkills, renderBotSkills } from './skills-ui.js';
 import { renderBotGroups } from './groups-ui.js';
+import { renderChannels } from './channels-ui.js';
 import { renderShareBot, renderAddFromCode } from './share-ui.js';
 import { installDrop } from './drop-ui.js';
 import { openAccountMenu } from './account-menu.js';
@@ -11,7 +12,6 @@ import { connectorIcon } from './connector-icon.js';
 import { installSidebarResize, installChatTools } from './layout-ui.js';
 import { renderRoutines } from './routines-ui.js';
 import { renderServers, installServerBanner } from './servers-ui.js';
-import { renderChannels } from './channels-ui.js';
 import { icon, setIcon } from './icons.js';
 import { encodeWav, splitSuggestions, starters } from './voice-core.mjs';
 import { renderMarkdown } from './markdown.js';
@@ -398,8 +398,8 @@ function renderMessages(bot){
  const pending=pendingSends.get(bot.id);
  if(pending&&!live.has(pending.id)){const row=append(node('div','message-row user pending'),append(node('div','message-body'),node('div','bubble',pending.text),node('small','delivery-state',pending.failed?'Failed to send':'Sending…')));row.dataset.extra='true';if(pending.failed)row.firstChild.append(button('Retry sending',()=>submitMessage(bot,pending.text,pending.id)));messages.append(row);}
  if(!entries(bot).length&&!pending){const cards=node('div','starters');for(const idea of starters(bot.name,bot.purpose))cards.append(append(button('',()=>submitMessage(bot,idea,undefined,[]),'starter'),node('span','',idea)));const empty=append(node('div','empty empty-chat'),avatar(bot),node('h2','',bot.name),node('p','',bot.purpose||'What’s on your mind?'),cards);empty.dataset.extra='true';messages.append(empty);}
- const busy=running.has(bot.id),send=$('#save-note');send.classList.toggle('stop',busy);if(send.dataset.icon!==(busy?'stop':'send')){send.dataset.icon=busy?'stop':'send';setIcon(send,busy?'stop':'send',busy?16:19);}send.title=busy?'Stop response':'Send';
- send.disabled=!busy&&!!pending&&!pending.failed;send.setAttribute('aria-label',busy?'Stop response':pending&&!pending.failed?'Sending message':'Send message');
+ const busy=running.has(bot.id),send=$('#save-note'),stopMode=busy&&!$('#draft').value.trim()&&!(pendingFiles.get(bot.id)||[]).length;send.classList.toggle('stop',stopMode);if(send.dataset.icon!==(stopMode?'stop':'send')){send.dataset.icon=stopMode?'stop':'send';setIcon(send,stopMode?'stop':'send',stopMode?16:19);}send.title=stopMode?'Stop response':busy?'Send (steers the Bot)':'Send';
+ send.disabled=!stopMode&&!!pending&&!pending.failed;send.setAttribute('aria-label',stopMode?'Stop response':busy?'Steer the Bot':pending&&!pending.failed?'Sending message':'Send message');
  renderApprovalCard();
  if(chatScroll.follow)scheduleChatBottom();else chatViewport.scrollTop=previousScroll;
 }
@@ -425,6 +425,10 @@ function activityPill(text,routine=false){
  if(!more){const pill=append(node('div','activity-pill'),head);pill.setAttribute('aria-label',`Activity: ${line}`);return pill;}
  const details=node('details','activity-pill'),summary=node('summary');summary.append(head);summary.setAttribute('aria-label',`Activity: ${line}. Show details`);append(details,summary,node('pre','activity-detail',text));return details;
 }
+// Messages from iMessage, Telegram and so on start with a tag like "[iMessage · Sam · the owner] ". Show a small channel badge instead.
+const CHANNEL_LOOK={iMessage:['#34c759','💬'],SMS:['#34c759','💬'],Telegram:['#29a9e1','✈'],Discord:['#5865f2','🎮'],Slack:['#e01e5a','#'],phone:['#34c759','📞'],'Phone call':['#34c759','📞']};
+function channelOrigin(text){const match=/^\[(Telegram|Discord|Slack|SMS|iMessage|phone|Phone call) \u00b7 ([^\]]{1,80}?)( \u00b7 the owner)?\] ?/.exec(text||'');if(!match)return null;let body=text.slice(match[0].length);const steer=body.indexOf('\n\n(The person sent this while you were still working.');if(steer>=0)body=body.slice(0,steer);const automatic=/^\(Automatic follow-up|\n\(Automatic follow-up/.test(body);if(automatic){const close=body.indexOf('.) ');if(close>=0)body=body.slice(close+3);}return{channel:match[1],name:match[2],owner:!!match[3],body,automatic};}
+function originBadge(origin){const [color,mark]=CHANNEL_LOOK[origin.channel]||CHANNEL_LOOK.iMessage;const label=origin.channel==='phone'?'Phone call':origin.channel;const badge=node('div','channel-origin');const dot=node('span','channel-origin-mark',mark);dot.style.background=color;badge.append(dot,node('span','',origin.automatic?`Automatic follow-up · ${label}`:`${label} · ${origin.name}`));badge.setAttribute('aria-label',origin.automatic?'Automatic follow-up':`From ${label}, ${origin.name}`);return badge;}
 function typingBubble(){const dots=append(node('div','bubble typing'),node('i'),node('i'),node('i'));dots.setAttribute('aria-label','Thinking');return append(node('div','typing-row'),dots,node('span','typing-label','Thinking it through'));}
 function senderFace(entry){const sender=workspace.bots.find(x=>x.id===entry.senderBotID);if(sender)return avatar(sender);const ghost=node('span','avatar ghost');ghost.setAttribute('aria-hidden','true');return ghost;}
 function questionCard(bot,prompt,canAnswer){
@@ -457,7 +461,7 @@ function renderEntryBody(bot,entry,body,{isLastUser,canAnswer,canSuggest}){
  else if(text){
   // Bot replies are Markdown (0.9.5): lists, tables, highlighted code, links and the Bot's own images. Your messages stay plain text.
   if(entry.kind==='bot'){const bubble=node('div',`bubble md-bubble${entry.state==='failed'?' failed':''}`);bubble.append(renderMarkdown(text,markdownContext(bot)));stack.append(bubble);}
-  else stack.append(node('div',`bubble${entry.state==='failed'?' failed':''}`,text));
+  else{const origin=channelOrigin(text);if(origin)stack.append(originBadge(origin));stack.append(node('div',`bubble${entry.state==='failed'?' failed':''}`,origin?origin.body:text));}
  }
  if(prompt)stack.append(questionCard(bot,prompt,canAnswer));
  if(canSuggest&&!prompt&&follow.suggestions.length){const chips=node('div','followups');chips.setAttribute('aria-label','Suggested follow-ups');for(const suggestion of follow.suggestions){const chip=button('',()=>submitMessage(bot,suggestion,undefined,[]),'followup');append(chip,node('span','followup-text',suggestion),node('span','followup-arrow','↗'));chips.append(chip);}stack.append(chips);}
@@ -480,7 +484,8 @@ function renderApprovalCard(){
  append(card,head,node('h3','',next.title),next.detail?node('pre','approval-detail',next.detail):null,append(node('div','approval-actions'),deny,allow));
  area.prepend(card);
 }
-$('#save-note').addEventListener('click',event=>{const bot=currentBot();if(bot&&running.has(bot.id)){event.preventDefault();bridge.stop(bot.id);}});
+$('#save-note').addEventListener('click',event=>{const bot=currentBot();if(bot&&running.has(bot.id)&&!$('#draft').value.trim()&&!(pendingFiles.get(bot.id)||[]).length){event.preventDefault();bridge.stop(bot.id);}});
+$('#draft').addEventListener('input',()=>{const bot=currentBot();if(!bot)return;const send=$('#save-note'),busy=running.has(bot.id),stopMode=busy&&!$('#draft').value.trim()&&!(pendingFiles.get(bot.id)||[]).length;send.classList.toggle('stop',stopMode);if(send.dataset.icon!==(stopMode?'stop':'send')){send.dataset.icon=stopMode?'stop':'send';setIcon(send,stopMode?'stop':'send',stopMode?16:19);}send.title=stopMode?'Stop response':busy?'Send (steers the Bot)':'Send';send.setAttribute('aria-label',stopMode?'Stop response':busy?'Steer the Bot':'Send message');});
 const waitingOn=bot=>[...approvals.values()].some(x=>x.title.startsWith(`Let ${bot.name} `));
 bridge.onApproval?.(request=>{if(!request?.id)return;approvals.set(request.id,request);render();});
 bridge.pendingApprovals?.().then(response=>{if(response?.ok)for(const request of response.value||[])approvals.set(request.id,request);if(approvals.size)render();}).catch(()=>{});
@@ -489,7 +494,7 @@ let answerMode=null;
 function showAnswerMode(){for(const [name,id] of [['think','#mode-think'],['deep','#mode-deep']]){const button=$(id);if(button){button.setAttribute('aria-pressed',String(answerMode===name));button.classList.toggle('on',answerMode===name);}}}
 for(const [name,id] of [['think','#mode-think'],['deep','#mode-deep']])$(id)?.addEventListener('click',()=>{answerMode=answerMode===name?null:name;showAnswerMode();$('#draft')?.focus();});
 async function submitMessage(bot,text,id=crypto.randomUUID(),files=pendingFiles.get(bot.id)||[]){
- if(running.has(bot.id)||pendingSends.get(bot.id)&&!pendingSends.get(bot.id).failed)return;
+ if(pendingSends.get(bot.id)&&!pendingSends.get(bot.id).failed)return;
  if(selected===bot.id)chatScroll.follow=true;
  const pending={id,text:text||(files.length?`📎 ${files.length} attachment${files.length===1?'':'s'}`:''),failed:false};pendingSends.set(bot.id,pending);drafts.set(bot.id,text);persistDrafts();renderMessages(bot);
  const mode=answerMode;try{workspace=await result(bridge.send(bot.id,text,id,files.length?files:undefined,mode||undefined));answerMode=null;showAnswerMode();pendingSends.delete(bot.id);if(files.length&&pendingFiles.get(bot.id)===files){pendingFiles.delete(bot.id);renderChips();}if(drafts.get(bot.id)===text){drafts.delete(bot.id);if(selected===bot.id&&$('#draft').value.trim()===text)$('#draft').value='';}persistDrafts();render();if(selected===bot.id)$('#draft').focus();}
@@ -805,7 +810,7 @@ const voice = createVoice({
   openBot: id => { if (workspace.bots.some(x => x.id === id)) selectBot(id); }
 });
 $('#voice-button').addEventListener('click', () => { if (!window.desktop) { toast('Voice mode is available in the installed app.'); return; } if (!setup.installed.length) { showConnection(); return; } voice.start(); });
-$('#composer').addEventListener('submit',event=>{event.preventDefault();const bot=currentBot(),text=$('#draft').value.trim();if(!bot||(!text&&!(pendingFiles.get(bot.id)||[]).length)||running.has(bot.id))return;if(!window.desktop||!setup.installed.length){showConnection();return;}submitMessage(bot,text,pendingSends.get(bot.id)?.text===text?pendingSends.get(bot.id).id:undefined);});
+$('#composer').addEventListener('submit',event=>{event.preventDefault();const bot=currentBot(),text=$('#draft').value.trim();if(!bot||(!text&&!(pendingFiles.get(bot.id)||[]).length))return;if(!window.desktop||!setup.installed.length){showConnection();return;}submitMessage(bot,text,pendingSends.get(bot.id)?.text===text?pendingSends.get(bot.id).id:undefined);});
 $('#draft').addEventListener('input',()=>{ drafts.set(selected,$('#draft').value);persistDrafts(); $('#draft').style.height='auto';$('#draft').style.height=Math.min(180,$('#draft').scrollHeight)+'px'; });
 $('#search-button').addEventListener('click',openPalette);
 $('#new-button').addEventListener('click',showNewBot); $('#profile-button').addEventListener('click',event=>{if(document.querySelector('.account-menu')){document.querySelector('.account-menu').remove();return;}openAccountMenu({anchor:event.currentTarget,bridge,result,toast,openSettings:tab=>showSettings(tab)});}); $('#apps-button').addEventListener('click',showApps); $('#status-button').addEventListener('click',()=>showConnection()); $('#attachment-button').addEventListener('click',()=>{const content=panel('Conversation actions');const bot=currentBot();append(content,button('Attach files…',()=>{dialog.close();attachFiles(bot);}),button('Export conversation…',()=>exportConversation()),node('p','muted','Tip: press Ctrl+V in the message box to paste an image.'));});

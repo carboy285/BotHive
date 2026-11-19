@@ -23,6 +23,8 @@ final class MacApproval: ObservableObject {
     var handler: (@MainActor (_ title: String, _ detail: String, _ authenticate: Bool) async -> Bool)?
     /// Called when the request shown to phones changes.
     var onChange: (() -> Void)?
+    /// Called when a request that a phone may answer appears, so it can also be sent to the owner's chat (10.1.2).
+    var onRoute: (@MainActor (UUID, String, String) -> Void)?
 
     @MainActor private final class Request {
         let id = UUID()
@@ -80,6 +82,7 @@ final class MacApproval: ObservableObject {
         alert.addButton(withTitle: "Approve")
         let request = Request(title: title, detail: detail, phoneCanAnswer: !authenticate && Self.phoneApprovalsEnabled)
         current = request; onChange?()
+        if request.phoneCanAnswer { onRoute?(request.id, title, detail) }
         if MacPush.enabled { Task { await MacPush.send(title: "Approval needed", body: MacPush.includeText ? title : "A Bot is waiting for your OK.", urgent: true) } }
         let hasWindow = NSApp.windows.contains { $0.isVisible && $0.canBecomeMain && !$0.isMiniaturized }
         let approved: Bool = await withCheckedContinuation { continuation in

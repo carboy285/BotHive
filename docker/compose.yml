@@ -8,12 +8,28 @@ services:
         CLIS: "@anthropic-ai/claude-code"
     ports:
       - "127.0.0.1:8765:8765"   # only this computer; change deliberately to share on your network
+      - "127.0.0.1:8766:8766"   # phone calls only: Twilio talks to this port through Tailscale Funnel (docs/CHANNELS.md). It serves nothing else.
     environment:
       OPENGROKBOT_WEB_PASSWORD: ${OPENGROKBOT_WEB_PASSWORD:?set a password of 10 or more characters}
       OPENGROKBOT_WEB_USER: ${OPENGROKBOT_WEB_USER:-admin}
       # 1 lets the Mac, Windows and iPhone apps signed in to this server change its settings, API keys and installed CLIs (nothing else can reach it
       # except through the password). Set it to 0 to keep the server read-only from the apps.
       OPENGROKBOT_WEB_ADMIN: ${OPENGROKBOT_WEB_ADMIN:-1}
+      # Chat channels (docs/CHANNELS.md). All optional; they can also be set from the Mac or Windows app under Settings → Channels.
+      OPENGROKBOT_CHANNEL_BOT: ${OPENGROKBOT_CHANNEL_BOT:-}
+      OPENGROKBOT_CHANNELS_APPROVE: ${OPENGROKBOT_CHANNELS_APPROVE:-}
+      OPENGROKBOT_TELEGRAM_TOKEN: ${OPENGROKBOT_TELEGRAM_TOKEN:-}
+      OPENGROKBOT_DISCORD_TOKEN: ${OPENGROKBOT_DISCORD_TOKEN:-}
+      OPENGROKBOT_SLACK_BOT_TOKEN: ${OPENGROKBOT_SLACK_BOT_TOKEN:-}
+      OPENGROKBOT_SLACK_APP_TOKEN: ${OPENGROKBOT_SLACK_APP_TOKEN:-}
+      OPENGROKBOT_INKBOX_API_KEY: ${OPENGROKBOT_INKBOX_API_KEY:-}
+      OPENGROKBOT_TWILIO_ACCOUNT_SID: ${OPENGROKBOT_TWILIO_ACCOUNT_SID:-}
+      OPENGROKBOT_TWILIO_AUTH_TOKEN: ${OPENGROKBOT_TWILIO_AUTH_TOKEN:-}
+      OPENGROKBOT_TWILIO_NUMBER: ${OPENGROKBOT_TWILIO_NUMBER:-}
+      OPENGROKBOT_OWNER_NUMBER: ${OPENGROKBOT_OWNER_NUMBER:-}
+      OPENGROKBOT_CALL_PIN: ${OPENGROKBOT_CALL_PIN:-}
+      OPENGROKBOT_PUBLIC_URL: ${OPENGROKBOT_PUBLIC_URL:-}
+      OPENGROKBOT_VOICE_HOST: 0.0.0.0   # inside the container; the port above is published to this computer only
     volumes:
       - opengrokbot-data:/data
     restart: unless-stopped

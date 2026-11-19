@@ -3,7 +3,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createChannelsHost } = require('./channels-host.cjs');
 
+const { mkdtempSync, readdirSync, readFileSync } = require('node:fs');
+const os = require('node:os'), path = require('node:path');
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0xff, 0xd9]);
+const HEIC = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypheic'), Buffer.alloc(16)]);
+const images = { 'a.jpg': JPEG, 'b.heic': HEIC, 'c.txt': Buffer.from('hello world, not an image') };
 function fixture({ env = {}, platform = 'linux', saved = {}, stall = false, fail = false } = {}) {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'channel-media-')), stops = [], startOptions = [];
   const files = { ...saved }; const started = []; const servers = [];
   const state = { bots: [{ id: 'hive', name: 'Hive', isMain: true }, { id: 'travel', name: 'Travel' }, { id: 'grp', name: 'Team', memberIDs: ['hive', 'travel'] }], entries: [] };
   let running = new Set();
@@ -12,12 +18,13 @@ function fixture({ env = {}, platform = 'linux', saved = {}, stall = false, fail
     atomicJSON: async (name, value) => { files[name] = JSON.parse(JSON.stringify(value)); },
     safeStorage: { isEncryptionAvailable: () => platform === 'win32', encryptString: s => Buffer.from('enc:' + s), decryptString: b => b.toString().slice(4) },
     platform, ensureState: async () => {}, getState: () => state,
-    startChat: async (id, text) => { started.push([id, text]); running.add(id); state.entries.push({ botID: id, kind: 'user', text }); if (!stall) setTimeout(() => { state.entries.push({ botID: id, kind: 'bot', text: fail ? 'it broke' : 'reply to ' + text, state: fail ? 'failed' : 'complete' }); running.delete(id); }, 5); },
+    startChat: async (id, text, options) => { started.push([id, text]); startOptions.push(options); running.add(id); state.entries.push({ botID: id, kind: 'user', text }); if (!stall) setTimeout(() => { state.entries.push({ botID: id, kind: 'bot', text: fail ? 'it broke' : 'reply to ' + text, state: fail ? 'failed' : 'complete' }); running.delete(id); }, 5); },
     isRunning: id => running.has(id), env, sleep: ms => new Promise(r => setTimeout(r, Math.min(ms, 2))),
     createServer: () => { const server = { closed: false, listen(port, host) { server.at = [port, host]; }, close() { server.closed = true; }, on() {} }; servers.push(server); return server; },
-    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({}) }), askTimeout: 200,
+    fetchImpl: async url => (/\.(jpg|heic|txt)$/.test(url) ? { ok: true, status: 200, arrayBuffer: async () => images[url.split('/').pop()] } : { ok: true, status: 200, json: async () => ({}) }), askTimeout: 200,
+    botDirectory: () => directory, stop: id => { stops.push(id); }, pollMs: 1,
   });
-  return { host, files, started, servers, state, running };
+  return { host, files, started, startOptions, servers, state, running, stops, directory };
 }
 
 test('a message is sent to the chosen Bot and its reply comes back', async () => {
@@ -124,4 +131,89 @@ test('channel_send reaches only approved people, defaults to whoever wrote last,
   const token = /t=([a-f0-9]+)/.exec(placed[0].Url)[1];
   const xml = await g.host.voice.handle('/twilio/voice', { AccountSid: 'AC1', CallSid: 'CA1' }, { t: token });
   assert.match(xml, /Your 3pm moved to 4pm\./);
+});
+
+test('end to end: a Telegram message from a pre-approved person reaches the chosen Bot and its answer is sent back; a stranger only gets a code', async () => {
+  const sent = []; const updates = [[
+    { update_id: 1, message: { text: 'what is on today?', chat: { id: 555, type: 'private' }, from: { id: 555, first_name: 'Sam' } } },
+    { update_id: 2, message: { text: 'let me in', chat: { id: 777, type: 'private' }, from: { id: 777, first_name: 'Mallory' } } },
+  ]];
+  const fetchImpl = async (url, options) => {
+    const method = url.split('/').pop(); const body = JSON.parse(options.body); const json = value => ({ ok: true, status: 200, json: async () => value });
+    if (method === 'getMe') return json({ ok: true, result: { username: 'hive_bot' } });
+    if (method === 'getUpdates') { const next = updates.shift(); if (!next) { await new Promise(r => setTimeout(r, 5)); return json({ ok: true, result: [] }); } return json({ ok: true, result: next }); }
+    if (method === 'sendMessage') sent.push([body.chat_id, body.text]);
+    return json({ ok: true, result: {} });
+  };
+  const f = fixture({ env: { OPENGROKBOT_CHANNEL_BOT: 'travel', OPENGROKBOT_TELEGRAM_TOKEN: '9:zzz', OPENGROKBOT_CHANNELS_APPROVE: 'telegram:555' } });
+  // Rebuild the host with the fake Telegram API (the fixture's own fetch answers nothing useful).
+  const { createChannelsHost } = require('./channels-host.cjs');
+  const files = f.files; const state = f.state; const started = [];
+  const host = createChannelsHost({
+    loadJSON: async (n, d) => (n in files ? JSON.parse(JSON.stringify(files[n])) : d), atomicJSON: async (n, v) => { files[n] = JSON.parse(JSON.stringify(v)); },
+    safeStorage: { isEncryptionAvailable: () => false }, platform: 'linux', ensureState: async () => {}, getState: () => state,
+    startChat: async (id, text) => { started.push([id, text]); state.entries.push({ botID: id, kind: 'bot', text: 'Two meetings today.', state: 'complete' }); },
+    isRunning: () => false, env: { OPENGROKBOT_CHANNEL_BOT: 'travel', OPENGROKBOT_TELEGRAM_TOKEN: '9:zzz', OPENGROKBOT_CHANNELS_APPROVE: 'telegram:555' },
+    fetchImpl, sleep: async () => {}, batchMs: 0,
+  });
+  await host.init();
+  await new Promise(r => setTimeout(r, 80));
+  assert.deepEqual(started, [['travel', '[Telegram · Sam] what is on today?']], 'only the approved person reaches the Bot');
+  assert.ok(sent.some(([chat, text]) => chat === 555 || chat === '555' ? text === 'Two meetings today.' : false), 'the answer goes back to Sam');
+  const stranger = sent.find(([chat]) => String(chat) === '777');
+  assert.ok(stranger && /Your code is \d{6}/.test(stranger[1]) && stranger[1].length < 160, 'Mallory gets a short code and nothing else');
+  assert.equal(host.hub.status().channels.telegram.pending.length, 1);
+  assert.match(host.note('travel'), /Telegram \(@hive_bot\), 1 approved person/);
+  await host.stop();
+});
+
+test('a photo from a channel is saved into the Bot\u2019s Attachments folder and the Bot is told where it is', async () => {
+  const f = fixture(); await f.host.init();
+  const answer = await f.host.askBot('hive', '', { channel: 'imessage', senderName: 'Sam', me: true }, { media: [{ url: 'https://s3.example/a.jpg', contentType: 'image/jpeg' }] });
+  assert.match(answer, /^reply to \[iMessage \u00b7 Sam \u00b7 the owner\] \(photo\)/);
+  const [, sent] = f.started.at(-1); const files = readdirSync(path.join(f.directory, 'Attachments'));
+  assert.equal(files.length, 1); assert.match(files[0], /\.jpg$/); assert.ok(sent.includes('Attachments/' + files[0]));
+  assert.deepEqual(readFileSync(path.join(f.directory, 'Attachments', files[0])), JPEG);
+});
+
+test('pictures that cannot be read are explained instead of guessed at', async () => {
+  const f = fixture(); await f.host.init();
+  assert.match(await f.host.askBot('hive', '', { channel: 'imessage', senderName: 'Sam' }, { media: [{ url: 'https://s3.example/b.heic' }] }), /HEIC.*JPEG or a screenshot/);
+  assert.match(await f.host.askBot('hive', '', { channel: 'imessage', senderName: 'Sam' }, { media: [{ url: 'https://s3.example/c.txt' }] }), /not a PNG, JPEG, GIF or WebP/);
+  assert.equal(f.started.length, 0, 'nothing readable and no words: the Bot is not bothered');
+  const mixed = await f.host.askBot('hive', 'add these', { channel: 'imessage', senderName: 'Sam' }, { media: [{ url: 'https://s3.example/a.jpg' }, { url: 'https://s3.example/b.heic' }] });
+  assert.match(mixed, /HEIC/); assert.match(f.started.at(-1)[1], /Attachments\/.*\.jpg/);
+});
+
+test('channel turns are fast turns, steering adds a note, and a stopped turn returns nothing', async () => {
+  const f = fixture({ stall: true }); await f.host.init();
+  const pending = f.host.askBot('hive', 'plan my day', { channel: 'telegram', senderName: 'Sam' }, { fast: true });
+  await new Promise(r => setTimeout(r, 5));
+  f.host.hub.deps.stop('hive'); assert.deepEqual(f.stops, ['hive']);
+  f.running.delete('hive');
+  assert.equal(await pending, null);
+  const steered = f.host.askBot('hive', 'shorter', { channel: 'telegram', senderName: 'Sam' }, { steer: true, fast: false });
+  await new Promise(r => setTimeout(r, 5));
+  assert.match(f.started.at(-1)[1], /\(The person sent this while you were still working/);
+  assert.deepEqual(f.startOptions, [{ channelTurn: true, channel: true }, { channelTurn: false, channel: true }]);
+  f.running.delete('hive'); await steered;
+});
+
+test('a reply that needs a tool is not cut short: the first reply goes out at once and the real answer follows', async () => {
+  const state = { bots: [{ id: 'hive', name: 'Hive', isMain: true }], entries: [] }; let working = false;
+  const host = createChannelsHost({
+    loadJSON: async (n, d) => d, atomicJSON: async () => {}, safeStorage: { isEncryptionAvailable: () => false }, platform: 'linux',
+    ensureState: async () => {}, getState: () => state, env: {}, sleep: () => new Promise(r => setTimeout(r, 1)), pollMs: 1, askTimeout: 2000,
+    startChat: async (id, text) => {
+      state.entries.push({ botID: id, kind: 'user', text }); working = true;
+      // First turn says it will check, then (after a gap, like a tool step) the second turn has the answer.
+      setTimeout(() => state.entries.push({ id: 'a', botID: id, kind: 'bot', text: 'I will check your reminders now.', state: 'complete' }), 3);
+      setTimeout(() => { state.entries.push({ id: 'b', botID: id, kind: 'bot', text: 'You have two reminders.', state: 'complete' }); working = false; }, 30);
+    },
+    isRunning: () => working,
+  });
+  const progress = [];
+  const answer = await host.askBot('hive', 'check my reminders', { channel: 'imessage', senderName: 'Sam' }, { progress: async text => { progress.push(text); } });
+  assert.deepEqual(progress, ['I will check your reminders now.']);
+  assert.equal(answer, 'You have two reminders.');
 });

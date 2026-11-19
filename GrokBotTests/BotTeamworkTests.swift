@@ -61,7 +61,7 @@ final class BotTeamworkTests: XCTestCase {
         let main = try XCTUnwrap(app.workspace.bots.first)
         XCTAssertTrue(app.addBot(name: "School", purpose: "Study", color: "ochre"))
         let school = try XCTUnwrap(app.workspace.bots.last)
-        let delivery = TeamMessage(id: UUID(), rootID: UUID(), from: school.id, to: main.id, text: "test", depth: 4)
+        let delivery = TeamMessage(id: UUID(), rootID: UUID(), from: school.id, to: main.id, text: "test", depth: 6)
         let response = """
         ```opengrokbot-action
         {"action":"delete_bot","to":"School"}

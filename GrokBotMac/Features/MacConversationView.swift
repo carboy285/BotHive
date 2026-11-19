@@ -271,14 +271,14 @@ struct MacConversationView: View {
                     .popover(isPresented: Binding(get: { dictation.note != nil }, set: { if !$0 { dictation.note = nil } })) {
                         Text(dictation.note ?? "").font(.callout).padding(14).frame(width: 280)
                     }
-                    if desktop.runningBots.contains(bot.id) {
+                    if desktop.runningBots.contains(bot.id), desktop.gateway != nil || (draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (desktop.attachments[bot.id] ?? []).isEmpty) {
                         Button { desktop.stop(botID: bot.id) } label: { Image(systemName: "stop.fill").foregroundStyle(ink).frame(width: 36, height: 36).background(tint, in: Circle()) }.buttonStyle(MacPressStyle()).help("Stop response")
                     } else if !draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(desktop.attachments[bot.id] ?? []).isEmpty {
                         Button { sendMessage() } label: {
                             Image(systemName: "arrow.up").font(.system(size: 18, weight: .semibold)).foregroundStyle(ink)
                                 .frame(width: 36, height: 36).background(tint, in: Circle())
                         }.buttonStyle(MacPressStyle()).disabled(desktop.needsProvider(bot))
-                            .help("Send message").accessibilityLabel("Send message")
+                            .help(desktop.runningBots.contains(bot.id) ? "Send (steers the Bot)" : "Send message").accessibilityLabel(desktop.runningBots.contains(bot.id) ? "Steer the Bot" : "Send message")
                     } else {
                         Button { startVoice() } label: {
                             Image(systemName: "waveform").font(.system(size: 17, weight: .semibold)).foregroundStyle(ink)
@@ -474,6 +474,12 @@ struct MacConversationView: View {
         let base = draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !base.isEmpty || !files.isEmpty else { return }
         let message = MacAppModel.attachmentMessage(base: base, names: files)
+        if desktop.runningBots.contains(bot.id), desktop.gateway == nil {
+            // Sending while the Bot works steers it: the running turn stops and the new message carries on from it.
+            desktop.steer(message, to: bot, app: app)
+            draft.wrappedValue = ""; desktop.attachments[bot.id] = []; desktop.flushDrafts(); composing = true
+            return
+        }
         if desktop.send(message, to: bot, app: app) {
             desktop.outgoingDrafts[bot.id] = RecoverableDraft(text: draft.wrappedValue, files: files)
             draft.wrappedValue = ""; desktop.attachments[bot.id] = []; desktop.flushDrafts(); composing = true
@@ -651,6 +657,9 @@ struct MacMessageView: View {
         let fromOtherBot = entry.kind == .bot && entry.senderBotID != nil
         let thinking = entry.text.isEmpty && entry.state == .streaming
         let isUser = entry.kind == .user
+        // A message that came from iMessage, Telegram and so on: a small channel badge instead of the raw "[iMessage · …]" tag.
+        let origin = isUser ? ChannelOrigin.parse(split.text) : nil
+        let shownText = origin?.body ?? split.text
         return HStack(alignment: .top, spacing: 10) {
             if isUser { Spacer(minLength: 90) }
             if fromOtherBot { senderAvatar.padding(.top, 21) }
@@ -660,10 +669,20 @@ struct MacMessageView: View {
                     Text(isGroup ? (entry.senderName ?? "Bot") : "\(entry.senderName ?? "Another Bot") replied")
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(MacTheme.secondary).padding(.leading, 4)
                 }
+                if let origin {
+                    HStack(spacing: 6) {
+                        Image(systemName: origin.symbol).font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                            .frame(width: 18, height: 18).background(Color(red: origin.tint.red, green: origin.tint.green, blue: origin.tint.blue), in: Circle())
+                        Text(origin.automatic ? "Automatic follow-up \u{00B7} \(origin.label)" : "\(origin.label) \u{00B7} \(origin.name)")
+                            .font(.system(size: 12, weight: .medium)).foregroundStyle(MacTheme.secondary).lineLimit(1)
+                    }
+                    .padding(.trailing, 4)
+                    .accessibilityElement(children: .combine).accessibilityLabel(origin.automatic ? "Automatic follow-up" : "From \(origin.label), \(origin.name)")
+                }
                 if thinking {
                     thinkingBubble
-                } else if !split.text.isEmpty {
-                    MacMessageContent(text: split.text, markdown: entry.kind == .bot)
+                } else if !shownText.isEmpty {
+                    MacMessageContent(text: shownText, markdown: entry.kind == .bot)
                         .font(.system(size: 15.5)).lineSpacing(5).textSelection(.enabled)
                         .padding(.horizontal, 15).padding(.vertical, 10)
                         .background(bubbleColor, in: RoundedRectangle(cornerRadius: 20, style: .continuous))

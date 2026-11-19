@@ -376,7 +376,7 @@ final class AppModel: ObservableObject {
             for action in parsed.actions {
                 switch action.action {
                 case "browse_web", "open_vm", "vm_exec", "vm_use", "generate_image", "generate_video", "composio_find", "composio_run", "channel_send", "phone_call": break // Executed by the desktop after successful CLI completion.
-                case let name where name.hasPrefix("apple_") || name.hasPrefix("browser_") || ["secure_login", "search_web", "search_knowledge", "read_knowledge"].contains(name): break // Mac-only tools, executed by the Mac app after successful CLI completion.
+                case let name where name.hasPrefix("apple_") || name.hasPrefix("browser_") || ["secure_login", "search_web", "search_knowledge", "read_knowledge", "recall", "ask_owner"].contains(name): break // Mac-only tools, executed by the Mac app after successful CLI completion.
                 case "schedule_task":
                     guard delivery == nil, value.entries.last(where: { $0.botID == bot.id && $0.kind == .user })?.text.hasPrefix("Scheduled task:") != true, !(value.bots.first(where: { $0.id == bot.id })?.schedules ?? []).contains(where: { $0.name == action.name && $0.enabled }),
                           let task = BotSchedule.make(action), let index = value.bots.firstIndex(where: { $0.id == bot.id }), (value.bots[index].schedules ?? []).count < 100 else { note("Task not scheduled: use a unique name, a future ISO date, valid timezone and recurrence, or message_received trigger."); continue }
@@ -403,7 +403,7 @@ final class AppModel: ObservableObject {
                 case "message_bot":
                     guard let name = action.to, let recipient = target(name), recipient.memberIDs == nil, recipient.id != bot.id,
                           let text = action.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 8000,
-                          depth < 4, (value.teamMessages ?? []).filter({ $0.rootID == root }).count < 12 else { note("Message not sent: choose another Bot and keep requests within the teamwork limits."); continue }
+                          depth < 6, (value.teamMessages ?? []).filter({ $0.rootID == root }).count < 30 else { note("Message not sent: choose another Bot and keep requests within the teamwork limits."); continue }
                     let message = TeamMessage(id: UUID(), rootID: root, from: bot.id, to: recipient.id, text: text, depth: depth + 1)
                     if value.teamMessages == nil { value.teamMessages = [] }; value.teamMessages?.append(message)
                     note("Queued message · \(recipient.name)")
@@ -578,5 +578,42 @@ final class AppModel: ObservableObject {
         change(&updated)
         do { try store.save(updated); workspace = updated; return true }
         catch { errorMessage = "Your changes could not be saved. Check available device storage and try again."; return false }
+    }
+    /// The Bot that asked another Bot is woken with the answer, so it carries on with the request (10.2.1).
+    func queueReply(for delivery: TeamMessage, from bot: Bot, text: String) {
+        guard delivery.reply != true, delivery.depth < 5, !text.isEmpty, workspace.bots.contains(where: { $0.id == delivery.from && $0.memberIDs == nil }),
+              (workspace.teamMessages ?? []).filter({ $0.rootID == delivery.rootID }).count < 30 else { return }
+        let body = "\(bot.name) answered your request:\n\(text.prefix(6000))\nUse this to carry on with what you were doing, and tell the human the outcome."
+        _ = commit { value in
+            if value.teamMessages == nil { value.teamMessages = [] }
+            value.teamMessages?.append(TeamMessage(id: UUID(), rootID: delivery.rootID, from: bot.id, to: delivery.from, text: String(body.prefix(8000)), depth: delivery.depth + 1, reply: true))
+        }
+    }
+
+    // MARK: Memory (10.1.2)
+
+    /// Writes the result of a memory pass: the rolling summary, lasting facts, and a merged note list when there were too many.
+    @discardableResult
+    func applyMemoryPass(botID: UUID, summary: String?, remember: [String], merged: [String]?, throughEntry: UUID?) -> Bool {
+        guard workspace.bots.contains(where: { $0.id == botID }) else { return false }
+        return commit { value in
+            guard let index = value.bots.firstIndex(where: { $0.id == botID }) else { return }
+            var memory = value.bots[index].memory ?? []
+            if let merged, !merged.isEmpty, merged.count < memory.count { memory = Array(merged.prefix(60)) }
+            for fact in remember {
+                if memory.count >= 100 { break }
+                if !memory.contains(where: { $0.caseInsensitiveCompare(fact) == .orderedSame }) { memory.append(fact) }
+            }
+            value.bots[index].memory = memory
+            if let summary { value.bots[index].summary = String(summary.prefix(6000)) }
+            if let throughEntry { value.bots[index].summaryAt = throughEntry }
+        }
+    }
+
+    /// Removes the oldest `count` entries when there are more than `limit`, and returns them so they can be archived.
+    func takeOldestEntries(over limit: Int, count: Int) -> [Entry] {
+        guard workspace.entries.count > limit else { return [] }
+        let moving = Array(workspace.entries.prefix(count))
+        return commit { $0.entries.removeFirst(count) } ? moving : []
     }
 }

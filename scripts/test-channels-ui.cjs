@@ -29,6 +29,9 @@ const assert = require('node:assert/strict');
         load: async () => ok(workspace), save: async value => { workspace = value; return ok(value); }, setupStatus: async () => ok(setup), scanCLIs: async () => ok(setup),
         onChange: () => {}, listModels: async () => ok([]), listFiles: async () => ok([]), composioStatus: async () => ok({ configured: false, toolkits: [] }), openDocs: async url => { calls.push(['openDocs', url]); return ok(true); },
         channelsStatus: async () => copy(),
+        channelsSetSettings: async patch => { calls.push(['settings', patch]); state.settings = { ...(state.settings || { fast: true, whenBusy: 'steer', replies: 'where', escalate: 'call' }), ...patch }; return copy(); },
+        channelsSetPerson: async (id, who, patch) => { calls.push(['person', id, who, patch]); const person = state.channels[id].approved.find(x => x.id === who); if (person && 'me' in patch) person.me = patch.me; return copy(); },
+        channelsTestCall: async () => { calls.push(['testCall']); return ok('Calling you now.'); },
         channelsSetBot: async id => { calls.push(['setBot', id]); state.bot = id; return copy(); },
         channelsConfigure: async (id, fields) => {
           calls.push(['configure', id, fields]);
@@ -42,8 +45,8 @@ const assert = require('node:assert/strict');
           if (on) c.pending = [{ name: '<img src=x onerror="window.__pwned=1">Mallory', code: '123456', at: Date.now() - 120000 }];
           return copy();
         },
-        channelsApprove: async (id, code) => {
-          calls.push(['approve', id, code]);
+        channelsApprove: async (id, code, options) => {
+          calls.push(['approve', id, code, options]);
           const c = state.channels[id]; const entry = c.pending.find(x => x.code === code);
           if (!entry) return fail('That code is not waiting. Ask them to message the Bot again to get a new one.');
           c.pending = []; c.approved.push({ id: '42', name: entry.name, at: Date.now() }); return copy();
@@ -97,6 +100,14 @@ const assert = require('node:assert/strict');
     await card('telegram').locator('.person-row').getByRole('button', { name: 'Remove' }).click();
     await page.waitForFunction(() => window.__calls.some(([name]) => name === 'remove'));
     assert.equal(await card('telegram').locator('.person-row').count(), 0);
+
+    // How the Bot behaves on channels: fast replies, steering, where replies go, and who is Me.
+    await page.getByLabel('Where replies go').selectOption('always');
+    await page.waitForFunction(() => window.__calls.some(([name, patch]) => name === 'settings' && patch.replies === 'always'));
+    await page.getByLabel('When I send while it is working').selectOption('queue');
+    await page.waitForFunction(() => window.__calls.some(([name, patch]) => name === 'settings' && patch.whenBusy === 'queue'));
+    await page.getByLabel('Fast replies on channels').uncheck();
+    await page.waitForFunction(() => window.__calls.some(([name, patch]) => name === 'settings' && patch.fast === false));
 
     // The guide link opens in the browser.
     await card('telegram').getByRole('button', { name: /Open the guide/ }).click();

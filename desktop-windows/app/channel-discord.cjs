@@ -64,8 +64,9 @@ class DiscordChannel {
       if (!(d.mentions || []).some(user => user.id === this.userId) && !mention.test(text)) return;
       text = text.replace(new RegExp(`<@!?${this.userId}>`, 'g'), '').trim();
     }
-    if (!text) return;
-    Promise.resolve(this.onMessage({ senderId: d.author.id, senderName: d.author.global_name || d.author.username, chatId: d.channel_id, text })).catch(() => {});
+    const media = (Array.isArray(d.attachments) ? d.attachments : []).filter(item => item?.url && /^image\//i.test(item.content_type || '')).map(item => ({ url: item.url, contentType: item.content_type, size: item.size || 0, name: item.filename }));
+    if (!text && !media.length) return;
+    Promise.resolve(this.onMessage({ senderId: d.author.id, senderName: d.author.global_name || d.author.username, chatId: d.channel_id, text, media })).catch(() => {});
   }
   async send(chatId, text) { await this.rest(`/channels/${encodeURIComponent(chatId)}/messages`, { method: 'POST', body: JSON.stringify({ content: text, allowed_mentions: { parse: [] } }) }); }
   async typing(chatId) { await this.rest(`/channels/${encodeURIComponent(chatId)}/typing`, { method: 'POST' }); }

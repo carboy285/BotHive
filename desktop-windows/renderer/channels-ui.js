@@ -23,7 +23,7 @@ export const CHANNEL_SETUP = {
   },
   slack: {
     blurb: 'Direct messages, and mentions in channels it is added to. Uses Socket Mode, so nothing has to be reachable from outside.',
-    steps: ['Create a Slack app and turn on Socket Mode.', 'Add the bot scopes chat:write, im:history and app_mentions:read, and subscribe to message.im and app_mention.', 'Install it, then copy the Bot token (xoxb-) and an App-level token (xapp-).'],
+    steps: ['Create a Slack app and turn on Socket Mode.', 'Add the bot scopes chat:write, im:history, files:read (so pictures reach the Bot) and app_mentions:read, and subscribe to message.im and app_mention.', 'Install it, then copy the Bot token (xoxb-) and an App-level token (xapp-).'],
     guide: 'https://api.slack.com/apps',
     fields: [{ key: 'botToken', label: 'Bot token', secret: true, placeholder: 'xoxb-…' }, { key: 'appToken', label: 'App token', secret: true, placeholder: 'xapp-…' }],
   },
@@ -31,7 +31,7 @@ export const CHANNEL_SETUP = {
     blurb: 'Your Bot gets its own iMessage identity through Inkbox. Works on Windows and on a server; nothing has to be reachable from outside.',
     steps: ['Sign up at inkbox.ai and create an agent with iMessage turned on.', 'Make an API key for that agent and paste it below.', 'From your phone, text “connect @your-agent-handle” to the router number Inkbox shows you.'],
     guide: 'https://inkbox.ai',
-    fields: [{ key: 'apiKey', label: 'Inkbox API key', secret: true, placeholder: 'ik_…' }],
+    fields: [{ key: 'apiKey', label: 'Inkbox API key', secret: true, placeholder: 'ik_…' }, { key: 'ownerNumber', label: 'Your number (calls)', placeholder: '+15557654321' }],
   },
   sms: {
     blurb: 'Texts to a Twilio number, and phone calls when you add your own number and a public https address.',
@@ -99,6 +99,7 @@ export async function renderChannels({ bridge, result, toast, page, workspace })
     const label = el('div', 'setting-text'); label.append(el('strong', '', 'Answers on channels'), el('small', 'muted', 'One Bot speaks for you everywhere. It is told which channels are on and gets tools to message approved people.'));
     const row = el('div', 'setting-row'); row.append(label, select); who.append(row);
     root.append(who);
+    root.append(behaviourCard());
 
     const list = el('section', 'channel-list'); list.setAttribute('aria-label', 'Channels');
     for (const id of ORDER) {
@@ -107,6 +108,28 @@ export async function renderChannels({ bridge, result, toast, page, workspace })
     }
     root.append(list);
     root.append(el('p', 'panel-footnote', 'Strangers who message your Bot get a 6-digit code and nothing else. Ask them for it and enter it here to let them in. Approved people are limited to 30 messages every 10 minutes. Tokens are encrypted with Windows device storage.'));
+  }
+
+  /** How the Bot behaves on channels: speed, steering, where replies go and when it reaches out. */
+  function behaviourCard() {
+    const s = status.settings || {}, card = el('section', 'settings-card channel-behaviour');
+    const set = (patch, done) => run(bridge.channelsSetSettings(patch), done || 'Saved.');
+    const check = el('label', 'setting-row'); const box = el('input', 'switch'); box.type = 'checkbox'; box.setAttribute('role', 'switch'); box.checked = s.fast !== false; box.setAttribute('aria-label', 'Fast replies on channels');
+    box.addEventListener('change', () => set({ fast: box.checked }));
+    const text = el('div', 'setting-text'); text.append(el('strong', '', 'Fast replies on channels'), el('small', 'muted', 'A quicker model and short answers. Turn off to use the Bot’s full model on every message.'));
+    check.append(text, box); card.append(check);
+    const choice = (title, hint, label, value, options, key) => {
+      const row = el('div', 'setting-row'); const t = el('div', 'setting-text'); t.append(el('strong', '', title), el('small', 'muted', hint));
+      const select = el('select'); select.setAttribute('aria-label', label);
+      for (const [v, name] of options) { const o = el('option', '', name); o.value = v; select.append(o); }
+      select.value = value; select.addEventListener('change', () => set({ [key]: select.value }));
+      row.append(t, select); card.append(row);
+    };
+    choice('When I send another message while it works', 'Messages a second apart are read together. Texting “stop” only stops the Bot.', 'When I send while it is working', s.whenBusy || 'steer', [['steer', 'Steer it: stop and carry on with my new message'], ['queue', 'Queue it: answer after the current one']], 'whenBusy');
+    choice('Where replies go', 'Scheduled tasks and things the Bot does on its own text you under the first choice.', 'Where replies go', s.replies || 'where', [['where', 'Reply where I wrote'], ['always', 'Always text me too']], 'replies');
+    choice('Reach me on', 'When the Bot needs you and you have not messaged it.', 'Reach me on', s.reachOn || '', [['', 'Any channel where I am marked Me'], ...ORDER.map(id => [id, status.channels[id]?.name || id])], 'reachOn');
+    choice('If an urgent question gets no answer', 'Calls never happen during quiet hours (10 pm to 8 am).', 'If I do not answer', s.escalate || 'call', [['call', 'Call me'], ['text', 'Text me again'], ['none', 'Do nothing']], 'escalate');
+    return card;
   }
 
   function channelCard(id, info) {
@@ -153,6 +176,18 @@ export async function renderChannels({ bridge, result, toast, page, workspace })
       run(bridge.channelsConfigure(id, fields), `${info.name} saved.`);
     });
     body.append(form);
+    if (id === 'imessage' && info.enabled) {
+      const inkbox = status.inkbox || {};
+      const voiceRow = el('label', 'field-row'); const voice = el('select'); voice.setAttribute('aria-label', 'Phone voice');
+      const none = el('option', '', 'Default voice'); none.value = ''; voice.append(none);
+      for (const v of inkbox.voices || []) { const o = el('option', '', v.name + (v.available ? '' : ' (unavailable)')); o.value = v.id; o.disabled = !v.available; voice.append(o); }
+      voice.value = info.fields?.voice || ''; voice.addEventListener('change', () => run(bridge.channelsConfigure('imessage', { voice: voice.value }), 'Voice saved.'));
+      voiceRow.append(el('span', '', 'Phone voice'), voice); body.append(voiceRow);
+      body.append(el('p', 'muted small', 'Calls are answered by Inkbox’s voice assistant, which is told your Bot’s name, style and notes. It cannot run the Bot’s tools during a call; the transcript comes back into the Bot’s chat and anything left to do is handed to the Bot. Tip: in the Inkbox console set the agent to contact-scoped access and allow only your own number to call it.'));
+      if (inkbox.state?.state === 'error' && inkbox.state.detail) body.append(el('p', 'muted small', `Phone calls: ${inkbox.state.detail}`));
+      if (inkbox.pendingAsk) body.append(el('p', 'muted small', `The Bot is waiting for your answer to: ${inkbox.pendingAsk.question}`));
+      if (bridge.channelsTestCall) actions.append(pill('Call me now', async () => { try { toast(await result(bridge.channelsTestCall())); } catch (error) { toast(error.message); } }, 'pill'));
+    }
     if (id === 'sms') body.append(el('p', 'muted small', status.calls?.ready ? (status.calls.listening ? 'Calls are ready. Text “call me” or ask the Bot to phone you.' : 'Calls are set up but the call listener is not running.') : 'Calls need your number, a PIN and a public https address.'));
 
     const people = el('div', 'channel-people'); people.append(el('h3', '', 'Approved people'));
@@ -160,7 +195,11 @@ export async function renderChannels({ bridge, result, toast, page, workspace })
     for (const person of info.approved) {
       const row = el('div', 'person-row'); const initial = el('span', 'person-initial', (person.name || '?')[0].toUpperCase());
       const details = el('div', 'person-text'); details.append(el('strong', '', person.name), el('small', 'muted', `Approved ${ago(person.at)}`));
-      row.append(initial, details, pill('Remove', async () => { if (!confirm(`Stop answering ${person.name} on ${info.name}?`)) return; run(bridge.channelsRemove(id, person.id), `${person.name} removed.`); }, 'pill small danger'));
+      const mine = el('label', 'channel-check'); const mineBox = el('input'); mineBox.type = 'checkbox'; mineBox.checked = !!person.me; mineBox.setAttribute('aria-label', `This is me: ${person.name}`);
+      mineBox.addEventListener('change', () => run(bridge.channelsSetPerson(id, person.id, { me: mineBox.checked }), mineBox.checked ? 'The Bot can now reach out to this person first.' : 'Saved.'));
+      mine.append(mineBox, el('span', '', 'Me'));
+      const rename = pill('Rename', () => { const next = window.prompt('Name for this person (the same name on two channels is one person to the Bot):', person.name); if (next === null) return; run(bridge.channelsSetPerson(id, person.id, { name: next })); }, 'pill small');
+      row.append(initial, details, mine, rename, pill('Remove', async () => { if (!confirm(`Stop answering ${person.name} on ${info.name}?`)) return; run(bridge.channelsRemove(id, person.id), `${person.name} removed.`); }, 'pill small danger'));
       people.append(row);
     }
     body.append(people);
@@ -175,8 +214,9 @@ export async function renderChannels({ bridge, result, toast, page, workspace })
       const text = el('div', 'person-text'); text.append(el('strong', '', `${person.name} wants to talk`), el('small', 'muted', `Asked ${ago(person.at)} · ask them for the code the Bot sent`));
       const code = el('input', 'field code-field'); code.inputMode = 'numeric'; code.maxLength = 6; code.placeholder = '6-digit code'; code.autocomplete = 'off'; code.setAttribute('aria-label', `Code from ${person.name}`);
       const approve = el('button', 'pill small primary', 'Approve'); approve.type = 'submit';
-      row.append(el('span', 'person-initial waiting', (person.name || '?')[0].toUpperCase()), text, code, approve);
-      row.addEventListener('submit', event => { event.preventDefault(); run(bridge.channelsApprove(id, code.value), `${person.name} can talk to the Bot now.`); });
+      const mine = el('label', 'channel-check'); const mineBox = el('input'); mineBox.type = 'checkbox'; mineBox.setAttribute('aria-label', `This is me: ${person.name}`); mine.append(mineBox, el('span', '', 'This is me'));
+      row.append(el('span', 'person-initial waiting', (person.name || '?')[0].toUpperCase()), text, code, mine, approve);
+      row.addEventListener('submit', event => { event.preventDefault(); run(bridge.channelsApprove(id, code.value, mineBox.checked ? { me: true } : undefined), `${person.name} can talk to the Bot now.`); });
       box.append(row);
     }
     return box;

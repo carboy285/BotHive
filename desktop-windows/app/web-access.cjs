@@ -29,7 +29,7 @@ const ADMIN_INVOKE = new Set([
   'cli:install', 'cli:install-status', 'cli-keys:set', 'cli-keys:status', 'setup:choose', 'setup:scan', 'setup:login', 'setup:server', 'setup:complete',
   'composio:connect', 'composio:refresh', 'composio:remove', 'media-keys:set', 'media-settings:set', 'voice:key', 'voice:save', 'voice:settings',
   'sharing:get', 'sharing:set', 'rules:set', 'connected-apps:allow-set', 'logins:add', 'logins:list', 'logins:remove', 'vault:list', 'vault:read', 'vault:save', 'vault:delete',
-  'channels:status', 'channels:set-bot', 'channels:configure', 'channels:enable', 'channels:approve', 'channels:remove', 'channels:test-call',
+  'channels:status', 'channels:set-bot', 'channels:configure', 'channels:enable', 'channels:approve', 'channels:set-settings', 'channels:set-person', 'channels:remove', 'channels:test-call',
   'ollama:pull', 'ollama:delete', 'cloud:sign-in', 'cloud:sign-out', 'cloud:enabled', 'cloud:approve', 'cloud:reconnect', 'diagnostics:get'
 ]);
 // Events another device receives.

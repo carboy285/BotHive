@@ -25,6 +25,12 @@ const attachments=require('./attachments.cjs');
 const voice=require('./voice.cjs');
 const providerKeys=require('./provider-keys.cjs');
 const deviceActions=require('./device-actions.cjs');
+const memoryModule=require('./memory.cjs');
+const turnOrigin=new Map();
+// Bots whose chain of turns is still going: a turn that used a tool is followed by another, with a moment in between when nothing runs.
+const chains=new Set();
+const memory=memoryModule.createMemory({getState:()=>state,persist:()=>atomicJSON('preview-workspace.json',state),archivePath:id=>file(path.join('Archive',id+'.jsonl')),onChange:id=>{try{notify();}catch{}try{channelsHost?.voiceInstructionsChanged(id);}catch{}},log:error=>console.error('memory:',error.message),
+ quickTurn:(botID,prompt)=>quickTurn(botID,prompt)});
 const botPackages=require('./bot-package.cjs');
 const settingsBundles=require('./settings-bundle.cjs');
 const backup=require('./backup.cjs');
@@ -148,7 +154,7 @@ async function ensureState(){
 async function initializeState(){
   const loaded=await loadJSON('preview-workspace.json',previewWorkspace());validateWorkspace(loaded);
   if(!cliInstaller)makeCliInstaller();
-  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text)=>startChat(id,text),isRunning:id=>active.has(id)||pendingBots.has(id),fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
+  if(!channelsHost){channelsHost=createChannelsHost({loadJSON,atomicJSON,safeStorage,ensureState,getState:()=>state,startChat:(id,text,options)=>startChat(id,text,undefined,undefined,0,options),isRunning:id=>active.has(id)||pendingBots.has(id)||chains.has(id),stop:id=>{stoppedBots.add(id);for(const run of active.get(id)||[])run.cancel();},botDirectory,record:async(botID,text)=>{state.entries.push({id:randomUUID(),botID,kind:'user',text:String(text).slice(0,100000),date:new Date().toISOString(),delivery:'delivered'});await atomicJSON('preview-workspace.json',state);notify();},afterTurn:id=>{memory.noteActivity(id).catch(()=>{});},forceMemory:id=>memory.runPass(id),settleApproval:(id,yes)=>settleApproval(id,yes),fetchImpl:(url,options)=>net.fetch(url,options),log:error=>console.error('channels:',error.message)});setImmediate(()=>channelsHost.init().catch(error=>console.error('channels:',error.message)));}
   skillStore=skillsModule.loadStore(await loadJSON('skills.json',null));
   serverStore=serversModule.load(await loadJSON('servers.json',null));
   if(loaded.version===1)await atomicJSON('legacy-workspace-backup.json',loaded);
@@ -181,6 +187,22 @@ function configuredProviders(bot){
  const choices=[config.providers.find(x=>x.provider===config.activeProvider)||config.providers[0]].filter(Boolean);
  return choices.map(choice=>({choice,installation:installed.find(x=>x.provider===choice.provider)}));
 }
+// Typing while a Bot is working steers it: the running turn is stopped and the new message carries on from it.
+const STEER_NOTE='\n\n(The person sent this while you were still working. Carry on with their original request with this in mind. Do not redo work that is already finished.)';
+async function steerIfRunning(botID,text){
+ if(!active.has(botID)&&!pendingBots.has(botID))return text;
+ stoppedBots.add(botID);for(const run of active.get(botID)||[])run.cancel();
+ for(let i=0;i<240&&(active.has(botID)||pendingBots.has(botID));i++)await new Promise(resolve=>setTimeout(resolve,50));
+ return text+STEER_NOTE;
+}
+// One quick, silent request to the Bot's own CLI on the faster model: used to keep the Bot's summary and notes up to date.
+async function quickTurn(botID,prompt){
+ const bot=state.bots.find(x=>x.id===botID);if(!bot)throw new Error('That Bot is gone.');
+ const {choice,installation}=configuredProviders(bot)[0]||{};if(!installation)throw new Error('No provider is set up for this Bot.');
+ const prefs=await loadJSON('voice-settings.json',{}),fast=prefs.fastModel!==false;
+ const run=cli.runCLI({installation,prompt,session:undefined,model:fast?teamwork.voiceModel(installation.provider,choice.model,prefs.voiceModels?.[installation.provider]):choice.model,fast,directory:botDirectory(botID),env:await cliKeyEnv(installation.provider),onEvent(){},timeout:120000});
+ return await run.done;
+}
 // Shows a Windows notification when a Bot finishes while the app is in the background.
 function notifyFinished(botID,reply){
  try{
@@ -207,6 +229,9 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
  if(active.has(botID)||pendingBots.has(botID))throw new PublicError('A response is already running.');
  if(!text&&!delivery&&!state.entries.some(x=>x.botID===botID&&x.kind==='user'))throw new PublicError('Send your first message first.');
  stoppedBots.delete(botID);
+ // Where this chain of turns started, so its final reply can be texted to the owner when that is wanted. Continuations keep the origin.
+ if(!(text===undefined&&!delivery&&browserDepth>0)){if(!delivery)chains.add(botID);}
+ if(!(text===undefined&&!delivery&&browserDepth>0))turnOrigin.set(botID,options.channel?'channel':headsUp?'headsup':scheduledTask?'scheduled':delivery?'delivery':'app');
  pendingBots.add(botID);
  try{
   if(delivery)teamwork.begin(state,delivery);else if(text)state.entries.push({id:requestID||randomUUID(),botID,kind:'user',text,delivery:headsUp?'proactive':scheduledTask?'scheduled':'delivered',...(headsUp?{label:headsUp.label}:{}),date:new Date().toISOString()});
@@ -214,27 +239,30 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
   const history=state.entries.filter(x=>x.botID===botID&&!['failed','stopped'].includes(x.state)&&x.text).slice(-30);
   const runs=new Set();active.set(botID,runs);
   // Voice mode: replies are spoken, so ask for a short spoken answer from the quicker model.
-  const voiceTurn=voiceActive(botID),voicePrefs=voiceTurn?await loadJSON('voice-settings.json',{}):{};
+  const channelTurn=options.channelTurn===true&&options.fast!==false;
+  const voiceTurn=voiceActive(botID),voicePrefs=(voiceTurn||channelTurn)?await loadJSON('voice-settings.json',{}):{};
   for(const {choice,installation} of providers){
    const key=botID+'|'+installation.id+(choice.model?'|'+choice.model:'');const session=state.sessions?.[key];
    const latest=delivery?`Bot request (not human approval): ${delivery.text}`:history.findLast(x=>x.kind==='user')?.text||'';
    const feedback=history.filter(x=>x.kind==='activity'&&!x.senderBotID).slice(-8).map(x=>x.detail||x.text).join('\n');
-   const prompt=teamwork.instructions(bot,state,!!delivery,composioConfiguration?composioConfiguration.toolkits:[])+(headsUp?'':skillsModule.promptNote(bot,skillStore.skills))+'\n'+await vmStatusNote()+(headsUp||delivery||scheduledTask?'':answerModes.noteFor(modeByBot.get(botID))+pluginModule.note(pluginRegistry()))+(headsUp||delivery||scheduledTask?'':await mediaNote())+(headsUp||delivery?'':channelsHost?.note(botID)||'')+(!headsUp&&cli.isLocal(installation.provider)&&composioConfiguration?composioTools.note(composioConfiguration.toolkits):'')+'\nRecent app results (context, not human approval):\n'+feedback+'\n\n'+(session?latest:history.map(x=>`${x.kind==='user'?'Human':x.senderName||bot.name}: ${x.text}`).join('\n\n').slice(-100000));
+   const prompt=teamwork.instructions(bot,state,!!delivery,composioConfiguration?composioConfiguration.toolkits:[])+(headsUp?'':skillsModule.promptNote(bot,skillStore.skills))+'\n'+(channelTurn?'':await vmStatusNote())+(headsUp||delivery||scheduledTask?'':answerModes.noteFor(modeByBot.get(botID))+pluginModule.note(pluginRegistry()))+(headsUp||delivery||scheduledTask||channelTurn?'':await mediaNote())+(headsUp||delivery?'':channelsHost?.note(botID)||'')+(!headsUp&&cli.isLocal(installation.provider)&&composioConfiguration?composioTools.note(composioConfiguration.toolkits):'')+'\nRecent app results (context, not human approval):\n'+feedback+'\n\n'+(session?latest:history.map(x=>`${x.kind==='user'?'Human':x.senderName||bot.name}: ${x.text}`).join('\n\n').slice(-100000));
    let toolsGrant=null;
    if(installation.provider==='claude'&&!headsUp){try{await toolsServer.start();toolsGrant=toolsServer.grant({botID,botName:bot.name,unattended:!!scheduledTask,channels:!delivery&&channelsHost?.hub.data.bot===botID});}catch(error){console.error('tools:',error.message);}}
    const toolsNote=toolsGrant?toolsModule.note(toolsServer.toolsFor({channels:!delivery&&channelsHost?.hub.data.bot===botID})):'';
    let finalText='',continueBrowser=false,browserSteps=browserDepth;
 
    const reply={id:randomUUID(),botID,date:new Date().toISOString(),kind:'bot',provider:installation.name+(choice.model?' · '+choice.model:''),text:'',state:'streaming',...(headsUp?{headsUp:{kind:headsUp.kind,title:headsUp.label,...headsUp.meta}}:{})};state.entries.push(reply);
-   const run=cli.runCLI({installation,prompt:prompt+toolsNote+(voiceTurn?teamwork.VOICE_STYLE:''),tools:toolsGrant&&{url:toolsGrant.url,token:toolsGrant.token},session,model:voiceTurn&&voicePrefs.fastModel!==false?teamwork.voiceModel(installation.provider,choice.model,voicePrefs.voiceModels?.[installation.provider]):choice.model,fast:voiceTurn&&voicePrefs.fastModel!==false,directory:botDirectory(botID),mcpURL:headsUp?undefined:composioConfiguration?.session.mcp.url,allowConnectedApps:!headsUp&&settings.allowConnectedApps!==false,env:await cliKeyEnv(installation.provider),onEvent:event=>{
+   const run=cli.runCLI({installation,prompt:prompt+toolsNote+(voiceTurn?teamwork.VOICE_STYLE:channelTurn?teamwork.CHANNEL_STYLE:''),tools:toolsGrant&&{url:toolsGrant.url,token:toolsGrant.token},session,model:(voiceTurn||channelTurn)&&voicePrefs.fastModel!==false?teamwork.voiceModel(installation.provider,choice.model,voicePrefs.voiceModels?.[installation.provider]):choice.model,fast:(voiceTurn||channelTurn)&&voicePrefs.fastModel!==false,directory:botDirectory(botID),mcpURL:headsUp?undefined:composioConfiguration?.session.mcp.url,allowConnectedApps:!headsUp&&settings.allowConnectedApps!==false,env:await cliKeyEnv(installation.provider),onEvent:event=>{
     if(event.type==='session'){state.sessions||={};state.sessions[key]=event.id;}
     if(event.type==='notice'){state.entries.push({id:randomUUID(),botID,kind:'activity',text:String(event.text).slice(0,400),date:new Date().toISOString()});notify();}
     if(event.type==='text'){finalText=event.text;const visible=teamwork.parse(event.text).text;reply.text=headsUp&&proactive.isQuiet(visible)?'':visible;notifyStreaming();}
    }});
    runs.add(run);run.done.finally(()=>toolsGrant?.revoke()).catch(()=>{});
    run.done.then(async()=>{if(scheduledTask&&!routineRuns.has(botID))routineRuns.set(botID,{id:scheduledTask.id,runID:requestID,failed:false});settings.providerHealth||={};settings.providerHealth[installation.provider]={state:'ready',detail:'Last message succeeded',at:new Date().toISOString()};teamwork.apply(state,bot,reply,finalText,bot.aiConfiguration||{providers:[choice],activeProvider:choice.provider,replyMode:'one'},delivery);if(delivery)teamwork.finish(state,delivery,'complete');
+    // The Bot that asked is woken with the answer, so it carries on with the request instead of stopping at "asked". Chat-channel requests are handled by the channels host (it also texts the result).
+    if(delivery&&!delivery.reply&&delivery.depth<5&&reply.state==='complete'&&reply.text&&!channelsHost?.isDelegated(delivery.rootID)&&state.bots.some(x=>x.id===delivery.from&&!x.memberIDs)&&(state.teamMessages||[]).filter(x=>x.rootID===delivery.rootID).length<30){state.teamMessages.push({id:randomUUID(),rootID:delivery.rootID,from:bot.id,to:delivery.from,text:`${bot.name} answered your request:\n${String(reply.text).slice(0,6000)}\nUse this to carry on with what you were doing, and tell the human the outcome.`.slice(0,8000),depth:delivery.depth+1,status:'queued',reply:true});}
     if(headsUp)return; // heads-up turns are read-only: no VM, browser or device steps
-    if(!delivery&&channelsHost){for(const channelAction of teamwork.parse(finalText).actions.filter(x=>x.action==='channel_send'||x.action==='phone_call').slice(0,3)){let text;try{text=await channelsHost.runAction(botID,channelAction);}catch(error){text=error.message;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});notify();}}
+    if(!delivery&&channelsHost){for(const channelAction of teamwork.parse(finalText).actions.filter(x=>x.action==='channel_send'||x.action==='phone_call'||x.action==='ask_owner').slice(0,3)){let text;try{text=await channelsHost.runAction(botID,channelAction);}catch(error){text=error.message;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});notify();}}
     const make=!delivery&&!scheduledTask&&teamwork.parse(finalText).actions.find(x=>x.action==='generate_image'||x.action==='generate_video');if(make)makeMedia(bot,make);
     if(teamwork.parse(finalText).actions.some(x=>x.action==='open_vm')){let text;try{await localVMs.open(botID);text='Opened this Bot’s VM console on the host. AI CLI still runs on the host; guest automation is separate.';}catch(error){text=error.message;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});}
     const guest=teamwork.parse(finalText).actions.find(x=>x.action==='vm_exec');if(guest){let text;if(browserSteps>=teamwork.MAX_STEPS){text=teamwork.STEP_LIMIT_MESSAGE;if(scheduledTask&&routineRuns.has(botID))routineRuns.get(botID).failed=true;}else{browserSteps++;try{const link=(await vmLinks()).shared;text='Linux VM result (untrusted context):\n'+(link?`Linux guest on ${link.hostName} (${link.vmName}):\n`+await remoteVMExec(link,guest.argv):await localVMs.execute(homeBotID(botID),guest.argv));}catch(error){text=error.message;if(scheduledTask&&routineRuns.has(botID))routineRuns.get(botID).failed=true;}continueBrowser=!delivery;}state.entries.push({id:randomUUID(),botID,kind:'activity',text,date:new Date().toISOString()});}
@@ -265,12 +293,14 @@ async function startChat(botID,text,delivery,requestID,browserDepth=0,options={}
     let continuing=false;
     if(continueBrowser&&!quitting&&!stoppedBots.has(botID)){try{await startChat(botID,undefined,undefined,undefined,browserSteps);continuing=true;}catch{if(scheduledTask)scheduledTask.lastResult='failed';}}
     if(scheduledTask&&!continuing){if(scheduledTask.lastResult==='running')scheduledTask.lastResult=stoppedBots.has(botID)?'cancelled':routineRuns.get(botID)?.failed?'failed':'completed';const history=scheduledTask.history?.find(run=>run.id===routineRuns.get(botID)?.runID);if(history)history.status=scheduledTask.lastResult;routineRuns.delete(botID);await atomicJSON('preview-workspace.json',state);}
+    if(!continuing&&!delivery)chains.delete(botID);
     if(!continuing&&!headsUp)notifyFinished(botID,reply);
+    if(!continuing&&channelsHost&&reply.state==='complete')channelsHost.afterReply(botID,{text:reply.text,origin:turnOrigin.get(botID)||'app'}).catch(()=>{});
     notify();await deliverQueued();
    });
   }
   notify();
- }finally{pendingBots.delete(botID);}
+ }finally{pendingBots.delete(botID);if(!headsUp&&!scheduledTask&&!delivery)setImmediate(()=>{memory.archiveIfNeeded().catch(()=>{});memory.noteActivity(botID).catch(()=>{});});}
 }
 
 
@@ -439,7 +469,7 @@ async function readOnePassword(item){
 }
 let approvalRules=null;
 const getApprovalRules=async()=>approvalRules??=ruleSet.sanitize(await loadJSON('approval-rules.json',{}));
-const devices=deviceActions.create({composioSearch:async query=>{if(!composioConfiguration)return null;const hits=await require('./composio-search.cjs').search({key:composioConfiguration.key,userID:settings.composioUserID,query});return hits;},rules:async(tool,target)=>ruleSet.decide(await getApprovalRules(),tool,target),browsers:localBrowsers,approve:(title,detail)=>requestApproval(title,detail),logins:loginStore,directory:botDirectory,pdfPages:require('./pdf-text.cjs').pdfPages,onePassword:readOnePassword,plugins:()=>pluginRegistry()});
+const devices=deviceActions.create({composioSearch:async query=>{if(!composioConfiguration)return null;const hits=await require('./composio-search.cjs').search({key:composioConfiguration.key,userID:settings.composioUserID,query});return hits;},rules:async(tool,target)=>ruleSet.decide(await getApprovalRules(),tool,target),browsers:localBrowsers,approve:(title,detail)=>requestApproval(title,detail),logins:loginStore,directory:botDirectory,pdfPages:require('./pdf-text.cjs').pdfPages,onePassword:readOnePassword,plugins:()=>pluginRegistry(),recall:(botID,query)=>memory.recall(botID,query)});
 // Plugins load only when their name is listed in settings.json under plugins.allowed; see docs/PLUGINS.md.
 const pluginModule=require('./plugins.cjs');
 function pluginRegistry(){return pluginModule.load(path.join(app.getPath('userData'),'plugins'),settings?.plugins?.allowed);}
@@ -480,7 +510,8 @@ async function hostSettings(){
  return {hostName:require('node:os').hostname(),platform:'windows',appVersion:app.getVersion(),providers:installed.map(x=>({provider:x.provider,version:x.version})),...(defaultProvider?{defaultProvider}:{}),
   apiKeys:Object.fromEntries([...providerKeys.PROVIDERS].map(p=>[p,!!cli[p]])),voiceKeys:Object.fromEntries([...settingsBundles.VOICE_PROVIDERS].map(p=>[p,!!voiceK[p]])),
   connectors:{configured:!!composioConfiguration,toolkits:composioConfiguration?.toolkits||[]},sharing:!!settings.shareKeys,admin:settings.webAccess?.admin===true,
-  installable:cliInstallModule.catalog().map(item=>({id:item.id,name:item.name,guide:item.guide,installed:installed.some(x=>x.provider===item.id),...(cliInstaller.status()[item.id]||{})}))};
+  installable:cliInstallModule.catalog().map(item=>({id:item.id,name:item.name,guide:item.guide,installed:installed.some(x=>x.provider===item.id),...(cliInstaller.status()[item.id]||{})})),
+  ...(channelsHost?{channels:channelsHost.status()}:{})};
 }
 /** This computer's keys and connector settings, for copying to another computer on the account (only while sharing is on). */
 async function exportBundle(){
@@ -529,6 +560,23 @@ async function remoteCommand(command){
   const found=installed.find(x=>x.provider===command.name);if(!found)throw new PublicError('Install that CLI first.');
   settings.selected=found.id;await saveSettings();notify();return;
  }
+ if(typeof command.action==='string'&&command.action.startsWith('channels_')){
+  if(!remoteChangesAllowed)throw new PublicError('Turn on remote administration for this server first (Settings → Web access → Let apps change settings).');
+  if(!channelsHost)throw new PublicError('Channels are still starting. Try again in a moment.');
+  const hub=channelsHost.hub,channel=String(command.name??''),text=typeof command.text==='string'?command.text:'';
+  try{
+   if(command.action==='channels_set_bot')await hub.setBot(text||null);
+   else if(command.action==='channels_configure'){if(!command.fields||typeof command.fields!=='object'||Array.isArray(command.fields)||Object.keys(command.fields).length>12)throw new Error('No settings were sent.');await hub.configure(channel,command.fields);}
+   else if(command.action==='channels_enable')await hub.setEnabled(channel,text==='on');
+   else if(command.action==='channels_approve')await hub.approve(channel,text,{me:command.fields?.me==='true'?true:command.fields?.me==='false'?false:undefined});
+   else if(command.action==='channels_set_settings'){const f=command.fields||{};const patch={};if('fast' in f)patch.fast=f.fast==='true';for(const key of ['whenBusy','reachOn','escalate','escalateMinutes','quietStart','quietEnd'])if(key in f)patch[key]=f[key];await hub.setSettings(patch);}
+   else if(command.action==='channels_set_person'){const f=command.fields||{};const patch={};if('name' in f)patch.name=f.name;if('me' in f)patch.me=f.me==='true';await hub.setPerson(channel,text,patch);}
+   else if(command.action==='channels_remove')await hub.remove(channel,text);
+   else if(command.action==='channels_test_call')await channelsHost.testCall();
+   else throw new Error('Unknown channels command.');
+  }catch(error){throw new PublicError(error.message);}
+  notify();return;
+ }
  if(command.action==='set_api_key'){
   if(!remoteChangesAllowed)throw new PublicError('Turn on “Share keys and connectors” on this computer first (Settings → Computer).');
   if(!providerKeys.PROVIDERS.has(command.name))throw new PublicError('Choose a provider that uses an API key.');
@@ -558,7 +606,7 @@ async function remoteCommand(command){
  if(command.action==='open_vm'){if(!bot)throw new Error('Unknown Bot');await localVMs.open(bot.id);return;}
  if(command.action==='vm_exec'){await startVMJob(command.requestID,bot,command.argv);return;}
  if(command.action==='open_browser'){if(!bot)throw new Error('Unknown Bot');localBrowsers.open(bot.id,command.text);return;} // a phone shows a preview; no window opens here
- if(command.action==='send'){if(!bot||typeof command.text!=='string'||!command.text.trim()||command.text.length>100000)throw new Error('Invalid message');let text=command.text;if(Array.isArray(command.attachments)&&command.attachments.length){let names;try{names=await attachments.saveRemoteImages(botDirectory(bot.id),command.attachments);}catch{throw new PublicError('The images could not be accepted. Send up to 3 JPEG or PNG images.');}text=attachments.attachmentMessage(text,names);}await startChat(bot.id,text,undefined,command.requestID);return;}
+ if(command.action==='send'){if(!bot||typeof command.text!=='string'||!command.text.trim()||command.text.length>100000)throw new Error('Invalid message');let text=command.text;if(Array.isArray(command.attachments)&&command.attachments.length){let names;try{names=await attachments.saveRemoteImages(botDirectory(bot.id),command.attachments);}catch{throw new PublicError('The images could not be accepted. Send up to 3 JPEG or PNG images.');}text=attachments.attachmentMessage(text,names);}text=await steerIfRunning(bot.id,text);await startChat(bot.id,text,undefined,command.requestID);return;}
  if(command.action==='stop'){if(bot)stoppedBots.add(bot.id);if(!bot)throw new Error('Unknown Bot');for(const run of active.get(bot.id)||[])run.cancel();return;}
  if(command.action==='retry'){if(!bot)throw new Error('Unknown Bot');const message=state.teamMessages?.findLast(x=>x.to===bot.id&&['failed','stopped'].includes(x.status));if(message){message.status='queued';await deliverQueued();}else await startChat(bot.id);return;}
  if(command.action==='react'){await setReaction(command.taskID,command.text??'');return;}
@@ -607,9 +655,10 @@ function requestApproval(title,detail){
   approvalWaiters.set(id,{resolve,title:String(title).slice(0,300),detail:String(detail||'').slice(0,2000)});
   if(!window.isVisible())window.show();if(window.isMinimized())window.restore();try{window.flashFrame(true);}catch{}
   window.webContents.send('approval:request',{id,title:String(title).slice(0,300),detail:String(detail||'').slice(0,2000)});
+  try{if(channelsHost&&(channelsHost.turnActive||!window.isFocused()))channelsHost.routeApproval({id,title:String(title),detail:String(detail||'')}).catch(()=>{});}catch{}
  });
 }
-function settleApproval(id,approved){const waiter=approvalWaiters.get(id);if(!waiter)return false;approvalWaiters.delete(id);waiter.resolve(approved===true);if(!approvalWaiters.size&&window&&!window.isDestroyed()){try{window.flashFrame(false);}catch{}}return true;}
+function settleApproval(id,approved){const waiter=approvalWaiters.get(id);if(!waiter)return false;approvalWaiters.delete(id);try{channelsHost?.approvalSettled(id);}catch{}waiter.resolve(approved===true);if(!approvalWaiters.size&&window&&!window.isDestroyed()){try{window.flashFrame(false);}catch{}}return true;}
 function denyAllApprovals(){for(const id of [...approvalWaiters.keys()])settleApproval(id,false);}
 // Bots whose voice mode is open (on this PC or a phone), with when that was last confirmed.
 const voiceBots=new Map();
@@ -666,7 +715,7 @@ function configureIPC() {
  // Settings → Copy diagnostics (0.9.5): versions, providers, voice settings and recent errors. No chats, keys or names of people.
  handle('diagnostics:get',async()=>{await ensureState();const os=require('node:os'),voiceSettings=await loadJSON('voice-settings.json',{});
   const errors=Object.entries(settings.providerHealth||{}).filter(([,v])=>v?.state&&v.state!=='ready'&&v.state!=='configured').map(([k,v])=>`${k}: ${String(v.detail||'').slice(0,160)}`);
-  return [`Bothive ${app.getVersion()} (Windows ${os.release()}, Electron ${process.versions.electron})`,`${os.cpus()[0]?.model||'CPU'} · ${os.cpus().length} cores · ${Math.round(os.totalmem()/2**30)} GB`,
+  return [`Bothive ${app.getVersion()} Beta (Windows ${os.release()}, Electron ${process.versions.electron})`,`${os.cpus()[0]?.model||'CPU'} · ${os.cpus().length} cores · ${Math.round(os.totalmem()/2**30)} GB`,
    `Providers: ${installed.map(x=>`${x.name} ${x.version||''}`.trim()).join('; ')||'none found'}`,`Bots: ${state.bots.length} · messages: ${state.entries.length}`,
    `Voice: listening ${voiceSettings.transcriber||'default'}, speaking ${voiceSettings.speaker||'default'}, patience ${voiceSettings.patience||'normal'}, quick model ${voiceSettings.fastModel!==false}, layout ${voiceSettings.layout||'card'}, Kokoro ${voiceSettings.kokoroVoice||'af_heart'}`,
    `Local voice models: ${JSON.stringify(voiceSettings.localModels||'recommended')}; voice models: ${JSON.stringify(voiceSettings.voiceModels||{})}; last speed test: ${voiceSettings.lastSpeed||'none'}`,
@@ -830,9 +879,11 @@ function configureIPC() {
  handle('channels:set-bot',channelCall(async(host,id)=>{await host.hub.setBot(id||null);return host.status();}));
  handle('channels:configure',channelCall(async(host,id,fields)=>{await host.hub.configure(id,fields);return host.status();}));
  handle('channels:enable',channelCall(async(host,id,on)=>{await host.hub.setEnabled(id,on===true);return host.status();}));
- handle('channels:approve',channelCall(async(host,id,code)=>{await host.hub.approve(id,code);return host.status();}));
+ handle('channels:approve',channelCall(async(host,id,code,options)=>{await host.hub.approve(id,code,{me:typeof options?.me==='boolean'?options.me:undefined});return host.status();}));
+ handle('channels:set-settings',channelCall(async(host,patch)=>{await host.hub.setSettings(patch&&typeof patch==='object'?patch:{});return host.status();}));
+ handle('channels:set-person',channelCall(async(host,id,who,patch)=>{await host.hub.setPerson(id,String(who),patch&&typeof patch==='object'?patch:{});return host.status();}));
  handle('channels:remove',channelCall(async(host,id,who)=>{await host.hub.remove(id,String(who));return host.status();}));
- handle('channels:test-call',channelCall(host=>host.voice.placeCall()));
+ handle('channels:test-call',channelCall(host=>host.testCall()));
 
  // ---- Routines screen (10.1): create, edit and run now. Pause and delete are the handlers below. ----
  const routineBot=botID=>{const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Routines belong to an individual Bot.');return bot;};
@@ -1028,7 +1079,7 @@ function configureIPC() {
    try{const found=await attachments.expandDropped(paths,limit);if(!found.files.length)throw new Error('Nothing in what you dropped could be attached. Files must be under 20 MB and not empty.');
     return {names:await attachments.copyLocalFiles(botDirectory(bot.id),found.files),skipped:found.skipped};}catch(error){throw new PublicError(error.message);}});
   handle('files:attach-data',async(botID,mime,data)=>{await ensureState();const bot=state.bots.find(x=>x.id===botID);if(!bot||bot.memberIDs)throw new PublicError('Attachments are available in individual Bot chats.');try{return await attachments.saveDataFile(botDirectory(bot.id),mime,data);}catch{throw new PublicError('Paste a PNG, JPEG, GIF or WebP image under 20 MB.');}});
-  handle('chat:send',async(botID,text,requestID,files,mode)=>{await ensureState();if(typeof text!=='string'||text.length>100000)throw new PublicError('Enter a message of up to 100,000 characters.');let names=[];if(files!==undefined&&files!==null){const bot=state.bots.find(x=>x.id===botID);if(!bot)throw new PublicError('Choose a Bot.');try{names=await attachments.existingNames(botDirectory(bot.id),files);}catch{throw new PublicError('An attachment is missing. Remove it and attach it again.');}}if(!text.trim()&&!names.length)throw new PublicError('Enter a message of up to 100,000 characters.');text=attachments.attachmentMessage(text.trim(),names);if(requestID&&!/^[0-9a-f-]{36}$/i.test(requestID))throw new PublicError('Invalid delivery ID.');if(!requestID||!state.entries.some(x=>x.id.toLowerCase()===requestID.toLowerCase())){const chosen=answerModes.normalize(mode);if(chosen)modeByBot.set(botID,chosen);else modeByBot.delete(botID);await startChat(botID,text,undefined,requestID);}return state;});
+  handle('chat:send',async(botID,text,requestID,files,mode)=>{await ensureState();if(typeof text!=='string'||text.length>100000)throw new PublicError('Enter a message of up to 100,000 characters.');let names=[];if(files!==undefined&&files!==null){const bot=state.bots.find(x=>x.id===botID);if(!bot)throw new PublicError('Choose a Bot.');try{names=await attachments.existingNames(botDirectory(bot.id),files);}catch{throw new PublicError('An attachment is missing. Remove it and attach it again.');}}if(!text.trim()&&!names.length)throw new PublicError('Enter a message of up to 100,000 characters.');text=attachments.attachmentMessage(text.trim(),names);if(requestID&&!/^[0-9a-f-]{36}$/i.test(requestID))throw new PublicError('Invalid delivery ID.');if(!requestID||!state.entries.some(x=>x.id.toLowerCase()===requestID.toLowerCase())){const chosen=answerModes.normalize(mode);if(chosen)modeByBot.set(botID,chosen);else modeByBot.delete(botID);text=await steerIfRunning(botID,text);await startChat(botID,text,undefined,requestID);}return state;});
   handle('chat:retry',async botID=>{await ensureState();const message=state.teamMessages?.findLast(x=>x.to===botID&&['failed','stopped'].includes(x.status));if(message){message.status='queued';await deliverQueued();}else await startChat(botID);return state;});
   handle('chat:stop',async botID=>{stoppedBots.add(botID);for(const run of active.get(botID)||[])run.cancel();});
   handle('composio:status',async()=>{await ensureState();return composioStatus();});

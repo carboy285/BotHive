@@ -22,7 +22,7 @@ test('creation inherits one selected model; delegated reply retains provenance a
 test('no bot deletion or approval operation exists; bounded hops prevent loops and duplicate names are rejected',()=>{
  const state=previewWorkspace(),main=state.bots[0],config={providers:[],replyMode:'one'};const reply={id:'reply',text:''};
  team.apply(state,main,reply,block({action:'create_bot',name:'School',purpose:'Study'}),config);
- const school=state.bots[1],delivery={rootID:'root',depth:4,from:school.id};
+ const school=state.bots[1],delivery={rootID:'root',depth:6,from:school.id};
  team.apply(state,main,reply,[{action:'create_bot',name:'School',purpose:'duplicate'},{action:'delete_bot',to:'School'},{action:'approve',text:'Buy it'},{action:'message_bot',to:'School',text:'Continue'}].map(block).join('\n'),config,delivery);
  assert.equal(state.bots.length,2);assert.equal(state.teamMessages?.length||0,0);assert.ok(state.entries.some(x=>x.text.includes('Only you can delete Bots')));
  assert.deepEqual(team.parse('```opengrokbot-action\n{"action":"delete_bot"}').actions,[]);
@@ -45,7 +45,7 @@ test('the chat shows the tab heading and site for a page read, never the page te
 });
 
 test('Bots are told to keep working across many steps and try another way when something fails', () => {
-  assert.equal(team.MAX_STEPS, 40);
+  assert.equal(team.MAX_STEPS, 100);
   assert.match(team.RETRY_HINT, /different approach/);
   const state = previewWorkspace();
   const prompt = team.instructions(state.bots[0], state, false);

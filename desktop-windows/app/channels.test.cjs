@@ -26,15 +26,15 @@ test('call requests are recognised, ordinary messages are not', () => {
   for (const text of ['call me a taxi', 'what is a call option', 'recall my notes', 'call mom tomorrow']) assert.ok(!CALL_WORDS.test(text), text);
 });
 
-function hubFixture({ asked = [], sent = [], now = { t: 1_000_000 }, calls = [], answer = 'the answer' } = {}) {
+function hubFixture({ asked = [], sent = [], now = { t: 1_000_000 }, calls = [], answer = 'the answer', batchMs = 0, events = [], stopped = [], setTimer, clearTimer } = {}) {
   let stored = null; const adapters = {};
   const hub = new ChannelHub({
     load: async () => stored, save: async value => { stored = JSON.parse(JSON.stringify(value)); },
-    makeAdapter: (id, fields, handlers) => (adapters[id] = { id, fields, handlers, started: false, async start() { this.started = true; }, async stop() { this.started = false; }, async send(chat, text) { sent.push([id, chat, text]); }, status: () => ({ state: 'on', detail: '' }) }),
-    ask: async (bot, text, from) => { asked.push([bot, text, from]); return typeof answer === 'function' ? answer(text) : answer; },
+    makeAdapter: (id, fields, handlers) => (adapters[id] = { id, fields, handlers, started: false, async start() { this.started = true; }, async stop() { this.started = false; }, async send(chat, text) { sent.push([id, chat, text]); }, async acknowledge(message) { events.push(['read', message.chatId]); }, async typing(chat) { events.push(['typing', chat]); }, status: () => ({ state: 'on', detail: '' }) }),
+    ask: async (bot, text, from, options) => { events.push(['ask', text]); asked.push([bot, text, from, options]); return typeof answer === 'function' ? answer(text, options) : answer; }, stop: bot => { stopped.push(bot); }, batchMs, setTimer, clearTimer,
     botExists: id => id === 'bot-1', call: async from => { calls.push(from); return 'Calling you now.'; }, now: () => now.t, code: (() => { let n = 100000; return () => String(++n); })(),
   });
-  return { hub, adapters, asked, sent, now, calls, saved: () => stored };
+  return { hub, adapters, asked, sent, now, calls, events, stopped, saved: () => stored };
 }
 
 test('nobody is answered until the owner approves them with the code they were given', async () => {
@@ -73,18 +73,12 @@ test('codes expire, waiting lists are capped, and nothing happens without a chos
   await assert.rejects(f.hub.setBot('nope'), /Choose one of your Bots/);
 });
 
-test('approved people are rate limited, long messages refused, calls routed, and one Bot turn runs at a time', async () => {
-  let release; const gate = new Promise(r => { release = r; });
-  const f = hubFixture({ answer: text => (text === 'slow' ? gate.then(() => 'done') : 'ok') });
+test('approved people are rate limited, long messages refused and calls routed', async () => {
+  const f = hubFixture();
   await f.hub.init(); await f.hub.setBot('bot-1'); await f.hub.configure('slack', { botToken: 'xoxb-1', appToken: 'xapp-1' }); await f.hub.setEnabled('slack', true);
   const { onMessage } = f.adapters.slack.handlers;
   await onMessage({ senderId: 'U1', chatId: 'D1', text: 'hi' });
   await f.hub.approve('slack', '100001');
-  const slow = onMessage({ senderId: 'U1', chatId: 'D1', text: 'slow' });
-  await new Promise(r => setImmediate(r));
-  await onMessage({ senderId: 'U1', chatId: 'D1', text: 'second' });
-  assert.match(f.sent.at(-1)[2], /Still working/);
-  release(); await slow; assert.equal(f.sent.at(-1)[2], 'done');
   await onMessage({ senderId: 'U1', chatId: 'D1', text: 'x'.repeat(4001) });
   assert.match(f.sent.at(-1)[2], /too long/);
   await onMessage({ senderId: 'U1', chatId: 'D1', text: 'call me' });
@@ -131,7 +125,7 @@ test('Telegram: direct messages from people reach the hub; groups and bots are i
   ]]);
   const channel = new TelegramChannel({ fields: { token: '1:x' }, handlers: { onMessage: m => got.push(m) }, fetchImpl, sleep: async () => {} });
   await channel.start(); await new Promise(r => setTimeout(r, 30)); await channel.stop();
-  assert.deepEqual(got, [{ senderId: '9', senderName: 'Ann Lee', chatId: '9', text: 'hi' }]);
+  assert.deepEqual(got, [{ senderId: '9', senderName: 'Ann Lee', chatId: '9', text: 'hi', media: [] }]);
   assert.ok(calls.some(([m, b]) => m === 'getUpdates' && b.offset === 8));
   await channel.send('9', 'reply'); assert.deepEqual(calls.at(-1), ['sendMessage', { chat_id: '9', text: 'reply', disable_web_page_preview: true }]);
   const bad = new TelegramChannel({ fields: { token: 'x' }, handlers: {}, fetchImpl: telegramFetch([], { ok: false, code: 401 }).fetchImpl });
@@ -315,9 +309,15 @@ test('iMessage through Inkbox: old messages are ignored, new one-to-one messages
     { id: 'm3', direction: 'inbound', is_group: true, is_blocked: false, content: 'group', remote_number: '+15550003333', conversation_id: 'g1' },
     { id: 'm4', direction: 'inbound', is_group: false, is_blocked: false, content: 'from email', remote_number: 'sam@example.com', conversation_id: 'c2' },
     { id: 'm5', direction: 'outbound', is_group: false, is_blocked: false, content: 'mine', remote_number: '+15550002222', conversation_id: 'c1' },
-    { id: 'm6', direction: 'inbound', is_group: false, is_blocked: false, content: null, remote_number: '+15550002222', conversation_id: 'c1' });
+    { id: 'm6', direction: 'inbound', is_group: false, is_blocked: false, content: null, remote_number: '+15550002222', conversation_id: 'c1' },
+    { id: 'm7', direction: 'inbound', is_group: false, is_blocked: false, content: '', remote_number: '+15550002222', conversation_id: 'c1', media: [{ url: 'https://s3.example/a.jpg', content_type: 'image/jpeg', size: 10 }, { url: 'https://s3.example/b.pdf', content_type: 'application/pdf', size: 10 }] });
   await tick(); await tick();
-  assert.deepEqual(got, [{ senderId: '+15550002222', senderName: '+15550002222', chatId: 'c1', text: 'hello' }]);
+  assert.deepEqual(got, [
+    { senderId: '+15550002222', senderName: '+15550002222', chatId: 'c1', text: 'hello', media: [] },
+    { senderId: '+15550002222', senderName: '+15550002222', chatId: 'c1', text: '', media: [{ url: 'https://s3.example/a.jpg', contentType: 'image/jpeg', size: 10 }] },
+  ], 'a photo with no words is still passed on; a PDF is not');
+  assert.equal(calls.filter(c => c[1] === '/mark-read').length, 0, 'the poll alone does not mark anything read; the hub does that for approved people');
+  await channel.acknowledge({ chatId: 'c1' });
   assert.deepEqual(calls.filter(c => c[1] === '/mark-read').map(c => c[2]), [{ conversation_id: 'c1' }]);
   await channel.send('c1', 'on it'); const sent = calls.at(-1);
   assert.deepEqual([sent[0], sent[1], sent[2]], ['POST', '/messages', { conversation_id: 'c1', text: 'on it' }]);
@@ -328,4 +328,97 @@ test('iMessage through Inkbox: old messages are ignored, new one-to-one messages
   await assert.rejects(refuse(401).start(), /did not accept that API key/);
   await assert.rejects(refuse(400).start(), /iMessage is not turned on/);
   await assert.rejects(new InkboxIMessageChannel({ fields: { apiKey: 'x' }, handlers: {} }).start(), /Paste the API key/);
+});
+
+async function approvedSlack(f, options = {}) {
+  await f.hub.init(); await f.hub.setBot('bot-1'); await f.hub.configure('slack', { botToken: 'xoxb-1', appToken: 'xapp-1' }); await f.hub.setEnabled('slack', true);
+  const { onMessage } = f.adapters.slack.handlers;
+  await onMessage({ senderId: 'U1', chatId: 'D1', text: 'hi' });
+  await f.hub.approve('slack', '100001', options);
+  f.events.length = 0; f.sent.length = 0;
+  return onMessage;
+}
+
+test('an approved message is marked read and shows typing before the Bot is asked, and a stranger gets neither', async () => {
+  const f = hubFixture(); await f.hub.init(); await f.hub.setBot('bot-1'); await f.hub.configure('slack', { botToken: 'xoxb-1', appToken: 'xapp-1' }); await f.hub.setEnabled('slack', true);
+  const { onMessage } = f.adapters.slack.handlers;
+  await onMessage({ senderId: 'U9', chatId: 'D9', text: 'let me in' });
+  assert.deepEqual(f.events, [], 'strangers are not acknowledged');
+  await onMessage({ senderId: 'U1', chatId: 'D1', text: 'hi' }); await f.hub.approve('slack', '100002'); f.events.length = 0;
+  await onMessage({ senderId: 'U1', chatId: 'D1', text: 'what is on today?' });
+  assert.deepEqual(f.events.slice(0, 3).map(e => e[0]), ['read', 'typing', 'ask']);
+});
+
+test('a burst of messages becomes one request, with pictures kept together with the words', async () => {
+  const timers = []; const f = hubFixture({ batchMs: 1200, setTimer: fn => { timers.push(fn); return timers.length; }, clearTimer: id => { timers[id - 1] = null; } });
+  const onMessage = await approvedSlack(f);
+  const photo = { url: 'https://x.example/a.jpg', contentType: 'image/jpeg' };
+  const first = onMessage({ senderId: 'U1', chatId: 'D1', text: '', media: [photo] });
+  const second = onMessage({ senderId: 'U1', chatId: 'D1', text: 'add these to my reminders' });
+  await new Promise(r => setImmediate(r));
+  assert.equal(f.asked.length, 0, 'still waiting for the burst to finish');
+  timers.filter(Boolean).at(-1)(); await Promise.all([first, second]);
+  assert.equal(f.asked.length, 1); assert.equal(f.asked[0][1], 'add these to my reminders'); assert.deepEqual(f.asked[0][3].media, [photo]);
+  assert.equal(f.asked[0][3].steer, false);
+});
+
+test('a message while the Bot works steers it: the old turn is stopped and the new one carries on', async () => {
+  let release; const gate = new Promise(r => { release = r; });
+  const f = hubFixture({ answer: (text, options) => (text === 'slow' ? gate.then(() => null) : options.steer ? 'carrying on' : 'ok') });
+  const onMessage = await approvedSlack(f);
+  const slow = onMessage({ senderId: 'U1', chatId: 'D1', text: 'slow' });
+  await new Promise(r => setImmediate(r));
+  const next = onMessage({ senderId: 'U1', chatId: 'D1', text: 'actually make it short' });
+  await new Promise(r => setImmediate(r));
+  assert.deepEqual(f.stopped, ['bot-1']); assert.equal(f.asked.length, 1, 'the new turn waits for the stopped one to finish');
+  release(); await Promise.all([slow, next]);
+  assert.equal(f.asked[1][3].steer, true); assert.deepEqual(f.sent.map(x => x[2]), ['carrying on'], 'the stopped turn says nothing');
+});
+
+test('with Queue the second message waits its turn instead of stopping the first', async () => {
+  let release; const gate = new Promise(r => { release = r; });
+  const f = hubFixture({ answer: text => (text === 'slow' ? gate.then(() => 'first done') : 'second done') });
+  const onMessage = await approvedSlack(f); await f.hub.setSettings({ whenBusy: 'queue' });
+  const slow = onMessage({ senderId: 'U1', chatId: 'D1', text: 'slow' }); await new Promise(r => setImmediate(r));
+  const next = onMessage({ senderId: 'U1', chatId: 'D1', text: 'then this' }); await new Promise(r => setImmediate(r));
+  assert.deepEqual(f.stopped, []); release(); await Promise.all([slow, next]);
+  assert.deepEqual(f.sent.map(x => x[2]), ['first done', 'second done']); assert.equal(f.asked[1][3].steer, false);
+  await assert.rejects(f.hub.setSettings({ whenBusy: 'later' }), /Steer or Queue/);
+});
+
+test('"stop" only stops the running turn and is never sent to the Bot', async () => {
+  let release; const gate = new Promise(r => { release = r; });
+  const f = hubFixture({ answer: text => (text === 'slow' ? gate.then(() => null) : 'ok') });
+  const onMessage = await approvedSlack(f);
+  await onMessage({ senderId: 'U1', chatId: 'D1', text: 'stop' }); assert.match(f.sent.at(-1)[2], /Nothing is running/);
+  const slow = onMessage({ senderId: 'U1', chatId: 'D1', text: 'slow' }); await new Promise(r => setImmediate(r));
+  await onMessage({ senderId: 'U1', chatId: 'D1', text: 'Cancel.' });
+  assert.deepEqual(f.stopped, ['bot-1']); assert.equal(f.sent.at(-1)[2], 'Stopped.'); release(); await slow;
+  assert.deepEqual(f.asked.map(x => x[1]), ['slow']);
+});
+
+test('you can mark yourself as the owner, rename a person, and change the channel settings', async () => {
+  const f = hubFixture(); const onMessage = await approvedSlack(f, { me: true });
+  assert.equal(f.hub.status().channels.slack.approved[0].me, true);
+  assert.equal(f.hub.owner('slack').person.id, 'U1');
+  await f.hub.setPerson('slack', 'U1', { name: 'Sam Rivera' });
+  await onMessage({ senderId: 'U1', chatId: 'D1', text: 'hello' });
+  assert.equal(f.asked[0][2].senderName, 'Sam Rivera'); assert.equal(f.asked[0][2].me, true);
+  await assert.rejects(f.hub.setPerson('slack', 'nobody', {}), /not approved/);
+  assert.equal(f.hub.status().settings.fast, true);
+  await f.hub.setSettings({ fast: false, quietStart: 23, escalateMinutes: 999 });
+  assert.deepEqual([f.hub.status().settings.fast, f.hub.status().settings.quietStart, f.hub.status().settings.escalateMinutes], [false, 23, 120]);
+});
+
+test('Telegram, Discord and Slack hand pictures to the hub, and Slack accepts file shares', async () => {
+  const got = [];
+  const tg = new TelegramChannel({ fields: { token: 't' }, handlers: { onMessage: m => got.push(m) }, fetchImpl: async (url, init) => json({ ok: true, result: JSON.parse(init.body).file_id ? { file_path: 'photos/1.jpg' } : [] }) });
+  const media = tg.mediaOf({ photo: [{ file_id: 'small', file_size: 1 }, { file_id: 'big', file_size: 9 }], document: { file_id: 'doc', mime_type: 'application/pdf' } });
+  assert.equal(media.length, 1); assert.deepEqual(await media[0].resolve(), { url: 'https://api.telegram.org/file/bott/photos/1.jpg', headers: {} });
+  const dc = new DiscordChannel({ fields: { token: 't' }, handlers: { onMessage: m => got.push(m) } }); dc.userId = 'bot';
+  dc.message({ author: { id: 'u', username: 'sam' }, channel_id: 'c', content: '', attachments: [{ url: 'https://cdn.example/a.png', content_type: 'image/png', size: 5, filename: 'a.png' }, { url: 'https://cdn.example/b.pdf', content_type: 'application/pdf' }] });
+  assert.equal(got.at(-1).media.length, 1); assert.equal(got.at(-1).text, '');
+  const sl = new SlackChannel({ fields: { botToken: 'xoxb-9', appToken: 'xapp' }, handlers: { onMessage: m => got.push(m) } }); sl.userId = 'UBOT';
+  sl.handle({ type: 'events_api', payload: { event_id: 'E1', event: { type: 'message', channel_type: 'im', subtype: 'file_share', user: 'U1', channel: 'D1', text: '', files: [{ url_private: 'https://files.slack.com/x.png', mimetype: 'image/png', name: 'x.png' }] } } });
+  assert.equal(got.at(-1).media[0].headers.Authorization, 'Bearer xoxb-9');
 });

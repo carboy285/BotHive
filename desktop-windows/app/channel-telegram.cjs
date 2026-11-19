@@ -31,9 +31,10 @@ class TelegramChannel {
         for (const update of updates) {
           this.offset = Math.max(this.offset, update.update_id + 1);
           const message = update.message;
-          if (message?.text && message.chat?.type === 'private' && message.from && !message.from.is_bot) {
+          const media = this.mediaOf(message);
+          if ((message?.text || media.length) && message.chat?.type === 'private' && message.from && !message.from.is_bot) {
             const name = [message.from.first_name, message.from.last_name].filter(Boolean).join(' ') || message.from.username || String(message.from.id);
-            Promise.resolve(this.onMessage({ senderId: String(message.from.id), senderName: name, chatId: String(message.chat.id), text: message.text })).catch(() => {});
+            Promise.resolve(this.onMessage({ senderId: String(message.from.id), senderName: name, chatId: String(message.chat.id), text: message.text || message.caption || '', media })).catch(() => {});
           }
         }
       } catch (error) {
@@ -43,6 +44,17 @@ class TelegramChannel {
         await this.sleep(delay); delay = Math.min(delay * 2, 30000);
       }
     }
+  }
+  /** Photos (the largest size) and image files. The download address is only looked up when the Bot is about to use the picture. */
+  mediaOf(message) {
+    const out = [];
+    const photo = Array.isArray(message?.photo) && message.photo.length ? message.photo[message.photo.length - 1] : null;
+    if (photo?.file_id) out.push(this.fileItem(photo.file_id, 'image/jpeg', photo.file_size));
+    if (message?.document?.file_id && /^image\//i.test(message.document.mime_type || '')) out.push(this.fileItem(message.document.file_id, message.document.mime_type, message.document.file_size, message.document.file_name));
+    return out;
+  }
+  fileItem(fileId, contentType, size, name) {
+    return { contentType, size: size || 0, name, resolve: async () => { const file = await this.call('getFile', { file_id: fileId }); return { url: `${API}/file/bot${this.token}/${file.file_path}`, headers: {} }; } };
   }
   async send(chatId, text) { await this.call('sendMessage', { chat_id: chatId, text, disable_web_page_preview: true }); }
   async typing(chatId) { await this.call('sendChatAction', { chat_id: chatId, action: 'typing' }, 8000); }

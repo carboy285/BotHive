@@ -22,7 +22,7 @@ RUN if [ -n "$CLIS" ]; then npm install -g $CLIS; fi
 
 ENV OPENGROKBOT_DATA_DIR=/data
 VOLUME /data
-EXPOSE 8765
+EXPOSE 8765 8766
 RUN chmod +x /app/docker/entrypoint.sh && useradd -m -u 1001 grok && mkdir -p /data && chown -R grok /data /app
 USER grok
 ENTRYPOINT ["/app/docker/entrypoint.sh"]

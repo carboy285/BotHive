@@ -102,7 +102,7 @@ final class LocalCLIRun: @unchecked Sendable {
             if !FileManager.default.isExecutableFile(atPath: cli.path) { lock.unlock(); throw CLIError.notInstalled }
             do { try process.run(); lock.unlock() } catch { lock.unlock(); throw error }
             let timeout = DispatchWorkItem { [weak self] in self?.cancel(timeout: true) }
-            DispatchQueue.global().asyncAfter(deadline: .now() + 600, execute: timeout)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1800, execute: timeout)
             defer { timeout.cancel() }
             let stderr = BoundedData(limit: 32_768)
             let readers = DispatchGroup()

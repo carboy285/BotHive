@@ -87,7 +87,7 @@ enum CLIError: Error, LocalizedError, Equatable {
         case .failed(let code): "The AI CLI stopped with exit code \(code). Check its login and configuration in Terminal, then retry."
         case .invalidOutput: "The CLI did not return a supported AI response. Update the CLI or select another installation."
         case .stopped: "Response stopped. You can send another message."
-        case .timedOut: "The CLI did not finish within ten minutes. Check its connection and try again."
+        case .timedOut: "The CLI did not finish within thirty minutes. Check its connection and try again."
         }
     }
 }

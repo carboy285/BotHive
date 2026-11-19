@@ -9,6 +9,10 @@ struct Bot: Identifiable, Codable, Hashable, Sendable {
     var isMain: Bool? = nil
     var aiConfiguration: BotAIConfiguration? = nil
     var memory: [String]? = nil
+    /// Everything worth knowing from this Bot's conversations, kept up to date in the background (10.1.2). At most 6,000 characters.
+    var summary: String? = nil
+    /// The last message the summary covers.
+    var summaryAt: UUID? = nil
     var memberIDs: [UUID]? = nil
     var appearance: BotAppearance? = nil
     var isPinned: Bool? = nil

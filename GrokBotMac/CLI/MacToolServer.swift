@@ -152,7 +152,7 @@ final class MacToolServer {
         ]
         if channels {
             list.append(Tool(name: "channel_send", description: "Send a message to a person the owner approved on a connected chat channel (telegram or imessage). Leave \"to\" out to reach whoever wrote last there. Only when the human asks, or in a routine they set up. At most 20 an hour.",
-                             properties: ["channel": ["type": "string", "enum": MacChannelKind.allCases.map(\.rawValue)], "to": s("Name of an approved person (optional)"), "text": s("The message, plain text")], required: ["channel", "text"]))
+                             properties: ["channel": ["type": "string", "enum": MacChannels.infos.map(\.id)], "to": s("Name of an approved person (optional)"), "text": s("The message, plain text")], required: ["channel", "text"]))
         }
         return list
     }

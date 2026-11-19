@@ -32,6 +32,8 @@ struct RemoteHostSettings: Codable, Sendable, Equatable {
     var admin: Bool? = nil
     /// 10.1.1: CLIs the computer can install by itself, and how each install is going.
     var installable: [Installable]? = nil
+    /// 10.1.2: the chat channels (Telegram, Discord, Slack, iMessage, SMS and calls) this computer or server runs. Never holds a token.
+    var channels: RemoteChannels? = nil
 
     struct Installable: Codable, Sendable, Equatable, Identifiable {
         var id: String
@@ -90,6 +92,8 @@ struct RemoteCommand: Codable, Sendable {
     var package: Data?
     /// vm_exec: the command to run inside a shared VM (program path first), at most 16 words.
     var argv: [String]?
+    /// channels_configure: a chat channel's settings (tokens, numbers), by field name.
+    var fields: [String: String]?
 }
 /// A Linux VM a computer is sharing with the others on the account.
 struct RemoteVM: Codable, Sendable, Identifiable, Hashable {
@@ -147,4 +151,109 @@ struct RemoteBrowserPreview: Codable, Sendable {
     var title: String
     var url: String
     var imageData: Data?
+}
+
+
+/// What a computer reports about its chat channels (10.1.2). Settings that are secrets arrive only as "is it set".
+struct RemoteChannels: Codable, Sendable, Equatable {
+    enum FieldValue: Codable, Sendable, Equatable {
+        case isSet(Bool), text(String)
+        init(from decoder: Decoder) throws {
+            let box = try decoder.singleValueContainer()
+            if let flag = try? box.decode(Bool.self) { self = .isSet(flag) } else { self = .text(try box.decode(String.self)) }
+        }
+        func encode(to encoder: Encoder) throws {
+            var box = encoder.singleValueContainer()
+            switch self { case .isSet(let value): try box.encode(value); case .text(let value): try box.encode(value) }
+        }
+        var text: String? { if case .text(let value) = self { return value }; return nil }
+        var set: Bool { switch self { case .isSet(let value): return value; case .text(let value): return !value.isEmpty } }
+    }
+    struct State: Codable, Sendable, Equatable { var state: String; var detail: String? }
+    struct Approved: Codable, Sendable, Equatable, Identifiable { var id: String; var name: String; var me: Bool? = nil }
+    struct Waiting: Codable, Sendable, Equatable, Identifiable { var name: String; var code: String; var id: String { code } }
+    struct Channel: Codable, Sendable, Equatable {
+        var name: String
+        var enabled: Bool
+        var configured: Bool
+        var fields: [String: FieldValue]
+        var state: State
+        var approved: [Approved]
+        var pending: [Waiting]
+    }
+    struct BotChoice: Codable, Sendable, Equatable, Identifiable { var id: String; var name: String }
+    struct Calls: Codable, Sendable, Equatable { var ready: Bool; var listening: Bool }
+    struct Settings: Codable, Sendable, Equatable {
+        var fast: Bool = true
+        var whenBusy: String = "steer"
+        /// "where": reply where the message came from; "always": also text every reply to the owner. Older servers send nothing.
+        var replies: String? = nil
+        var reachOn: String? = nil
+        var escalate: String = "call"
+        var escalateMinutes: Int = 10
+        var quietStart: Int = 22
+        var quietEnd: Int = 8
+    }
+    struct Voice: Codable, Sendable, Equatable, Identifiable { var id: String; var name: String; var available: Bool = true }
+    struct Question: Codable, Sendable, Equatable { var question: String }
+    struct Inkbox: Codable, Sendable, Equatable {
+        var ready: Bool = false
+        var state: State? = nil
+        var ownerNumber: String? = nil
+        var voices: [Voice] = []
+        var pendingAsk: Question? = nil
+    }
+    var bot: String?
+    var bots: [BotChoice]
+    var channels: [String: Channel]
+    var calls: Calls
+    var settings: Settings? = nil
+    var inkbox: Inkbox? = nil
+}
+
+/// Where a message in a Bot's chat came from, when it arrived on a chat channel (10.1.2). The channels engine starts such messages
+/// with a tag like "[iMessage · Sam · the owner] "; the chat shows a small badge instead of the raw tag.
+struct ChannelOrigin: Equatable, Sendable {
+    let channel: String
+    let name: String
+    let owner: Bool
+    let body: String
+    /// True for turns the app started for the person (other Bots answered, a call ended).
+    let automatic: Bool
+
+    private static let tag = try! NSRegularExpression(pattern: #"^\[(Telegram|Discord|Slack|SMS|iMessage|phone|Phone call) · ([^\]]{1,80}?)( · the owner)?\] ?"#)
+    static let steerNote = "\n\n(The person sent this while you were still working."
+
+    static func parse(_ text: String) -> ChannelOrigin? {
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = tag.firstMatch(in: text, range: range), let whole = Range(match.range, in: text),
+              let channel = Range(match.range(at: 1), in: text), let name = Range(match.range(at: 2), in: text) else { return nil }
+        var body = String(text[whole.upperBound...])
+        if let steer = body.range(of: steerNote) { body = String(body[..<steer.lowerBound]) }
+        let automatic = body.hasPrefix("(Automatic follow-up") || body.contains("\n(Automatic follow-up")
+        if automatic, let close = body.range(of: ".) ") { body = String(body[close.upperBound...]) }
+        return ChannelOrigin(channel: String(text[channel]), name: String(text[name]), owner: match.range(at: 3).location != NSNotFound, body: body, automatic: automatic)
+    }
+
+    /// An SF Symbol and a tint for each channel.
+    var symbol: String {
+        switch channel {
+        case "iMessage": return "message.fill"
+        case "SMS": return "message"
+        case "Telegram": return "paperplane.fill"
+        case "Discord": return "gamecontroller.fill"
+        case "Slack": return "number"
+        default: return "phone.fill"
+        }
+    }
+    var tint: (red: Double, green: Double, blue: Double) {
+        switch channel {
+        case "iMessage", "SMS": return (0.20, 0.78, 0.35)
+        case "Telegram": return (0.16, 0.63, 0.89)
+        case "Discord": return (0.35, 0.40, 0.95)
+        case "Slack": return (0.88, 0.12, 0.35)
+        default: return (0.20, 0.78, 0.35)
+        }
+    }
+    var label: String { channel == "phone" ? "Phone call" : channel }
 }

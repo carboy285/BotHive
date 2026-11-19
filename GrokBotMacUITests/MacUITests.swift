@@ -64,7 +64,7 @@ final class MacUITests: XCTestCase {
         capture(app, name: "macos-connect-apps")
         app.typeKey(.escape, modifierFlags: [])
         app.typeKey(",", modifierFlags: .command)
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Account")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ==[c] %@ OR value ==[c] %@ OR title ==[c] %@", "Account", "Account", "Account")).firstMatch.waitForExistence(timeout: 5)) // the section title is drawn in capitals now
         capture(app, name: "macos-settings")
         app.buttons["Computer"].click()
         XCTAssertTrue(app.staticTexts["iPhone remote control"].waitForExistence(timeout: 5))

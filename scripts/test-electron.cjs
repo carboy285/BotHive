@@ -50,6 +50,8 @@ const {_electron:electron}=require('@playwright/test');const fs=require('node:fs
   assert.equal((await page.evaluate(id=>window.desktop.configureBot(id,{providers:[{provider:'codex',model:'fixture-model'},{provider:'claude',model:'must-not-run'}],activeProvider:'codex',replyMode:'all'}),mainID)).ok,true);
   await page.getByRole('button',{name:'Library',exact:true}).click();await page.getByRole('heading',{name:'No files yet'}).waitFor();await page.getByRole('button',{name:'Computer',exact:true}).click();await page.getByText('Runs on this device',{exact:true}).waitFor();await page.keyboard.press('Escape');
   await page.locator('#draft').fill('Create team fixture');await page.locator('#draft').press('Enter');await page.locator('.bubble').getByText('Specialist weekend plan',{exact:true}).waitFor();
+  // The Bot that asked carries on once the specialist answers (10.2.1); let it finish before the next message so the next one is not a steer.
+  await page.locator('.bubble').getByText('All set, the plan is ready.',{exact:true}).waitFor();
   await page.waitForFunction(async()=>{const r=await window.desktop.load();return r.value.teamMessages?.[0]?.status==='complete';});
   let saved=(await page.evaluate(()=>window.desktop.load())).value;const specialist=saved.bots.find(x=>x.name==='Travel');assert.ok(specialist);assert.equal(specialist.aiConfiguration.activeProvider,'codex');assert.equal(specialist.aiConfiguration.providers[0].model,'fixture-model');assert.equal(saved.entries.filter(x=>x.kind==='bot'&&x.senderBotID).at(-1).senderBotID,specialist.id);
   await page.locator('#draft').fill('Create group fixture');await page.locator('#draft').press('Enter');await page.locator('#bot-list').getByRole('button',{name:'Project',exact:false}).click();

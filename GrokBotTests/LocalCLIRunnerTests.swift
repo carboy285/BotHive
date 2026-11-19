@@ -91,6 +91,7 @@ final class LocalCLIRunnerTests: XCTestCase {
         prompt=$(cat)
         case "$prompt" in
           'You are Travel.'*) printf '%s\\n' '\(try event("Specialist weekend plan"))' ;;
+          *'answered your request'*) printf '%s\\n' '\(try event("All set, the plan is ready."))' ;;
           *) printf '%s\\n' '\(try event(create))' ;;
         esac
         """
@@ -109,11 +110,17 @@ final class LocalCLIRunnerTests: XCTestCase {
         XCTAssertEqual(app.workspace.teamMessages?.first?.status, .complete)
         let travel = try XCTUnwrap(app.workspace.bots.first { $0.name == "Travel" })
         XCTAssertEqual(travel.aiConfiguration?.activeProvider, .codex)
-        XCTAssertEqual(app.entries(for: main).last?.senderBotID, travel.id)
-        XCTAssertEqual(app.entries(for: main).last?.text, "Specialist weekend plan")
+        // The Bot that asked is woken with the answer and carries on (10.2.1), so its own last message comes after the specialist's.
+        for _ in 0..<100 {
+            if app.entries(for: main).last?.text == "All set, the plan is ready." { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let theirs = app.entries(for: main).filter { $0.senderBotID == travel.id }
+        XCTAssertEqual(theirs.last?.text, "Specialist weekend plan")
+        XCTAssertEqual(app.entries(for: main).last?.text, "All set, the plan is ready.")
         XCTAssertEqual(desktop.providersToRun(for: travel).count, 1)
         let arguments = try String(contentsOf: root.appendingPathComponent("arguments.txt"), encoding: .utf8)
-        XCTAssertEqual(arguments.components(separatedBy: "--model\nchosen-model").count - 1, 2)
+        XCTAssertEqual(arguments.components(separatedBy: "--model\nchosen-model").count - 1, 3)
         XCTAssertFalse(arguments.contains("never-called"))
     }
 

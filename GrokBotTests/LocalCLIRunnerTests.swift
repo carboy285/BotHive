@@ -115,7 +115,7 @@ final class LocalCLIRunnerTests: XCTestCase {
             if app.entries(for: main).last?.text == "All set, the plan is ready." { break }
             try await Task.sleep(for: .milliseconds(100))
         }
-        let theirs = app.entries(for: main).filter { $0.senderBotID == travel.id }
+        let theirs = app.entries(for: main).filter { $0.senderBotID == travel.id && $0.kind == .bot }
         XCTAssertEqual(theirs.last?.text, "Specialist weekend plan")
         XCTAssertEqual(app.entries(for: main).last?.text, "All set, the plan is ready.")
         XCTAssertEqual(desktop.providersToRun(for: travel).count, 1)
